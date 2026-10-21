@@ -21,7 +21,7 @@ rules:
       - style
       - test
   # Off: the rule rejects any subject starting with a proper noun, and it cannot tell
-  # "SciFact" from shouting.
+  # "AotSmoke" from shouting.
   subject-case:
     - 0
     - never

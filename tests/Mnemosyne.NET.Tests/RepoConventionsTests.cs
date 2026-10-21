@@ -32,18 +32,22 @@ public sealed class RepoConventionsTests
     public void EverySourceProjectIsInTheSolution()
     {
         var root = RepoRoot();
-        var slnx = File.ReadAllText(Path.Combine(root, "Mnemosyne.NET.slnx"));
+        var slnx = XDocument.Load(Path.Combine(root, "Mnemosyne.NET.slnx"));
+        var listed = slnx.Descendants("Project")
+            .Select(e => (e.Attribute("Path")?.Value ?? string.Empty).Replace('\\', '/'))
+            .ToHashSet(StringComparer.Ordinal);
         foreach (var project in SourceProjects())
         {
             var relative = Path.GetRelativePath(root, project).Replace('\\', '/');
-            Assert.Contains(relative, slnx, StringComparison.Ordinal);
+            Assert.True(listed.Contains(relative), $"{relative} is not a Project in Mnemosyne.NET.slnx");
         }
     }
 
     [Fact]
     public void AotSmokeRootsEverySourceProject()
     {
-        var smoke = Path.Combine(RepoRoot(), "tests", "Mnemosyne.NET.AotSmoke", "Mnemosyne.NET.AotSmoke.csproj");
+        var root = RepoRoot();
+        var smoke = Path.Combine(root, "tests", "Mnemosyne.NET.AotSmoke", "Mnemosyne.NET.AotSmoke.csproj");
         Assert.True(File.Exists(smoke), $"{smoke} not found");
 
         var doc = XDocument.Load(smoke);
@@ -65,12 +69,18 @@ public sealed class RepoConventionsTests
     [Fact]
     public void CiRunsTheAotGate()
     {
-        var ci = Path.Combine(RepoRoot(), ".github", "workflows", "ci.yml");
+        var root = RepoRoot();
+        var ci = Path.Combine(root, ".github", "workflows", "ci.yml");
         Assert.True(File.Exists(ci), $"{ci} not found");
 
         var job = JobBody(StripComments(File.ReadAllText(ci)), "aot-publish");
         Assert.Contains("-p:PublishAot=true", job, StringComparison.Ordinal);
         Assert.Contains("-warnaserror", job, StringComparison.Ordinal);
+
+        // GitHub counts a skipped job as passing a required check, so the gate must always run
+        // and must never be allowed to fail quietly.
+        Assert.DoesNotContain("if:", job, StringComparison.Ordinal);
+        Assert.DoesNotContain("continue-on-error:", job, StringComparison.Ordinal);
     }
 
     private static string StripComments(string yaml) =>
@@ -88,8 +98,9 @@ public sealed class RepoConventionsTests
 
     private static string[] SourceProjects()
     {
-        var projects = Directory.GetFiles(Path.Combine(RepoRoot(), "src"), "*.csproj", SearchOption.AllDirectories)
-            .Where(p => Path.GetDirectoryName(Path.GetDirectoryName(p)) == Path.Combine(RepoRoot(), "src"))
+        var srcDir = Path.Combine(RepoRoot(), "src");
+        var projects = Directory.GetFiles(srcDir, "*.csproj", SearchOption.AllDirectories)
+            .Where(p => Path.GetDirectoryName(Path.GetDirectoryName(p)) == srcDir)
             .Order(StringComparer.Ordinal)
             .ToArray();
         Assert.NotEmpty(projects);
