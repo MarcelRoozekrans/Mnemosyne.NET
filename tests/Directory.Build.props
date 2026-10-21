@@ -5,4 +5,10 @@
     <!-- Route `dotnet test` through Microsoft.Testing.Platform; the .NET 10 SDK refuses the VSTest bridge. -->
     <TestingPlatformDotnetTestSupport>true</TestingPlatformDotnetTestSupport>
   </PropertyGroup>
+
+  <!-- Code coverage for the Microsoft.Testing.Platform runner. ci.yml passes the coverage options
+       to the test app and uploads the Cobertura report to Codecov. -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Testing.Extensions.CodeCoverage" />
+  </ItemGroup>
 </Project>

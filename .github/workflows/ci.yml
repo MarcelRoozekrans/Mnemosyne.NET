@@ -1,0 +1,302 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  # What makes a tag reach nuget.org. release-please creates the tag and a GitHub release, and
+  # this fires on the release. An event created with the built-in GITHUB_TOKEN starts no
+  # workflow, so release-please must run on a GitHub App token for this trigger to ever fire.
+  release:
+    types: [published]
+  # Re-run after a flake or a runner outage without an empty commit, and the manual half of the
+  # publish-nuget gate. Underscores, not hyphens, so the job's `if:` dereferences it plainly.
+  workflow_dispatch:
+    inputs:
+      publish_to_nuget:
+        description: "Push the packed packages to nuget.org (dispatch against the release tag, not main)"
+        type: boolean
+        default: false
+
+# Three pushes to a branch would otherwise queue three complete runs, two already irrelevant.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# The default is repository-configurable and therefore not a default at all, so it is stated.
+permissions:
+  contents: read
+
+jobs:
+  # BRANCH PROTECTION: matrixing produces one check per OS, "build-test (ubuntu-latest)" and
+  # "build-test (windows-latest)". The Main ruleset must require both, or gating silently drops.
+  build-test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      # Both legs always run to completion: the platforms fail for different reasons, and
+      # cancelling one hides the failure nothing else covers.
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write   # Codecov upload via OIDC, no token secret
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v6
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj', 'Directory.Build.props', 'Directory.Packages.props') }}
+          restore-keys: ${{ runner.os }}-nuget-
+
+      - name: Restore
+        run: dotnet restore Mnemosyne.NET.slnx
+
+      - name: Build
+        run: dotnet build Mnemosyne.NET.slnx --no-restore -c Release
+
+      # Tests are selected by project and never by --filter: Directory.Build.targets refuses a
+      # VSTest filter under Microsoft.Testing.Platform (MNEMO0001) because it is silently ignored.
+      # Every tests/*.Tests project runs on its own so a failure names the project, and all of
+      # them run before the step fails so one break does not hide the next.
+      - name: Test
+        # MSBuild reads the variable as the TestingPlatformCommandLineArguments property, which
+        # dotnet test hands to every test app: one Cobertura file per project lands next to its
+        # failure log under bin/Release, and Codecov merges them.
+        env:
+          TestingPlatformCommandLineArguments: --coverage --coverage-output-format cobertura
+        shell: bash
+        run: |
+          projects=$(ls tests/*.Tests/*.csproj)
+          if [ -z "$projects" ]; then
+            echo "::error::No tests/*.Tests project found, so nothing would run while the step exits 0."
+            exit 1
+          fi
+          failed=""
+          for project in $projects; do
+            echo "::group::$project"
+            if ! dotnet test "$project" --no-build -c Release --verbosity normal; then
+              failed="$failed $project"
+              # Microsoft.Testing.Platform prints the failure count and nothing else; the detail
+              # goes to a per-project log. The log is UTF-16LE with a BOM, so decode it.
+              for log in "$(dirname "$project")"/bin/Release/*/TestResults/*.log; do
+                [ -f "$log" ] || continue
+                echo "----- failure detail from $log -----"
+                if [ "$(head -c 2 "$log" | od -An -tx1 | tr -d ' ')" = "fffe" ]; then
+                  iconv -f UTF-16LE -t UTF-8 "$log" || cat "$log"
+                else
+                  cat "$log"
+                fi
+              done
+            fi
+            echo "::endgroup::"
+          done
+          if [ -n "$failed" ]; then
+            echo "::error::Failed test projects:$failed"
+            exit 1
+          fi
+
+      - name: Upload coverage to Codecov
+        if: '!cancelled()'
+        uses: codecov/codecov-action@v7
+        with:
+          use_oidc: true
+          files: "tests/*/bin/Release/**/TestResults/*.cobertura.xml"
+          disable_search: true   # only the files above, not every *.xml the search finds
+          fail_ci_if_error: false
+
+  # Conventional commits, enforced mechanically: release-please derives versions from commit
+  # messages. Lints only the commits a pull request adds, never the existing history.
+  commitlint:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          # The full history, so the PR's base and head commits are both present to lint between.
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Lint the commits this pull request adds
+        run: >
+          npx --yes --package @commitlint/cli@21.2.1 --package @commitlint/config-conventional@21.2.0
+          commitlint --from ${{ github.event.pull_request.base.sha }} --to ${{ github.event.pull_request.head.sha }} --verbose
+
+  # Packs every package and validates what was produced. Its own job on one OS: a .nupkg is
+  # platform-independent, so packing inside the matrix would do the same work twice.
+  pack-validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          # GitVersion derives the version from history and refuses a shallow clone.
+          fetch-depth: 0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v6
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj', 'Directory.Build.props', 'Directory.Packages.props') }}
+          restore-keys: ${{ runner.os }}-nuget-
+
+      # The regex guard is load-bearing: `-p:Version=` with an empty value silently packs 1.0.0.
+      - name: Derive the package version
+        shell: bash
+        run: |
+          dotnet tool restore
+          version=$(dotnet dotnet-gitversion /output json | jq -r '.SemVer')
+          if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+ ]]; then
+            echo "::error::GitVersion produced '$version', which is not a version. Packing would fall back to the SDK default 1.0.0 without a word, so failing here instead."
+            exit 1
+          fi
+          echo "PACKAGE_VERSION=$version" >> "$GITHUB_ENV"
+          echo "packing as $version"
+
+      # Until the first release tag exists, every derived version must be a 0.x prerelease.
+      # 1.0.0 is the SDK default nobody chose, and a stable or 1.x version on an untagged
+      # commit means versioning is mis-wired. A tagged commit is exempt: that is a real release.
+      - name: Assert the version is a 0.x prerelease while no release tag exists
+        shell: bash
+        run: |
+          if [ "$PACKAGE_VERSION" = "1.0.0" ]; then
+            echo "::error::The version is 1.0.0, the SDK default. GitVersion did not feed the pack."
+            exit 1
+          fi
+          if git describe --tags --exact-match HEAD >/dev/null 2>&1; then
+            echo "HEAD is tagged; $PACKAGE_VERSION is a release version."
+          elif ! [[ "$PACKAGE_VERSION" == 0.* && "$PACKAGE_VERSION" == *-* ]]; then
+            echo "::error::'$PACKAGE_VERSION' on an untagged commit must be a 0.x prerelease (0.y.z-label.n)."
+            exit 1
+          fi
+
+      - name: Pack
+        run: dotnet pack Mnemosyne.NET.slnx -c Release -o artifacts/packages -p:Version="$PACKAGE_VERSION"
+
+      - name: Assert exactly three packages
+        shell: bash
+        run: |
+          count=$(find artifacts/packages -name '*.nupkg' | wc -l)
+          if [ "$count" -ne 3 ]; then
+            echo "::error::Expected exactly 3 .nupkg files in artifacts/packages, found $count."
+            ls -l artifacts/packages
+            exit 1
+          fi
+
+  # Native AOT is a gate over every package: the smoke app roots each one, and the publish fails
+  # on any trim or AOT warning.
+  aot-publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Publish the smoke app with native AOT
+        run: dotnet publish tests/Mnemosyne.NET.AotSmoke -c Release -r linux-x64 -p:PublishAot=true -warnaserror
+
+      - name: Run the native binary
+        run: tests/Mnemosyne.NET.AotSmoke/bin/Release/net10.0/linux-x64/publish/Mnemosyne.NET.AotSmoke
+
+  # The real push to nuget.org. Two ways in: a published release (the automatic path), or a
+  # manual dispatch with publish_to_nuget set, for re-running a push that died partway.
+  # Both run the full matrix and pack-validate on that commit first, and both refuse a prerelease.
+  publish-nuget:
+    if: >-
+      github.event_name == 'release' ||
+      (github.event_name == 'workflow_dispatch' && inputs.publish_to_nuget)
+    needs: [build-test, pack-validate, aot-publish]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # Trusted Publishing mints a short-lived key from an OIDC token. A job-level permissions
+    # block replaces the workflow-level one, so contents: read is restated.
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Derive the package version
+        shell: bash
+        run: |
+          dotnet tool restore
+          version=$(dotnet dotnet-gitversion /output json | jq -r '.SemVer')
+          if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+ ]]; then
+            echo "::error::GitVersion produced '$version', which is not a version. Packing would fall back to the SDK default 1.0.0 without a word, so failing here instead."
+            exit 1
+          fi
+          echo "PACKAGE_VERSION=$version" >> "$GITHUB_ENV"
+          echo "packing as $version"
+
+      # nuget.org never forgets a published version, so an accidental prerelease is permanent.
+      # Dispatching against main instead of the tag derives a prerelease; stop here, not at the push.
+      - name: Refuse to publish a prerelease
+        shell: bash
+        run: |
+          if [[ "$PACKAGE_VERSION" == *-* ]]; then
+            echo "::error::Refusing to publish '$PACKAGE_VERSION': it is a prerelease. GitVersion returns a stable version only on a tagged commit, so dispatch this workflow against the tag, for example gh workflow run ci.yml --ref v1.2.3 -f publish_to_nuget=true, not against main."
+            exit 1
+          fi
+          echo "$PACKAGE_VERSION is stable; continuing to pack and push."
+
+      - name: Pack
+        run: dotnet pack Mnemosyne.NET.slnx -c Release -o artifacts/packages -p:Version="$PACKAGE_VERSION"
+
+      # Trusted Publishing, not a stored key. Needs a matching policy on nuget.org naming this
+      # repository and workflow, and the NUGET_USER repository variable.
+      - name: Mint a short-lived nuget.org key
+        uses: NuGet/login@v1
+        id: nuget-login
+        with:
+          user: ${{ vars.NUGET_USER }}
+
+      # The .snupkg files ride along: nuget.org receives them with each .nupkg from the same
+      # directory. --skip-duplicate makes a retry after a partial failure safe.
+      - name: Push every package to nuget.org
+        shell: bash
+        env:
+          NUGET_API_KEY: ${{ steps.nuget-login.outputs.NUGET_API_KEY }}
+        run: |
+          if [ -z "$NUGET_API_KEY" ]; then
+            echo "::error::The NuGet login step minted no key, so this push cannot authenticate. Check the NUGET_USER repository variable and the Trusted Publishing policy on nuget.org."
+            exit 1
+          fi
+          dotnet nuget push "artifacts/packages/*.nupkg" \
+            --source https://api.nuget.org/v3/index.json \
+            --api-key "$NUGET_API_KEY" \
+            --skip-duplicate

@@ -1,0 +1,33 @@
+# Conventional commits, enforced mechanically: release-please derives release versions from
+# commit messages, so a malformed type is a commit the release tooling cannot read.
+extends:
+  - "@commitlint/config-conventional"
+
+rules:
+  # The stock type set; spelled out so a new type is a deliberate edit to this file.
+  type-enum:
+    - 2
+    - always
+    - - build
+      - chore
+      - ci
+      - docs
+      - feat
+      - fix
+      - perf
+      - refactor
+      - revert
+      - style
+      - test
+  # Off: the rule rejects any subject starting with a proper noun, and it cannot tell
+  # "SciFact" from shouting.
+  subject-case:
+    - 0
+    - never
+    - []
+  # Off: bodies quote error messages, command lines and URLs verbatim, and wrapping quoted
+  # material to satisfy a linter makes the body worse. The header cap stays at 100.
+  body-max-line-length:
+    - 0
+    - always
+    - 100

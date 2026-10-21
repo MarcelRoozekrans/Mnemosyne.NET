@@ -62,6 +62,30 @@ public sealed class RepoConventionsTests
         }
     }
 
+    [Fact]
+    public void CiRunsTheAotGate()
+    {
+        var ci = Path.Combine(RepoRoot(), ".github", "workflows", "ci.yml");
+        Assert.True(File.Exists(ci), $"{ci} not found");
+
+        var job = JobBody(StripComments(File.ReadAllText(ci)), "aot-publish");
+        Assert.Contains("-p:PublishAot=true", job, StringComparison.Ordinal);
+        Assert.Contains("-warnaserror", job, StringComparison.Ordinal);
+    }
+
+    private static string StripComments(string yaml) =>
+        string.Join('\n', yaml.Split('\n').Where(l => !l.TrimStart().StartsWith('#')));
+
+    // The lines of one top-level job: from "  name:" up to the next two-space-indented key.
+    private static string JobBody(string yaml, string name)
+    {
+        var lines = yaml.Split('\n').Select(l => l.TrimEnd('\r')).ToArray();
+        var start = Array.FindIndex(lines, l => l == $"  {name}:");
+        Assert.True(start >= 0, $"ci.yml has no job {name}");
+        var body = lines.Skip(start + 1).TakeWhile(l => l.Length == 0 || l.StartsWith("   ", StringComparison.Ordinal));
+        return string.Join('\n', body);
+    }
+
     private static string[] SourceProjects()
     {
         var projects = Directory.GetFiles(Path.Combine(RepoRoot(), "src"), "*.csproj", SearchOption.AllDirectories)
