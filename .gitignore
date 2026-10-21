@@ -1,60 +1,24 @@
+# Build output
 bin/
 obj/
+TestResults/
+
+# IDE and per-user files
 *.user
 *.suo
 .vs/
 *.DotSettings.user
-BenchmarkDotNet.Artifacts/
-site/
-.worktrees/
 
-# Docusaurus docs site build products. package-lock.json is committed deliberately — it is
-# what keeps the site's dependency tree reproducible (Phase 4.5).
-node_modules/
-.docusaurus/
-build/
-
-# Generated Lucent index artifacts. These were committed once, in April 2026, and had to be
-# purged from all history before this repository could be pushed: embeddings.bin reached 227 MB
-# against GitHub's hard 100 MB per-file limit, and chunks.json 73 MB. They are regenerable, so
-# nothing was lost — but the rewrite touched 589 commits, which is a bad afternoon to repeat.
-.lucent/
-
-# Test result output (--logger trx is the standing default for Benchmarks.Quality.Tests)
-TestResults/
-
-# The GraphRAG caches — extractions, and the community reports written from them. Both normally
-# live under RAGNET_BEIR_CACHE, beside the datasets and well outside this tree — but
-# RAGNET_BEIR_CACHE is a path a developer chooses, and pointing it at a directory inside the
-# checkout is an easy afternoon's mistake. Two things must never be committed from either, and they
-# are different things: the text is LLM output derived from MultiHop-RAG's articles, which are
-# ODC-By and not ours to redistribute, and it is paid for per token. Neither belongs in history.
-# The same reasoning covers the HyDE hypotheticals beside them.
-graph-extractions/
-graph-reports/
-hypotheticals/
-
-# dotnet pack output — ci.yml's pack-validate job and tests/Rag.NET.PackageValidation.Tests both
-# use artifacts/packages; packages are build products and never belong in history.
+# dotnet pack output. Packages are build products and never belong in history.
 artifacts/
 *.nupkg
 *.snupkg
 
-# Claude Code runtime artefacts. Named individually rather than ignoring all of .claude/, because
-# that directory is also where shared agent and skill definitions would live if this repo ever
-# commits any, and a blanket rule would silently refuse to add them.
-#
-# scheduled_tasks.lock was tracked until 2026-08-17 (removed in #290). It holds a session id, a pid
-# and an acquisition timestamp — a local artefact of whoever last ran a scheduled task, committed by
-# accident. Found because it sorts first in the repository tree and a GitHub cassette recording
-# fetched its content as "the first file".
+# Claude Code runtime artefacts. Named individually rather than ignoring all of .claude/,
+# which may later hold shared agent and skill definitions.
 .claude/scheduled_tasks.lock
 .claude/worktrees/
-
-# Pre-push review reports are per-session artefacts, not documentation. Two were committed
-# into docs/, which is the Docusaurus content root with routeBasePath "/" — so they would have
-# been published as pages alongside the guide. Ignored here so the next one cannot repeat it.
-docs/pre-push-review-*.md
+.worktrees/
 
 # Screenshots and page snapshots the Playwright MCP server writes into the working directory.
 .playwright-mcp/
