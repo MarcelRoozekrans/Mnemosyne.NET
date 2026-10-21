@@ -17,7 +17,7 @@ Design: [roadmap design](../superpowers/specs/2026-10-21-roadmap-design.md), bui
 **Goal:** Solution, central package management, CI with a Native AOT gate, release-please, Renovate and Codecov, matching the sibling repos.
 **Surface:** Infra
 **HelpWanted:** no
-**Plan:** _to be written_
+**Plan:** `docs/superpowers/plans/2026-10-21-phase-1.1-scaffold.md`
 
 ### Phase 1.2: Abstractions [status: pending]
 **Goal:** Records, the scope and provenance model, and the store and selector interfaces in `Mnemosyne.NET.Abstractions`.
