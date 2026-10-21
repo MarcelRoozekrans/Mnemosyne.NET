@@ -4,11 +4,12 @@ extends:
   - "@commitlint/config-conventional"
 
 rules:
-  # The stock type set; spelled out so a new type is a deliberate edit to this file.
+  # The stock type set plus `bench`, a recurring category for benchmark work; spelled out so a new type is a deliberate edit to this file.
   type-enum:
     - 2
     - always
-    - - build
+    - - bench
+      - build
       - chore
       - ci
       - docs

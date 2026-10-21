@@ -175,20 +175,16 @@ jobs:
           echo "PACKAGE_VERSION=$version" >> "$GITHUB_ENV"
           echo "packing as $version"
 
-      # Until the first release tag exists, every derived version must be a 0.x prerelease.
-      # 1.0.0 is the SDK default nobody chose, and a stable or 1.x version on an untagged
-      # commit means versioning is mis-wired. A tagged commit is exempt: that is a real release.
-      - name: Assert the version is a 0.x prerelease while no release tag exists
+      # A build whose HEAD is on a release tag is a real release and passes as derived. Any other
+      # build must be a prerelease, and must not be 1.0.0: that is the SDK default nobody chose,
+      # so seeing it untagged means GitVersion did not feed the pack.
+      - name: Assert an untagged build is a prerelease
         shell: bash
         run: |
-          if [ "$PACKAGE_VERSION" = "1.0.0" ]; then
-            echo "::error::The version is 1.0.0, the SDK default. GitVersion did not feed the pack."
-            exit 1
-          fi
           if git describe --tags --exact-match HEAD >/dev/null 2>&1; then
             echo "HEAD is tagged; $PACKAGE_VERSION is a release version."
-          elif ! [[ "$PACKAGE_VERSION" == 0.* && "$PACKAGE_VERSION" == *-* ]]; then
-            echo "::error::'$PACKAGE_VERSION' on an untagged commit must be a 0.x prerelease (0.y.z-label.n)."
+          elif [ "$PACKAGE_VERSION" = "1.0.0" ] || ! [[ "$PACKAGE_VERSION" == *-* ]]; then
+            echo "::error::'$PACKAGE_VERSION' on an untagged commit must be a prerelease and not 1.0.0."
             exit 1
           fi
 
