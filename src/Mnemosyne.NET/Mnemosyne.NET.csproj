@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <IsPackable>true</IsPackable>
+    <IsAotCompatible>true</IsAotCompatible>
+    <Description>Reasonlet selection and ranking: find the best known procedure for a question.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Mnemosyne.NET.Abstractions\Mnemosyne.NET.Abstractions.csproj" />
+  </ItemGroup>
+</Project>

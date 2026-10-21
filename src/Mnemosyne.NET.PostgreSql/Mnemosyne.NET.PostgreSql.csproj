@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <IsPackable>true</IsPackable>
+    <IsAotCompatible>true</IsAotCompatible>
+    <Description>PostgreSQL + pgvector store for Reasonlets.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Mnemosyne.NET.Abstractions\Mnemosyne.NET.Abstractions.csproj" />
+    <ProjectReference Include="..\Mnemosyne.NET\Mnemosyne.NET.csproj" />
+  </ItemGroup>
+</Project>
