@@ -13,11 +13,12 @@ Design: [roadmap design](../superpowers/specs/2026-10-21-roadmap-design.md), bui
 - [ ] CI is green, including the Native AOT gate and integration tests against pgvector
 - [ ] A preview is on NuGet via release-please, and the docsite is live with getting-started docs and a sample
 
-### Phase 1.1: Repo scaffold, CI and release pipeline [status: active]
+### Phase 1.1: Repo scaffold, CI and release pipeline [status: complete]
 **Goal:** Solution, central package management, CI with a Native AOT gate, release-please, Renovate and Codecov, matching the sibling repos.
 **Surface:** Infra
 **HelpWanted:** no
 **Plan:** `docs/superpowers/plans/2026-10-21-phase-1.1-scaffold.md`
+**Completed:** 2026-10-21
 
 ### Phase 1.2: Abstractions [status: pending]
 **Goal:** Records, the scope and provenance model, and the store and selector interfaces in `Mnemosyne.NET.Abstractions`.

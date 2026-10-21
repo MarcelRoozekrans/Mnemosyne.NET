@@ -23,7 +23,7 @@ with getting-started docs and a sample. See the
 - [ ] A preview is on NuGet via release-please, and the docsite is live with getting-started docs and a sample
 
 ## Phases
-1. Phase 1.1 — Repo scaffold, CI and release pipeline [active]
+1. Phase 1.1 — Repo scaffold, CI and release pipeline [complete]
 2. Phase 1.2 — Abstractions [pending]
 3. Phase 1.3 — Graph JSON schema v1 [pending]
 4. Phase 1.4 — PostgreSQL + pgvector store [pending]
