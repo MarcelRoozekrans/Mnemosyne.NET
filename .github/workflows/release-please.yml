@@ -28,11 +28,10 @@ on:
     branches: [main]
   workflow_dispatch:
 
-# release-please writes: the release PR (contents for the branch, pull-requests for the PR)
-# and, on the run triggered by that PR's merge, the tag and the GitHub release.
+# Every write (the release PR, the tag, the GitHub release) goes through the App token minted
+# below, so the built-in GITHUB_TOKEN only needs to read.
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
 
 jobs:
   release-please:
@@ -53,17 +52,18 @@ jobs:
           permission-pull-requests: write
           permission-issues: write
 
-      # release-type simple: the release PR maintains CHANGELOG.md and a version.txt, and
-      # nothing in the build consumes either; GitVersion derives the build's version from
-      # the tag this workflow creates, not from a file.
+      # The action reads release-please-config.json and .release-please-manifest.json. It must
+      # not be given a release-type input: any such input makes the action build its manifest
+      # from inputs alone and ignore the config file, which would drop every rule below.
       #
-      # The version rules live in release-please-config.json rather than in this input.
-      # bump-minor-pre-major keeps a breaking change on 0.x at a minor bump instead of
-      # jumping to 1.0.0. .release-please-manifest.json records the last released version
-      # (0.0.0, because nothing has been released), and the two files must exist together:
-      # the config is what puts release-please into manifest mode.
+      # The config sets release-type simple (the release PR maintains CHANGELOG.md and a
+      # version.txt, which nothing in the build consumes; GitVersion derives the build's version
+      # from the tag this workflow creates) and bump-minor-pre-major, which keeps a breaking
+      # change on 0.x at a minor bump. The manifest records the last released version, 0.0.0
+      # because nothing has been released. With no tag to count from, release-please would fall
+      # back to its default first release of 1.0.0, so the config's initial-version of 0.1.0 is
+      # the reason the first release PR proposes 0.1.0.
       - name: Create or update the release pull request
         uses: googleapis/release-please-action@v5
         with:
           token: ${{ steps.app-token.outputs.token }}
-          release-type: simple
