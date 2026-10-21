@@ -2,5 +2,13 @@
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
     "local>MarcelRoozekrans/renovate-config"
+  ],
+  "packageRules": [
+    {
+      "description": "Microsoft.Testing.Extensions.CodeCoverage must move together with xunit.v3: CodeCoverage 18.1.0 and later need version 2 of Microsoft.Testing.Platform, while xunit.v3 3.x runs on version 1.",
+      "matchPackageNames": ["xunit.v3", "Microsoft.Testing.Extensions.CodeCoverage"],
+      "groupName": "xunit-v3-test-platform",
+      "separateMajorMinor": false
+    }
   ]
 }

@@ -74,7 +74,7 @@ jobs:
         # dotnet test hands to every test app: one Cobertura file per project lands next to its
         # failure log under bin/Release, and Codecov merges them.
         env:
-          TestingPlatformCommandLineArguments: --coverage --coverage-output-format cobertura
+          TestingPlatformCommandLineArguments: --coverage --coverage-output-format cobertura --coverage-settings ${{ github.workspace }}/coverage.config.xml
         shell: bash
         run: |
           projects=$(ls tests/*.Tests/*.csproj)
@@ -175,13 +175,13 @@ jobs:
           echo "PACKAGE_VERSION=$version" >> "$GITHUB_ENV"
           echo "packing as $version"
 
-      # A build whose HEAD is on a release tag is a real release and passes as derived. Any other
+      # A build whose HEAD is on a release tag (v followed by a digit; any other tag does not count) is a real release and passes as derived. Any other
       # build must be a prerelease, and must not be 1.0.0: that is the SDK default nobody chose,
       # so seeing it untagged means GitVersion did not feed the pack.
       - name: Assert an untagged build is a prerelease
         shell: bash
         run: |
-          if git describe --tags --exact-match HEAD >/dev/null 2>&1; then
+          if git describe --tags --match 'v[0-9]*' --exact-match HEAD >/dev/null 2>&1; then
             echo "HEAD is tagged; $PACKAGE_VERSION is a release version."
           elif [ "$PACKAGE_VERSION" = "1.0.0" ] || ! [[ "$PACKAGE_VERSION" == *-* ]]; then
             echo "::error::'$PACKAGE_VERSION' on an untagged commit must be a prerelease and not 1.0.0."
@@ -191,12 +191,13 @@ jobs:
       - name: Pack
         run: dotnet pack Mnemosyne.NET.slnx -c Release -o artifacts/packages -p:Version="$PACKAGE_VERSION"
 
-      - name: Assert exactly three packages
+      - name: Assert one package per source project
         shell: bash
         run: |
+          expected=$(ls src/*/*.csproj | wc -l)
           count=$(find artifacts/packages -name '*.nupkg' | wc -l)
-          if [ "$count" -ne 3 ]; then
-            echo "::error::Expected exactly 3 .nupkg files in artifacts/packages, found $count."
+          if [ "$count" -ne "$expected" ]; then
+            echo "::error::Expected $expected .nupkg files in artifacts/packages (one per src project), found $count."
             ls -l artifacts/packages
             exit 1
           fi
