@@ -4,7 +4,7 @@
   <CodeCoverage>
     <ModulePaths>
       <Include>
-        <ModulePath>.*Mnemosyne\.NET.*\.dll$</ModulePath>
+        <ModulePath>.*[\\/]Mnemosyne\.NET[^\\/]*\.dll$</ModulePath>
       </Include>
       <Exclude>
         <ModulePath>.*Tests\.dll$</ModulePath>

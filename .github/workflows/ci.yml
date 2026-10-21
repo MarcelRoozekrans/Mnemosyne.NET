@@ -175,9 +175,10 @@ jobs:
           echo "PACKAGE_VERSION=$version" >> "$GITHUB_ENV"
           echo "packing as $version"
 
-      # A build whose HEAD is on a release tag (v followed by a digit; any other tag does not count) is a real release and passes as derived. Any other
-      # build must be a prerelease, and must not be 1.0.0: that is the SDK default nobody chose,
-      # so seeing it untagged means GitVersion did not feed the pack.
+      # A build whose HEAD is on a release tag (v followed by a digit; any other tag does not
+      # count) is a real release and passes as derived. Any other build must be a prerelease,
+      # and must not be 1.0.0: that is the SDK default nobody chose, so seeing it untagged
+      # means GitVersion did not feed the pack.
       - name: Assert an untagged build is a prerelease
         shell: bash
         run: |
