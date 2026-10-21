@@ -40,6 +40,28 @@ public sealed class RepoConventionsTests
         }
     }
 
+    [Fact]
+    public void AotSmokeRootsEverySourceProject()
+    {
+        var smoke = Path.Combine(RepoRoot(), "tests", "Mnemosyne.NET.AotSmoke", "Mnemosyne.NET.AotSmoke.csproj");
+        Assert.True(File.Exists(smoke), $"{smoke} not found");
+
+        var doc = XDocument.Load(smoke);
+        var references = doc.Descendants("ProjectReference")
+            .Select(e => Path.GetFullPath(Path.Combine(Path.GetDirectoryName(smoke)!, (e.Attribute("Include")?.Value ?? string.Empty).Replace('\\', '/'))))
+            .ToHashSet(StringComparer.Ordinal);
+        var rooted = doc.Descendants("TrimmerRootAssembly")
+            .Select(e => e.Attribute("Include")?.Value)
+            .ToHashSet(StringComparer.Ordinal);
+
+        foreach (var project in SourceProjects())
+        {
+            var assemblyName = Property(project, "AssemblyName") ?? Path.GetFileNameWithoutExtension(project);
+            Assert.True(references.Contains(project), $"AotSmoke has no ProjectReference to {project}");
+            Assert.True(rooted.Contains(assemblyName), $"AotSmoke does not root assembly {assemblyName}");
+        }
+    }
+
     private static string[] SourceProjects()
     {
         var projects = Directory.GetFiles(Path.Combine(RepoRoot(), "src"), "*.csproj", SearchOption.AllDirectories)
