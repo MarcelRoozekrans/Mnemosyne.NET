@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <PublishAot>true</PublishAot>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/Mnemosyne.NET.Abstractions/Mnemosyne.NET.Abstractions.csproj" />
+    <ProjectReference Include="../../src/Mnemosyne.NET/Mnemosyne.NET.csproj" />
+    <ProjectReference Include="../../src/Mnemosyne.NET.PostgreSql/Mnemosyne.NET.PostgreSql.csproj" />
+  </ItemGroup>
+
+  <!-- Rooting, not calling, is what makes the trimmer and AOT compiler analyze every package in full. -->
+  <ItemGroup>
+    <TrimmerRootAssembly Include="Mnemosyne.NET.Abstractions" />
+    <TrimmerRootAssembly Include="Mnemosyne.NET" />
+    <TrimmerRootAssembly Include="Mnemosyne.NET.PostgreSql" />
+  </ItemGroup>
+
+</Project>

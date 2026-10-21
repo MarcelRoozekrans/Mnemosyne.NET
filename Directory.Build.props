@@ -1,0 +1,27 @@
+<Project>
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+
+  <!-- Shared NuGet package metadata. Description is deliberately NOT set here: each .csproj owns its own. -->
+  <PropertyGroup>
+    <Authors>Marcel Roozekrans</Authors>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/MarcelRoozekrans/Mnemosyne.NET</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/MarcelRoozekrans/Mnemosyne.NET</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageTags>ai;agents;memory;procedural-memory;reasonlets;embeddings;pgvector;dotnet</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Packs each project's OWN README.md, beside its .csproj. There is no root fallback: a
+         packable project without its own README fails pack (NU5039). -->
+    <None Include="$(MSBuildProjectDirectory)\README.md" Pack="true" PackagePath="\" Visible="false" />
+  </ItemGroup>
+</Project>

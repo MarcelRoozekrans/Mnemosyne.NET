@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Mnemosyne.NET.Abstractions/Mnemosyne.NET.Abstractions.csproj" />
+    <Project Path="src/Mnemosyne.NET/Mnemosyne.NET.csproj" />
+    <Project Path="src/Mnemosyne.NET.PostgreSql/Mnemosyne.NET.PostgreSql.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Mnemosyne.NET.Tests/Mnemosyne.NET.Tests.csproj" />
+    <Project Path="tests/Mnemosyne.NET.AotSmoke/Mnemosyne.NET.AotSmoke.csproj" />
+  </Folder>
+</Solution>

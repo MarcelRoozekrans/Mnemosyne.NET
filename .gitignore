@@ -1,0 +1,24 @@
+# Build output
+bin/
+obj/
+TestResults/
+
+# IDE and per-user files
+*.user
+*.suo
+.vs/
+*.DotSettings.user
+
+# dotnet pack output. Packages are build products and never belong in history.
+artifacts/
+*.nupkg
+*.snupkg
+
+# Claude Code runtime artefacts. Named individually rather than ignoring all of .claude/,
+# which may later hold shared agent and skill definitions.
+.claude/scheduled_tasks.lock
+.claude/worktrees/
+.worktrees/
+
+# Screenshots and page snapshots the Playwright MCP server writes into the working directory.
+.playwright-mcp/

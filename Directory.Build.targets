@@ -1,0 +1,24 @@
+<Project>
+
+  <!--
+    Refuses a VSTest filter on a project Microsoft.Testing.Platform runs, because the filter is
+    silently ignored there and EVERY test in the assembly runs instead.
+
+    Passing a filter to `dotnet test` sets the MSBuild property VSTestTestCaseFilter. Under MTP the
+    runner is InvokeTestingPlatform, which does not read it: MTP raises MTP0001, only a WARNING, and
+    the run proceeds over the whole assembly. Error rather than Warning on purpose, so it is not
+    scrolled past.
+
+    The Condition checks the hook target, not TestingPlatformDotnetTestSupport: the target exists
+    only when MTP is the runner, so the guard arms itself for any project that adopts MTP.
+  -->
+  <Target Name="RefuseVSTestFilterUnderTestingPlatform"
+          BeforeTargets="InvokeTestingPlatform"
+          Condition="'$(VSTestTestCaseFilter)' != ''">
+
+    <Error Code="MNEMO0001"
+           Text="'--filter' is silently ignored here: Microsoft.Testing.Platform is the test runner for this project, and it does not apply the VSTest filter property, so EVERY test in the assembly runs instead of the ones you asked for. Use the native xunit v3 runner, which honours -class, -method and -filter: $(TargetDir)$(AssemblyName).exe -class &lt;fully.qualified.ClassName&gt;" />
+
+  </Target>
+
+</Project>

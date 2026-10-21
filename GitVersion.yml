@@ -1,0 +1,32 @@
+# Derives every package version from git history: GitVersion as a dotnet local tool
+# (.config/dotnet-tools.json), this file as its configuration, output parsed with jq in CI.
+#
+# The repository has no tags yet, deliberately. Until the first release tag exists,
+# next-version below is the base, and every version GitVersion produces is a PRERELEASE:
+# 0.1.0-preview.N on main, 0.1.0-<branch>.N on branches. Nothing publishes, but the pack
+# step must produce a coherent version. Once a release tag vX.Y.Z exists, GitVersion returns
+# that stable version on the tagged commit and this file needs no change.
+workflow: GitHubFlow/v1
+
+# The fallback base while no tag exists. 0.x on purpose: a 1.0.0-anything version would claim
+# a release decision that has not been made.
+next-version: 0.1.0
+
+branches:
+  main:
+    # GitHubFlow's default for main is an empty label, meaning stable versions. Until the
+    # first tag, main is labelled so that it produces prereleases.
+    label: preview
+    # ContinuousDelivery gives one prerelease number per commit: 0.1.0-preview.N, N monotonic.
+    # NOT ContinuousDeployment, which in GitVersion 6 strips the label and would derive a
+    # stable 0.1.0 from main.
+    mode: ContinuousDelivery
+
+  # A publish run that checks out a release TAG leaves HEAD detached, so GitVersion matches no
+  # named branch and uses this config. GitHubFlow's default there bumps the tagged commit to
+  # the NEXT patch with a "-no-branch-" label, which a publish step would refuse as a
+  # prerelease. With the increment prevented on a tagged commit, a checkout of vX.Y.Z
+  # derives exactly X.Y.Z; untagged commits are unaffected.
+  unknown:
+    prevent-increment:
+      when-current-commit-tagged: true
