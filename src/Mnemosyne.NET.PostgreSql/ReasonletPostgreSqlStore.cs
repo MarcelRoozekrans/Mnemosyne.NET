@@ -1,6 +1,7 @@
 using System.Data;
 using System.Data.Async;
 using System.Data.Async.Adapters;
+using System.Diagnostics;
 using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Text.Json;
@@ -17,7 +18,9 @@ namespace Mnemosyne.NET.PostgreSql;
 /// <remarks>
 /// The host calls <see cref="MigrateAsync"/> once at startup, before anything else. Every other member answers
 /// <see cref="MnemosyneErrorCode.Unavailable"/> until the schema is migrated. The store opens one connection
-/// per operation from the data source it is given.
+/// per operation from the data source it is given. Every public member is one operation of
+/// <see cref="MnemosyneTelemetry.ActivitySourceName"/> and <see cref="MnemosyneTelemetry.MeterName"/>, a failed or
+/// invalid call included, and its signals carry no user data.
 /// </remarks>
 public sealed class ReasonletPostgreSqlStore : IReasonletStore
 {
@@ -65,7 +68,10 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
     /// </remarks>
     /// <param name="ct">The cancellation token.</param>
     /// <returns>Success, or the error.</returns>
-    public async ValueTask<UnitResult<MnemosyneError>> MigrateAsync(CancellationToken ct)
+    public ValueTask<UnitResult<MnemosyneError>> MigrateAsync(CancellationToken ct) =>
+        StoreTelemetry.RunAsync("migrate", _ => MigrateOperationAsync(ct));
+
+    private async ValueTask<UnitResult<MnemosyneError>> MigrateOperationAsync(CancellationToken ct)
     {
         // Assigned rather than returned inside the try, so every line of the method can execute.
         UnitResult<MnemosyneError> result;
@@ -156,7 +162,11 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
     /// The stored lineage is corrupt: the <c>parent_id</c> links above the parent form a cycle, which only
     /// hand-written SQL can create.
     /// </exception>
-    public async ValueTask<Result<ReasonletReceipt, MnemosyneError>> RememberAsync(ReasonletStoreEntry entry, CancellationToken ct)
+    public ValueTask<Result<ReasonletReceipt, MnemosyneError>> RememberAsync(ReasonletStoreEntry entry, CancellationToken ct) =>
+        StoreTelemetry.RunAsync("remember", activity => RememberOperationAsync(entry, activity, ct));
+
+    private async ValueTask<Result<ReasonletReceipt, MnemosyneError>> RememberOperationAsync(
+        ReasonletStoreEntry entry, Activity? activity, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(entry);
         var migrated = await EnsureMigratedAsync(ct).ConfigureAwait(false);
@@ -185,7 +195,13 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
             return NormError(nameof(entry.Embedding));
         }
 
-        return await GuardAsync(RememberCoreAsync(entry, ct)).ConfigureAwait(false);
+        var result = await GuardAsync(RememberCoreAsync(entry, ct)).ConfigureAwait(false);
+        if (result.IsSuccess)
+        {
+            StoreTelemetry.Remember(activity, result.Value);
+        }
+
+        return result;
     }
 
     private async Task<Result<ReasonletReceipt, MnemosyneError>> RememberCoreAsync(ReasonletStoreEntry entry, CancellationToken ct)
@@ -352,7 +368,10 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
     }
 
     /// <inheritdoc />
-    public async ValueTask<Result<ReasonletDefinition, MnemosyneError>> GetAsync(ReasonletScope scope, ReasonletId id, CancellationToken ct)
+    public ValueTask<Result<ReasonletDefinition, MnemosyneError>> GetAsync(ReasonletScope scope, ReasonletId id, CancellationToken ct) =>
+        StoreTelemetry.RunAsync("get", _ => GetOperationAsync(scope, id, ct));
+
+    private async ValueTask<Result<ReasonletDefinition, MnemosyneError>> GetOperationAsync(ReasonletScope scope, ReasonletId id, CancellationToken ct)
     {
         var migrated = await EnsureMigratedAsync(ct).ConfigureAwait(false);
         if (migrated.IsFailure)
@@ -423,7 +442,11 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
     /// <see cref="MnemosyneErrorCode.NotFound"/>.
     /// </remarks>
     /// <exception cref="ArgumentNullException"><paramref name="provenance"/> is null.</exception>
-    public async ValueTask<Result<ExecutionId, MnemosyneError>> AppendExecutionAsync(
+    public ValueTask<Result<ExecutionId, MnemosyneError>> AppendExecutionAsync(
+        ReasonletScope scope, ReasonletId id, ReasonletOutcome outcome, ReasonletProvenance provenance, CancellationToken ct) =>
+        StoreTelemetry.RunAsync("execution.append", _ => AppendExecutionOperationAsync(scope, id, outcome, provenance, ct));
+
+    private async ValueTask<Result<ExecutionId, MnemosyneError>> AppendExecutionOperationAsync(
         ReasonletScope scope, ReasonletId id, ReasonletOutcome outcome, ReasonletProvenance provenance, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(provenance);
@@ -474,7 +497,11 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
     /// that a concurrent erase deletes while the upsert waits for it answers <see cref="MnemosyneErrorCode.Conflict"/>:
     /// the foreign-key check finds the execution gone.
     /// </remarks>
-    public async ValueTask<UnitResult<MnemosyneError>> AppendFeedbackAsync(
+    public ValueTask<UnitResult<MnemosyneError>> AppendFeedbackAsync(
+        ReasonletScope scope, ExecutionId execution, ReasonletFeedback feedback, CancellationToken ct) =>
+        StoreTelemetry.RunAsync("feedback.append", _ => AppendFeedbackOperationAsync(scope, execution, feedback, ct));
+
+    private async ValueTask<UnitResult<MnemosyneError>> AppendFeedbackOperationAsync(
         ReasonletScope scope, ExecutionId execution, ReasonletFeedback feedback, CancellationToken ct)
     {
         var migrated = await EnsureMigratedAsync(ct).ConfigureAwait(false);
@@ -530,9 +557,14 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
     /// order: a second sort key could stop the index from serving the ordering. The embedding must have a nonzero,
     /// finite norm, or the search is a <see cref="MnemosyneErrorCode.Validation"/> failure.
     /// </remarks>
-    public async ValueTask<Result<IReadOnlyList<ReasonletCandidate>, MnemosyneError>> SearchAsync(
-        ReasonletScope scope, ReadOnlyMemory<float> embedding, string? intent, int limit, CancellationToken ct)
+    public ValueTask<Result<IReadOnlyList<ReasonletCandidate>, MnemosyneError>> SearchAsync(
+        ReasonletScope scope, ReadOnlyMemory<float> embedding, string? intent, int limit, CancellationToken ct) =>
+        StoreTelemetry.RunAsync("search", activity => SearchOperationAsync(scope, embedding, intent, limit, activity, ct));
+
+    private async ValueTask<Result<IReadOnlyList<ReasonletCandidate>, MnemosyneError>> SearchOperationAsync(
+        ReasonletScope scope, ReadOnlyMemory<float> embedding, string? intent, int limit, Activity? activity, CancellationToken ct)
     {
+        StoreTelemetry.SearchLimit(activity, limit);
         var migrated = await EnsureMigratedAsync(ct).ConfigureAwait(false);
         if (migrated.IsFailure)
         {
@@ -545,7 +577,13 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
             return invalid.Value;
         }
 
-        return await GuardAsync(SearchCoreAsync(scope, embedding, intent, limit, ct)).ConfigureAwait(false);
+        var result = await GuardAsync(SearchCoreAsync(scope, embedding, intent, limit, ct)).ConfigureAwait(false);
+        if (result.IsSuccess)
+        {
+            StoreTelemetry.Searched(activity, result.Value);
+        }
+
+        return result;
     }
 
     private MnemosyneError? ValidateSearch(ReadOnlySpan<float> embedding, string? intent, int limit)
@@ -670,9 +708,14 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
     /// read its depths and the moment it took its locks, so that the two order the rows they share by different depths.
     /// </remarks>
     /// <exception cref="ArgumentNullException"><paramref name="erasure"/> is null.</exception>
-    public async ValueTask<Result<ReasonletErasureResult, MnemosyneError>> EraseAsync(ReasonletErasure erasure, CancellationToken ct)
+    public ValueTask<Result<ReasonletErasureResult, MnemosyneError>> EraseAsync(ReasonletErasure erasure, CancellationToken ct) =>
+        StoreTelemetry.RunAsync("erase", activity => EraseOperationAsync(erasure, activity, ct));
+
+    private async ValueTask<Result<ReasonletErasureResult, MnemosyneError>> EraseOperationAsync(
+        ReasonletErasure erasure, Activity? activity, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(erasure);
+        StoreTelemetry.EraseBy(activity, erasure);
         var migrated = await EnsureMigratedAsync(ct).ConfigureAwait(false);
         if (migrated.IsFailure)
         {
@@ -685,7 +728,13 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
             return valid.Error;
         }
 
-        return await GuardAsync(EraseCoreAsync(erasure, ct)).ConfigureAwait(false);
+        var result = await GuardAsync(EraseCoreAsync(erasure, ct)).ConfigureAwait(false);
+        if (result.IsSuccess)
+        {
+            StoreTelemetry.Erased(activity, result.Value);
+        }
+
+        return result;
     }
 
     private async Task<Result<ReasonletErasureResult, MnemosyneError>> EraseCoreAsync(ReasonletErasure erasure, CancellationToken ct)
@@ -765,25 +814,37 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
 
     /// <summary>
     /// Prunes as <see cref="PruneAsync(ReasonletRetention, CancellationToken)"/> does, and adds every committed batch to
-    /// <paramref name="progress"/>, which therefore holds what was deleted even when the prune fails.
+    /// <paramref name="progress"/>, which therefore holds what was deleted even when the prune fails. The telemetry
+    /// reads its counts from there, so it counts every committed batch however the prune ends.
     /// </summary>
-    internal async ValueTask<Result<ReasonletPruneResult, MnemosyneError>> PruneAsync(
-        ReasonletRetention retention, PruneProgress progress, CancellationToken ct)
+    internal ValueTask<Result<ReasonletPruneResult, MnemosyneError>> PruneAsync(
+        ReasonletRetention retention, PruneProgress progress, CancellationToken ct) =>
+        StoreTelemetry.RunAsync("prune", activity => PruneOperationAsync(retention, progress, activity, ct));
+
+    private async ValueTask<Result<ReasonletPruneResult, MnemosyneError>> PruneOperationAsync(
+        ReasonletRetention retention, PruneProgress progress, Activity? activity, CancellationToken ct)
     {
-        ArgumentNullException.ThrowIfNull(retention);
-        var migrated = await EnsureMigratedAsync(ct).ConfigureAwait(false);
-        if (migrated.IsFailure)
+        try
         {
-            return migrated.Error;
-        }
+            ArgumentNullException.ThrowIfNull(retention);
+            var migrated = await EnsureMigratedAsync(ct).ConfigureAwait(false);
+            if (migrated.IsFailure)
+            {
+                return migrated.Error;
+            }
 
-        var valid = retention.Validate();
-        if (valid.IsFailure)
+            var valid = retention.Validate();
+            if (valid.IsFailure)
+            {
+                return valid.Error;
+            }
+
+            return await GuardAsync(PruneCoreAsync(retention, progress, ct)).ConfigureAwait(false);
+        }
+        finally
         {
-            return valid.Error;
+            StoreTelemetry.Pruned(activity, progress);
         }
-
-        return await GuardAsync(PruneCoreAsync(retention, progress, ct)).ConfigureAwait(false);
     }
 
     private async Task<Result<ReasonletPruneResult, MnemosyneError>> PruneCoreAsync(
