@@ -790,7 +790,8 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
     /// version below it was remembered or last ran at or after the cutoff, so a superseded version stays while a later
     /// one is in use, and a lineage goes only once its whole subtree is idle. <see cref="ReasonletStatus.PendingReview"/>
     /// Reasonlets are judged like active ones. The idle ones are listed once, deepest first, and deleted in batches of
-    /// at most 1,000 in that order, so no batch deletes a Reasonlet and keeps its child. A batch deletes its
+    /// at most 1,000 in that order, so a whole idle lineage goes in one prune; a batch keeps any Reasonlet with a
+    /// descendant it does not hold, so it never deletes a Reasonlet and keeps its child. A batch deletes its
     /// Reasonlets' runs with them, unless they hold more than 1,000, which then go first in batches of their own: no
     /// transaction deletes more than 1,000 rows of either kind directly, and the metrics and feedback rows that
     /// cascade come on top. Each batch locks its Reasonlets without waiting, skipping any that another transaction
@@ -913,15 +914,18 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
     /// </summary>
     /// <remarks>
     /// <para>
-    /// The idle ids are listed once, deepest first, and taken a chunk of <paramref name="batchSize"/> at a time; that
-    /// order is what keeps a batch from deleting a parent without its children. The list can hold too much: a row
+    /// The idle ids are listed once, deepest first, and taken a chunk of <paramref name="batchSize"/> at a time. The
+    /// order lets a whole idle subtree go in one prune: a row's children are in its chunk or went in an earlier one,
+    /// so they are gone or held when its batch runs. What keeps a batch from deleting a parent without its children
+    /// is the re-check, which keeps every row with a descendant the batch does not hold. The list can hold too much: a row
     /// that became used since it was read is dropped by its batch's re-check. It can also hold too little: a row an
     /// erase made idle since, by removing the descendant that kept it, waits for the next prune.
     /// </para>
     /// <para>
-    /// A chunk normally goes in one Reasonlet batch, which deletes its idle Reasonlets with their runs. When the
-    /// chunk's Reasonlets hold more than <paramref name="batchSize"/> runs, those runs go first, in run batches of at
-    /// most <paramref name="batchSize"/> until one comes back short, and the Reasonlet batch follows. A Reasonlet batch
+    /// A chunk normally goes in one Reasonlet batch, which deletes its idle Reasonlets with their runs. A batch first
+    /// counts the runs of the Reasonlets it holds, without locking them. When there are more than
+    /// <paramref name="batchSize"/>, it deletes a batch of them instead, more run batches follow until one comes back
+    /// short, and then the Reasonlet batch. A Reasonlet batch
     /// still checks the bound on the rows it finds idle, and when they hold too many runs it deletes a batch of them
     /// and leaves the Reasonlets for the next batch, so no transaction deletes more than <paramref name="batchSize"/>
     /// rows of either kind directly.
@@ -970,10 +974,10 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
         var idle = await ListIdleReasonletsAsync(scope, cutoff, ct).ConfigureAwait(false);
         foreach (var chunk in idle.Chunk(batchSize))
         {
-            // Whether a batch that finds more runs than the bound sends them to run batches first. Once they have gone,
-            // the runs left belong to rows the re-check keeps, and the bounded delete handles the rare rest.
+            // Whether a batch that counts more runs than the bound strips them first. Once they have gone, the runs left
+            // belong to rows the re-check keeps, and the bounded delete handles the rare rest.
             var stripRuns = true;
-            IdlePruneRow? batch;
+            IdleBatch batch;
             do
             {
                 var strip = stripRuns;
@@ -982,31 +986,46 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
                     {
                         var retention = new RetentionRepository(connection);
                         var locked = await retention.LockIdleReasonletsAsync(chunk, transaction, ct).ConfigureAwait(false);
-                        var runs = await retention.LockIdleExecutionsAsync(locked, transaction, ct).ConfigureAwait(false);
-                        if (strip && runs > batchSize)
+                        if (strip && await retention.CountIdleExecutionsAsync(locked, transaction, ct).ConfigureAwait(false) > batchSize)
                         {
-                            // Too many runs to delete with the Reasonlets: commit nothing, and strip them first.
-                            return null;
+                            // Too many runs to delete with the Reasonlets: this batch deletes one batch of them instead.
+                            var stripped = await retention.DeleteIdleExecutionsAsync(locked, cutoff, batchSize, transaction, ct).ConfigureAwait(false);
+                            return new IdleBatch(0, stripped, StrippedRunsFirst: true, ChunkDone: false);
                         }
 
+                        await retention.LockIdleExecutionsAsync(locked, transaction, ct).ConfigureAwait(false);
                         await retention.LockIdleMetricsAsync(locked, transaction, ct).ConfigureAwait(false);
-                        return await retention.DeleteStillIdleAsync(locked, cutoff, batchSize, transaction, ct).ConfigureAwait(false);
+
+                        // An aggregate always answers a row, so the null-forgiving operator only skips a check the query cannot fail.
+                        var deleted = (await retention.DeleteStillIdleAsync(locked, cutoff, batchSize, transaction, ct).ConfigureAwait(false))!;
+                        return new IdleBatch(deleted.Reasonlets, deleted.Executions, StrippedRunsFirst: false, ChunkDone: !deleted.Stripped);
                     },
                     ct).ConfigureAwait(false);
-                if (batch is null)
+                progress.Reasonlets += batch.Reasonlets;
+                progress.Executions += batch.Executions;
+                if (batch.StrippedRunsFirst)
                 {
-                    await StripIdleRunsAsync(chunk, cutoff, batchSize, progress, ct).ConfigureAwait(false);
+                    // A full batch means more may be left; a short one means the idle rows' runs are gone.
+                    if (batch.Executions == batchSize)
+                    {
+                        await StripIdleRunsAsync(chunk, cutoff, batchSize, progress, ct).ConfigureAwait(false);
+                    }
+
                     stripRuns = false;
                 }
-                else
-                {
-                    progress.Reasonlets += batch.Reasonlets;
-                    progress.Executions += batch.Executions;
-                }
             }
-            while (batch is null || batch.Stripped);
+            while (!batch.ChunkDone);
         }
     }
+
+    /// <summary>What one batch of a chunk did.</summary>
+    /// <param name="Reasonlets">The Reasonlets it deleted.</param>
+    /// <param name="Executions">The executions it deleted.</param>
+    /// <param name="StrippedRunsFirst">
+    /// Whether it counted more runs than the bound and deleted a batch of them instead of the Reasonlets.
+    /// </param>
+    /// <param name="ChunkDone">Whether the chunk's idle Reasonlets are gone, so no further batch is needed.</param>
+    private readonly record struct IdleBatch(int Reasonlets, int Executions, bool StrippedRunsFirst, bool ChunkDone);
 
     /// <summary>
     /// Deletes the runs of a chunk's idle Reasonlets in run batches of at most <paramref name="batchSize"/>, until one

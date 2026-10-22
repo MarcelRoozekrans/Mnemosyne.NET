@@ -637,9 +637,10 @@ public sealed class PruneTests(PgVectorFixture fixture) : IClassFixture<PgVector
     [Fact]
     public async Task AChunkWhoseRunsExceedTheBoundLosesThemInRunBatchesFirst()
     {
-        // One idle Reasonlet with five old runs, in batches of two. Its runs do not fit in its Reasonlet batch, so they
-        // go first, two at a time, until a run batch comes back short; the Reasonlet batch then deletes it with no run
-        // left. No batch deletes more than two executions.
+        // One idle Reasonlet with five old runs, in batches of two. The first batch counts five runs, which do not fit
+        // with the Reasonlet, so it deletes two of them instead; run batches follow, two at a time, until one comes
+        // back short, and the Reasonlet batch then deletes it with no run left. No batch deletes more than two
+        // executions.
         var store = await MigratedStoreAsync();
         store.PruneBatchSizeOverride = 2;
         var scope = PgVectorFixture.NewScope();
@@ -653,15 +654,15 @@ public sealed class PruneTests(PgVectorFixture fixture) : IClassFixture<PgVector
         Assert.Equal((1, 5), (result.Reasonlets, result.Executions));
         Assert.Equal((0L, 0L), await CountsAsync(fixture.DataSource, scope));
 
-        // The first batch finds five runs and commits nothing; three run batches follow, then the Reasonlet batch.
-        Assert.Equal([5L, 3L, 1L, 0L, 0L], left);
+        // The counting batch deletes two, two run batches follow, then the Reasonlet batch.
+        Assert.Equal([3L, 1L, 0L, 0L], left);
     }
 
     [Fact(Timeout = 30_000)]
     public async Task ARowThatBecomesIdleAfterItsRunsWereStrippedStillGoesWithinTheBound()
     {
         // Y, with three old runs, has a child C that another transaction holds, in batches of two. The first batch
-        // finds three runs and commits nothing. The run batch skips C, so C keeps Y, and it deletes nothing. Then the
+        // counts three runs, so it tries to strip them, but it skipped C, so C keeps Y and it deletes nothing. Then the
         // other transaction ends and C is erased, so Y is idle with three runs when its Reasonlet batch runs. That
         // batch checks the bound on the rows it finds idle: it deletes two runs and keeps Y, and the next batch deletes
         // Y with its last run.
@@ -681,7 +682,7 @@ public sealed class PruneTests(PgVectorFixture fixture) : IClassFixture<PgVector
         {
             left.Add(await Entries.ScalarAsync<long>(
                 fixture.DataSource, "SELECT count(*) FROM mnemosyne.reasonlet_executions WHERE reasonlet_id = $1", y.Id.Value));
-            if (left.Count == 2)
+            if (left.Count == 1)
             {
                 await transaction.CommitAsync(Ct);
                 Assert.True((await store.EraseAsync(new ReasonletErasure(scope, SubjectB), Ct)).IsSuccess);
@@ -691,7 +692,7 @@ public sealed class PruneTests(PgVectorFixture fixture) : IClassFixture<PgVector
         var result = await PruneAsync(store, new ReasonletRetention { Scope = scope, ReasonletsUnusedFor = FiveDays });
 
         Assert.Equal((1, 3), (result.Reasonlets, result.Executions));
-        Assert.Equal([3L, 3L, 1L, 0L], left);
+        Assert.Equal([3L, 1L, 0L], left);
         Assert.Equal((0L, 0L), await CountsAsync(fixture.DataSource, scope));
     }
 

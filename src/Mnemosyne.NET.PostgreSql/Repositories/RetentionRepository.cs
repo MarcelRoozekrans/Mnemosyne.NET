@@ -121,8 +121,10 @@ internal sealed partial class RetentionRepository(IAsyncDbConnection connection)
     /// per lineage, so the used closure is the used rows and every ancestor of one: a walk up <c>parent_id</c>. Every
     /// candidate outside the closure is idle. It follows that every child of an idle row is idle, so taking the list
     /// in chunks, deepest first, means that when a batch holds a row at depth k, every listed row deeper than k, its
-    /// children among them, is in the same chunk or went in an earlier one. The order serves only that: a batch locks
-    /// its chunk without waiting, so the order it locks in cannot make it deadlock.
+    /// children among them, is in the same chunk or went in an earlier one, so a whole idle subtree goes in one prune.
+    /// The order serves only that. It is not what keeps a parent from going without its children, which is the
+    /// re-check's rule that a descendant the batch does not hold keeps the row; and a batch locks its chunk without
+    /// waiting, so the order it locks in cannot make it deadlock.
     /// </para>
     /// <para>
     /// The depth is computed as <see cref="ReasonletRepository.LockForErasureAsync"/> computes it: a walk up from the
@@ -244,13 +246,35 @@ internal sealed partial class RetentionRepository(IAsyncDbConnection connection)
     public partial Task<Guid[]> LockIdleReasonletsAsync(Guid[] ids, IAsyncDbTransaction transaction, CancellationToken ct);
 
     /// <summary>
-    /// Locks <c>FOR UPDATE</c>, in id order and until the transaction ends, every execution of the locked Reasonlets,
-    /// and answers how many it locked. The second lock step of a Reasonlet batch, after
-    /// <see cref="LockIdleReasonletsAsync"/> and before <see cref="LockIdleMetricsAsync"/>. The store reads the count to
-    /// decide whether the chunk's runs fit in the batch, or must first go in run batches of their own.
+    /// Counts the executions of the locked Reasonlets, without locking them. The store reads the count to decide
+    /// whether a chunk's runs fit in its Reasonlet batch, or must first go in run batches of their own.
     /// </summary>
     /// <remarks>
-    /// Executions before metrics, as an erase takes them: a subject erase locks runs of a Reasonlet it keeps and then
+    /// A plain count, because the decision needs no lock: <see cref="DeleteStillIdleAsync"/> checks the bound again on
+    /// the rows it finds idle, and a run batch locks only the runs it deletes. Only the Reasonlet batch's delete needs
+    /// every run locked first, by <see cref="LockIdleExecutionsAsync"/>, so that it takes no execution lock while it
+    /// holds metrics rows. The executions are found by a probe of the <c>(scope, reasonlet_id)</c> index per
+    /// Reasonlet, as in that method. The Reasonlet locks hold new runs off, so the count is exact for the batch.
+    /// </remarks>
+    [Query("""
+        SELECT count(*)::int
+        FROM mnemosyne.reasonlets r CROSS JOIN LATERAL (
+            SELECT 1 FROM mnemosyne.reasonlet_executions x
+            WHERE x.scope = r.scope AND x.reasonlet_id = r.id
+            OFFSET 0
+        ) c
+        WHERE r.id = ANY(@ids)
+        """)]
+    public partial Task<int?> CountIdleExecutionsAsync(Guid[] ids, IAsyncDbTransaction transaction, CancellationToken ct);
+
+    /// <summary>
+    /// Locks <c>FOR UPDATE</c>, in id order and until the transaction ends, every execution of the locked Reasonlets,
+    /// and answers how many it locked. The second lock step of a Reasonlet batch, after
+    /// <see cref="LockIdleReasonletsAsync"/> and before <see cref="LockIdleMetricsAsync"/>.
+    /// </summary>
+    /// <remarks>
+    /// The lock is what the Reasonlet batch's delete needs, not the count, which nothing reads. Executions before
+    /// metrics, as an erase takes them: a subject erase locks runs of a Reasonlet it keeps and then
     /// that Reasonlet's metrics row, without locking the Reasonlet, so a prune that took the metrics row first and
     /// then deleted the runs would deadlock with it. The executions are found through their Reasonlet's scope, by a
     /// probe of the <c>(scope, reasonlet_id)</c> index per Reasonlet that <c>OFFSET 0</c> keeps from being flattened,
