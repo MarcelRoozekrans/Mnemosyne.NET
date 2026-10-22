@@ -68,6 +68,24 @@ public sealed record ReasonletGraph
             CheckLimits);
     }
 
+    /// <summary>Computes the content hash: the SHA-256 of the graph's canonical JSON form. Never throws.</summary>
+    /// <returns>
+    /// 64 lowercase hex characters, or the <see cref="MnemosyneErrorCode.Validation"/> failure from <see cref="Validate"/>.
+    /// </returns>
+    /// <remarks>
+    /// Equal graphs hash the same however their nodes, edges and property members are ordered, and whether their
+    /// strings are escaped or not. Arrays inside property values keep their order, numbers keep their raw text so
+    /// <c>1</c> and <c>1.0</c> differ, null and empty properties are the same, and <see cref="SchemaVersion"/> is
+    /// included. The canonical form is a permanent contract, because stored hashes depend on it.
+    /// </remarks>
+    public Result<string, MnemosyneError> ComputeContentHash()
+    {
+        var valid = Validate();
+        return valid.IsSuccess
+            ? Result<string, MnemosyneError>.Success(CanonicalGraphWriter.Hash(this))
+            : Result<string, MnemosyneError>.Failure(valid.Error);
+    }
+
     private UnitResult<MnemosyneError> CheckVersion() =>
         SchemaVersion == CurrentSchemaVersion
             ? UnitResult<MnemosyneError>.Success()

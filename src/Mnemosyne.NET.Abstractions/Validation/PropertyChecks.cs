@@ -17,8 +17,8 @@ internal static class PropertyChecks
     /// <summary>
     /// Checks the keys and values of a properties dictionary and returns the first failure.
     /// A key is two or more dot-separated segments, none of them empty, and valid UTF-16. A value must be defined,
-    /// nested at most <see cref="ReasonletGraphLimits.MaxPropertyDepth"/> levels deep, and hold only valid UTF-16
-    /// in its strings and member names, so that measuring and writing it cannot throw.
+    /// nested at most <see cref="ReasonletGraphLimits.MaxPropertyDepth"/> levels deep, and hold only valid UTF-8 and
+    /// UTF-16 in its strings and member names, so that measuring and writing it cannot throw.
     /// </summary>
     public static UnitResult<MnemosyneError> Validate(IReadOnlyDictionary<string, JsonElement>? props, string pathPrefix)
     {
