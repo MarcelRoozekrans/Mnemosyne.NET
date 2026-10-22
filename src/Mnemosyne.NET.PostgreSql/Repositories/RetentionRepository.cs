@@ -210,13 +210,43 @@ internal sealed partial class RetentionRepository(IAsyncDbConnection connection)
     public partial Task<Guid[]> ListIdleReasonletsInScopeAsync(string scope, DateTime cutoff, IAsyncDbTransaction transaction, CancellationToken ct);
 
     /// <summary>
-    /// Locks <c>FOR UPDATE</c>, until the transaction ends, the listed Reasonlets that still exist, one after another
-    /// in the order given, and answers their ids in that order. The first lock step of every prune batch.
+    /// Walks up <c>parent_id</c> from the Reasonlets of one chunk that still exist to the tops of their lineages, and
+    /// returns every link it met, in no particular order: the chunk's rows and all their ancestors, each once. The
+    /// store numbers the depths from these links, so that <see cref="LockIdleReasonletsAsync"/> locks by the lineages
+    /// as they stand now.
+    /// </summary>
+    /// <remarks>
+    /// <c>UNION</c> visits each row once and ends at a hand-written <c>parent_id</c> cycle, and each step is a
+    /// primary-key probe in a <c>LATERAL</c> subquery that <c>LIMIT 1</c> keeps from being flattened, as in
+    /// <see cref="ReasonletRepository.WalkUpAsync"/>. So the walk reads the chunk's paths to the top and no other
+    /// branch of their lineages, and is linear in that. The scope is carried rather than bound, so it serves a prune
+    /// of every scope. The depths are numbered in the store rather than by a walk down here: a walk down restricted to
+    /// these rows has to join each step to them, and PostgreSQL 17 planned that join to re-read them at every step,
+    /// which is quadratic in the depth of a chain.
+    /// </remarks>
+    [Query("""
+        WITH RECURSIVE up (id, parent_id, scope) AS (
+            SELECT r.id, r.parent_id, r.scope FROM mnemosyne.reasonlets r WHERE r.id = ANY(@ids)
+            UNION
+            SELECT p.id, p.parent_id, p.scope
+            FROM up CROSS JOIN LATERAL (
+                SELECT r.id, r.parent_id, r.scope FROM mnemosyne.reasonlets r
+                WHERE r.id = up.parent_id AND r.scope = up.scope
+                LIMIT 1
+            ) p
+        )
+        SELECT id, parent_id FROM up
+        """)]
+    public partial Task<List<ParentLinkRow>> WalkUpIdleAsync(Guid[] ids, IAsyncDbTransaction transaction, CancellationToken ct);
+
+    /// <summary>
+    /// Locks <c>FOR UPDATE</c>, until the transaction ends, the given Reasonlets that still exist, one after another
+    /// in the order given, and answers their ids in that order. The first lock step of every prune batch. The store
+    /// gives them deepest first by their depth now, then by id, the order an erase locks Reasonlets in.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// The order given is the list's: deepest first, then by id, which is the order an erase locks Reasonlets in. A
-    /// row a concurrent erase deleted while this waited for it is skipped. <c>FOR UPDATE</c> conflicts with every
+    /// A row a concurrent erase deleted while this waited for it is skipped. <c>FOR UPDATE</c> conflicts with every
     /// lock a writer takes on a Reasonlet: an append's <c>FOR KEY SHARE</c>, and a remember's <c>FOR NO KEY UPDATE</c>
     /// on the parent and <c>FOR KEY SHARE</c> on each ancestor. So from here until commit no run can be appended to a
     /// locked row and no version remembered below one; a writer that comes later waits and then finds the row gone.

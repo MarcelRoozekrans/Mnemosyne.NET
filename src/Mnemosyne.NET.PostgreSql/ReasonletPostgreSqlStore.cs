@@ -664,9 +664,10 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
     /// remembered while it runs is not erased by it. The Reasonlets are locked deepest first, the order a remember's
     /// path locks take, so an erase waits behind a remember rather than deadlocking with it. Then come the executions
     /// it removes, then the metrics rows it subtracts from, so two overlapping erases take their rows in one order and
-    /// complete. A deadlock that still
-    /// happens, with a remember that raced the lock walk or with a hand-written transaction, answers
-    /// <see cref="MnemosyneErrorCode.Conflict"/>.
+    /// complete. A concurrent prune locks in the same order. A deadlock that still happens answers
+    /// <see cref="MnemosyneErrorCode.Conflict"/>: with a remember that raced the lock walk, with a hand-written
+    /// transaction, or with another erase or a prune when a third erase cut a lineage between the moment one of them
+    /// read its depths and the moment it took its locks, so that the two order the rows they share by different depths.
     /// </remarks>
     /// <exception cref="ArgumentNullException"><paramref name="erasure"/> is null.</exception>
     public async ValueTask<Result<ReasonletErasureResult, MnemosyneError>> EraseAsync(ReasonletErasure erasure, CancellationToken ct)
@@ -729,7 +730,8 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
     /// version below it was remembered or last ran at or after the cutoff, so a superseded version stays while a later
     /// one is in use, and a lineage goes only once its whole subtree is idle. <see cref="ReasonletStatus.PendingReview"/>
     /// Reasonlets are judged like active ones. The idle ones are listed once, deepest first, and deleted in batches of
-    /// at most 1,000, their runs first in batches of their own, so no batch deletes a Reasonlet and keeps its child.
+    /// at most 1,000 in that order, so no batch deletes a Reasonlet and keeps its child. A batch's runs go first, in
+    /// batches of their own, so that no transaction deletes more than 1,000 rows of either kind.
     /// Each batch locks its Reasonlets, then their runs, then their metrics rows, the order every writer takes them
     /// in, and re-checks before it deletes: a Reasonlet that ran, or gained a version, after the list was read is kept
     /// and not counted, and so are its ancestors. An append or a remember that arrives after the locks waits, then
@@ -825,16 +827,17 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
     /// </summary>
     /// <remarks>
     /// <para>
-    /// The idle ids are listed once, in lock order, deepest first, and taken a chunk of <paramref name="batchSize"/>
-    /// at a time. Against a fixed cutoff a row can become used but never idle, so the list only ever holds too much,
-    /// and each batch's re-check drops what became used. A chunk's runs go first, in run batches of at most
+    /// The idle ids are listed once, deepest first, and taken a chunk of <paramref name="batchSize"/> at a time; that
+    /// order is what keeps a batch from deleting a parent without its children. Against a fixed cutoff a row can become
+    /// used but never idle, so the list only ever holds too much, and each batch's re-check drops what became used. A chunk's runs go first, in run batches of at most
     /// <paramref name="batchSize"/> until one deletes nothing, so the Reasonlet batch that follows deletes at most
     /// <paramref name="batchSize"/> Reasonlets and, normally, no runs.
     /// </para>
     /// <para>
     /// Each batch is its own transaction and locks in the order every writer uses: Reasonlets, then executions, then
-    /// metrics rows. A run batch locks the chunk's Reasonlets and then deletes executions, which it locks in id
-    /// order; it takes no metrics lock. A Reasonlet batch locks the Reasonlets, then their executions in id order,
+    /// metrics rows. Both kinds of batch lock the chunk's Reasonlets through <see cref="LockByCurrentDepthAsync"/>,
+    /// deepest first by the depths the lineages have when the batch runs, then by id. A run batch then deletes
+    /// executions, which it locks in id order; it takes no metrics lock. A Reasonlet batch locks the Reasonlets, then their executions in id order,
     /// then their metrics rows in id order, and only then re-checks and deletes, touching no row it does not hold.
     /// So a cycle of waits with another writer would need that writer to hold a row later in this order while it
     /// waits for an earlier one, and none does:
@@ -851,12 +854,13 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
     /// </description></item>
     /// <item><description>
     /// A remember locks its parent and every ancestor bottom-up, child before parent, then inserts new rows. The prune
-    /// lists a child before its parent too, because the list is deepest first and a link between existing rows is
-    /// never added, only cut. So the two lock any path in one direction.
+    /// locks a child before its parent too, because it locks deepest first by the lineages as they stand. So the two
+    /// lock any path in one direction.
     /// </description></item>
     /// <item><description>
     /// An erase locks Reasonlets deepest first and by id, then executions in id order, then the metrics rows of the
-    /// Reasonlets it keeps in id order, then deletes only what it locked. That is the prune's order phase by phase. A
+    /// Reasonlets it keeps in id order, then deletes only what it locked. That is the prune's order phase by phase,
+    /// and both read the depths fresh, so an erase that cut a lineage before either ran changes both orders alike. A
     /// subject erase locks runs and the metrics row of a Reasonlet it keeps without locking that Reasonlet, which is
     /// why the prune takes the runs before the metrics rows: the other way round, each would hold what the other
     /// waits for. Two erases or two prunes meet in the same order as each other.
@@ -866,11 +870,10 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
     /// </description></item>
     /// </list>
     /// <para>
-    /// One gap remains. The prune's depths are read when the list is. An erase that deletes an ancestor between then
-    /// and a batch makes the subtree below it shallower. A later erase sees the new depths, and if it locks two rows
-    /// of the batch in the other order, it and the prune can deadlock. The prune retries a deadlock, and the
-    /// erase answers <see cref="MnemosyneErrorCode.Conflict"/>, as its contract allows. Along any one path the order
-    /// still agrees, so a remember is not affected.
+    /// What remains is the window every erase has too: a batch reads its depths, then takes its locks, and an erase
+    /// that commits a cut in between leaves it ordering by the old depths while a later erase orders by the new ones.
+    /// A deadlock there is retried, and the erase answers <see cref="MnemosyneErrorCode.Conflict"/>, as two erases
+    /// would in the same window.
     /// </para>
     /// </remarks>
     private async Task PruneIdleReasonletsAsync(string? scope, DateTime cutoff, int batchSize, PruneProgress progress, CancellationToken ct)
@@ -886,7 +889,7 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
                     async (connection, transaction) =>
                     {
                         var retention = new RetentionRepository(connection);
-                        var locked = await retention.LockIdleReasonletsAsync(chunk, transaction, ct).ConfigureAwait(false);
+                        var locked = await LockByCurrentDepthAsync(retention, chunk, transaction, ct).ConfigureAwait(false);
                         return await retention.DeleteIdleExecutionsAsync(locked, cutoff, batchSize, transaction, ct).ConfigureAwait(false);
                     },
                     ct).ConfigureAwait(false);
@@ -898,7 +901,7 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
                 async (connection, transaction) =>
                 {
                     var retention = new RetentionRepository(connection);
-                    var locked = await retention.LockIdleReasonletsAsync(chunk, transaction, ct).ConfigureAwait(false);
+                    var locked = await LockByCurrentDepthAsync(retention, chunk, transaction, ct).ConfigureAwait(false);
                     await retention.LockIdleExecutionsAsync(locked, transaction, ct).ConfigureAwait(false);
                     await retention.LockIdleMetricsAsync(locked, transaction, ct).ConfigureAwait(false);
 
@@ -908,6 +911,83 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
                 ct).ConfigureAwait(false);
             progress.Reasonlets += batch.Reasonlets;
             progress.Executions += batch.Executions;
+        }
+    }
+
+    /// <summary>
+    /// Locks the Reasonlets of a chunk that still exist <c>FOR UPDATE</c>, deepest first by their depth below the top
+    /// of their lineage as it stands now, then by id, and answers them in that order. The first step of every batch.
+    /// </summary>
+    /// <remarks>
+    /// The chunk's rows come from the list, and that is what keeps a batch from deleting a parent without its
+    /// children. The order comes from the lineages now, so a prune and an erase put the rows they share in one order
+    /// even after an erase deleted an ancestor and made a subtree shallower since the list was read. Fresh depths
+    /// still put every child before its parent, so a remember, which locks a path bottom-up, meets the batch in the
+    /// same direction.
+    /// </remarks>
+    internal static async Task<Guid[]> LockByCurrentDepthAsync(
+        RetentionRepository retention, Guid[] chunk, IAsyncDbTransaction transaction, CancellationToken ct)
+    {
+        var links = await retention.WalkUpIdleAsync(chunk, transaction, ct).ConfigureAwait(false);
+        return await retention.LockIdleReasonletsAsync(ByCurrentDepth(chunk, links), transaction, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Orders the rows of <paramref name="chunk"/> that <paramref name="links"/> still holds deepest first, by their
+    /// depth below the top of their lineage, then by id in PostgreSQL's order: the key
+    /// <see cref="ReasonletRepository.LockForErasureAsync"/> locks by.
+    /// </summary>
+    /// <remarks>
+    /// The links are every row from the chunk up to its tops, so numbering them down from the tops visits each once.
+    /// A row no top leads to, on or below a hand-written <c>parent_id</c> cycle, gets depth 0, as in an erase.
+    /// </remarks>
+    internal static Guid[] ByCurrentDepth(Guid[] chunk, List<ParentLinkRow> links)
+    {
+        var children = new Dictionary<Guid, List<Guid>>();
+        var depths = new Dictionary<Guid, int>();
+        var next = new Queue<Guid>();
+        foreach (var link in links)
+        {
+            if (link.ParentId is { } parent)
+            {
+                (CollectionsMarshal.GetValueRefOrAddDefault(children, parent, out _) ??= []).Add(link.Id);
+            }
+            else
+            {
+                depths[link.Id] = 0;
+                next.Enqueue(link.Id);
+            }
+        }
+
+        while (next.TryDequeue(out var id))
+        {
+            foreach (var child in children.GetValueOrDefault(id, []))
+            {
+                depths[child] = depths[id] + 1;
+                next.Enqueue(child);
+            }
+        }
+
+        var members = chunk.ToHashSet();
+        return [.. links
+            .Where(link => members.Contains(link.Id))
+            .OrderByDescending(link => depths.GetValueOrDefault(link.Id))
+            .ThenBy(link => link.Id, PostgresUuidOrder.Instance)
+            .Select(link => link.Id)];
+    }
+
+    /// <summary>Orders ids as PostgreSQL orders <c>uuid</c>: by their bytes in the order they are written.</summary>
+    private sealed class PostgresUuidOrder : IComparer<Guid>
+    {
+        public static readonly PostgresUuidOrder Instance = new();
+
+        public int Compare(Guid x, Guid y)
+        {
+            Span<byte> left = stackalloc byte[16];
+            Span<byte> right = stackalloc byte[16];
+            x.TryWriteBytes(left, bigEndian: true, out _);
+            y.TryWriteBytes(right, bigEndian: true, out _);
+            return left.SequenceCompareTo(right);
         }
     }
 

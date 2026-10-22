@@ -596,6 +596,49 @@ public sealed class PruneTests(PgVectorFixture fixture) : IClassFixture<PgVector
     }
 
     [Fact]
+    public async Task ABatchLocksByTheDepthsItFindsNotTheListsDepths()
+    {
+        // Two idle chains, a0 -> a1 -> a2 -> a3 and b0 -> b1, listed deepest first. Then a2's link to a1 is cut, as an
+        // erase of a1 by another subject would leave it, so a2 now tops its own lineage and a3 sits at depth 1. A later
+        // erase locks by those fresh depths, so the batch must too, or the two could take shared rows in opposite
+        // orders. The lock answers its rows in the order it locked them.
+        await MigratedStoreAsync();
+        var scope = PgVectorFixture.NewScope();
+        var a = await ChainAsync(fixture.DataSource, scope, 4);
+        var b = await ChainAsync(fixture.DataSource, scope, 2);
+        await using var connection = (await fixture.DataSource.OpenConnectionAsync(Ct)).AsAsync();
+        await using var transaction = await connection.BeginTransactionAsync(System.Data.IsolationLevel.ReadCommitted, Ct);
+        var retention = new Repositories.RetentionRepository(connection);
+        var listed = await retention.ListIdleReasonletsInScopeAsync(scope.Value, DateTime.UtcNow.AddDays(-5), transaction, Ct);
+        Assert.Equal(ByDepth((a[3], 3), (a[2], 2), (a[1], 1), (b[1], 1), (a[0], 0), (b[0], 0)), listed);
+        await Entries.ExecuteAsync(fixture.DataSource, "UPDATE mnemosyne.reasonlets SET parent_id = NULL WHERE id = $1", a[2]);
+
+        var locked = await ReasonletPostgreSqlStore.LockByCurrentDepthAsync(retention, listed, transaction, Ct);
+
+        Assert.Equal(ByDepth((a[3], 1), (a[1], 1), (b[1], 1), (a[2], 0), (a[0], 0), (b[0], 0)), locked);
+    }
+
+    /// <summary>Orders ids as a prune and an erase lock them: deepest first, then by id.</summary>
+    private static Guid[] ByDepth(params (Guid Id, int Depth)[] rows) =>
+        [.. rows.OrderByDescending(r => r.Depth).ThenBy(r => r.Id.ToString(), StringComparer.Ordinal).Select(r => r.Id)];
+
+    [Fact(Timeout = 30_000)]
+    public async Task IdleRowsOnAHandWrittenParentCycleArePruned()
+    {
+        // Only hand-written SQL can make a cycle. No top leads to its rows, so they lock at depth 0, as an erase locks
+        // them, and both walks end; the rows are idle, so they go.
+        var store = await MigratedStoreAsync();
+        var scope = PgVectorFixture.NewScope();
+        var chain = await ChainAsync(fixture.DataSource, scope, 2);
+        await Entries.ExecuteAsync(fixture.DataSource, "UPDATE mnemosyne.reasonlets SET parent_id = $1 WHERE id = $2", chain[1], chain[0]);
+
+        var result = await PruneAsync(store, new ReasonletRetention { Scope = scope, ReasonletsUnusedFor = FiveDays });
+
+        Assert.Equal((2, 2), (result.Reasonlets, result.Executions));
+        Assert.Equal((0L, 0L), await CountsAsync(fixture.DataSource, scope));
+    }
+
+    [Fact]
     public async Task AFailedIdlePruneKeepsEarlierBatches()
     {
         // A chain of four in batches of two. The first chunk commits: a run batch deletes its two runs, an empty run
@@ -740,16 +783,16 @@ public sealed class PruneTests(PgVectorFixture fixture) : IClassFixture<PgVector
             dataSource,
             """
             INSERT INTO mnemosyne.reasonlet_executions (id, reasonlet_id, scope, executed_at, success, duration_ticks, source)
-            SELECT gen_random_uuid(), id, scope, now() - interval '10 days', true, 0, 's' FROM mnemosyne.reasonlets WHERE scope = $1
+            SELECT gen_random_uuid(), id, scope, now() - interval '10 days', true, 0, 's' FROM mnemosyne.reasonlets WHERE id = ANY($1)
             """,
-            scope.Value);
+            ids);
         await Entries.ExecuteAsync(
             dataSource,
             """
             INSERT INTO mnemosyne.reasonlet_metrics (reasonlet_id, scope, runs, successes, last_success_at, last_executed_at)
-            SELECT id, scope, 1, 1, now() - interval '10 days', now() - interval '10 days' FROM mnemosyne.reasonlets WHERE scope = $1
+            SELECT id, scope, 1, 1, now() - interval '10 days', now() - interval '10 days' FROM mnemosyne.reasonlets WHERE id = ANY($1)
             """,
-            scope.Value);
+            ids);
         return ids;
     }
 
@@ -776,20 +819,18 @@ public sealed class PruneTests(PgVectorFixture fixture) : IClassFixture<PgVector
     }
 
     /// <summary>
-    /// Waits, for at most ten seconds, until <paramref name="count"/> client backends other than
-    /// <paramref name="otherPid"/> wait for a lock: the prune, which has listed its candidates and is locking them, or
-    /// the store operations the test started before it.
+    /// Waits, for at most ten seconds, until some backend waits for a lock that <paramref name="holderPid"/> holds:
+    /// in these tests, the prune, which has listed its candidates and is locking one the holder's transaction has.
     /// </summary>
-    private async Task WaitForPruneLockWaitAsync(int otherPid, int count = 1)
+    private async Task WaitForPruneLockWaitAsync(int holderPid)
     {
         var clock = Stopwatch.StartNew();
         while (clock.Elapsed < TimeSpan.FromSeconds(10))
         {
-            var waiting = await Entries.ScalarAsync<long>(
+            if (await Entries.ScalarAsync<bool>(
                 fixture.DataSource,
-                "SELECT count(*) FROM pg_stat_activity WHERE wait_event_type = 'Lock' AND backend_type = 'client backend' AND pid <> $1",
-                otherPid);
-            if (waiting >= count)
+                "SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE $1 = ANY(pg_blocking_pids(pid)))",
+                holderPid))
             {
                 return;
             }
@@ -797,7 +838,7 @@ public sealed class PruneTests(PgVectorFixture fixture) : IClassFixture<PgVector
             await Task.Delay(25, Ct);
         }
 
-        Assert.Fail($"Fewer than {count} backends waited for a lock within ten seconds.");
+        Assert.Fail("No backend waited for the holder's lock within ten seconds.");
     }
 
     private static async Task<List<Guid>> IdsAsync(NpgsqlDataSource dataSource, string sql, object? parameter)
