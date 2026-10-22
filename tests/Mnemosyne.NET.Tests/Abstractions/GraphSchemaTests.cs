@@ -87,13 +87,73 @@ public class GraphSchemaTests
     }
 
     [Fact]
-    public void TooManyNodesOrEdges_FailsSchema()
+    public void TooManyNodes_FailsSchema()
     {
         var nodes = string.Join(",", Enumerable.Repeat("""{"id":"a","type":"t"}""", ReasonletGraphLimits.MaxNodes + 1));
-        var edges = string.Join(",", Enumerable.Repeat("""{"from":"a","to":"a"}""", ReasonletGraphLimits.MaxEdges + 1));
 
         Assert.False(IsValid($$"""{"schemaVersion":1,"nodes":[{{nodes}}],"edges":[]}"""));
+    }
+
+    [Fact]
+    public void TooManyEdges_FailsSchema()
+    {
+        var edges = string.Join(",", Enumerable.Repeat("""{"from":"a","to":"a"}""", ReasonletGraphLimits.MaxEdges + 1));
+
         Assert.False(IsValid($$"""{"schemaVersion":1,"nodes":[{"id":"a","type":"t"}],"edges":[{{edges}}]}"""));
+    }
+
+    private const string WithNulls =
+        """{"schemaVersion":1,"nodes":[{"id":"a","type":"t","name":null,"tool":null,"properties":null},{"id":"b","type":"t"}],"edges":[{"from":"a","to":"b","condition":null,"properties":null}],"properties":null}""";
+
+    private const string WithoutNulls =
+        """{"schemaVersion":1,"nodes":[{"id":"a","type":"t"},{"id":"b","type":"t"}],"edges":[{"from":"a","to":"b"}]}""";
+
+    [Fact]
+    public void ExplicitNullOptionals_PassSchema()
+    {
+        Assert.True(IsValid(WithNulls));
+    }
+
+    [Fact]
+    public void ExplicitNullOptionals_DeserializeAndHashLikeAbsent()
+    {
+        var withNulls = ReasonletGraphJson.Deserialize(WithNulls);
+        var without = ReasonletGraphJson.Deserialize(WithoutNulls);
+
+        Assert.True(withNulls.IsSuccess, withNulls.IsFailure ? withNulls.Error.Message : null);
+        Assert.True(without.IsSuccess);
+        Assert.Equal(without.Value.ComputeContentHash(), withNulls.Value.ComputeContentHash());
+    }
+
+    [Theory]
+    [InlineData("""{"schemaVersion":1,"nodes":[{"id":"a","type":null}],"edges":[]}""")]
+    [InlineData("""{"schemaVersion":1,"nodes":[{"id":"a","type":"t"}],"edges":[{"from":null,"to":"a"}]}""")]
+    public void ExplicitNullRequired_FailsSchema(string json)
+    {
+        Assert.False(IsValid(json));
+    }
+
+    [Fact]
+    public void NonBlankClass_MatchesCharIsWhiteSpaceForEveryChar()
+    {
+        var pattern = Json(SchemaText).GetProperty("$defs").GetProperty("nonBlankString").GetProperty("pattern").GetString()!;
+        var regex = new System.Text.RegularExpressions.Regex(pattern);
+
+        for (var c = 0; c <= 0xFFFF; c++)
+        {
+            Assert.Equal(!char.IsWhiteSpace((char)c), regex.IsMatch(((char)c).ToString()));
+        }
+    }
+
+    [Theory]
+    [InlineData("\\u0085", false)]
+    [InlineData("\\uFEFF", true)]
+    public void Id_OfOnlyOneChar_AgreesWithValidate(string escaped, bool valid)
+    {
+        var json = $$"""{"schemaVersion":1,"nodes":[{"id":"{{escaped}}","type":"t"}],"edges":[]}""";
+
+        Assert.Equal(valid, IsValid(json));
+        Assert.Equal(valid, ReasonletGraphJson.Deserialize(json).IsSuccess);
     }
 
     [Fact]

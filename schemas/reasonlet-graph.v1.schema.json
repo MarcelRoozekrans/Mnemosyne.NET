@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/MarcelRoozekrans/Mnemosyne.NET/schemas/reasonlet-graph.v1.schema.json",
   "title": "Reasonlet graph v1",
-  "description": "A Mnemosyne.NET Reasonlet graph, schema version 1. This schema documents the wire format for writers that are not .NET. It cannot express every rule: unique node ids, edge endpoints that name existing nodes, the 65536-byte limit on the combined size of all properties, and the 32-level depth limit on property values are not checked here. ReasonletGraph.Validate() in Mnemosyne.NET.Abstractions is the full check, and ReasonletGraphJson.Deserialize runs it.",
+  "description": "A Mnemosyne.NET Reasonlet graph, schema version 1. This schema documents the wire format for writers that are not .NET. It cannot express every rule: unique node ids, edge endpoints that name existing nodes, the 65536-byte limit on the combined size of all properties, and the 32-level depth limit on property values are not checked here. ReasonletGraph.Validate() in Mnemosyne.NET.Abstractions is the full check, and ReasonletGraphJson.Deserialize runs it. The $id is an identifier, not a URL to fetch the schema from.",
   "type": "object",
   "required": ["schemaVersion", "nodes", "edges"],
   "additionalProperties": false,
@@ -24,13 +24,22 @@
       "maxItems": 2000,
       "items": { "$ref": "#/$defs/edge" }
     },
-    "properties": { "$ref": "#/$defs/properties" }
+    "properties": { "$ref": "#/$defs/optionalProperties" }
   },
   "$defs": {
     "nonBlankString": {
+      "description": "Non-blank: at least one character outside the set that .NET char.IsWhiteSpace accepts. The class lists that set explicitly because ECMA-262 whitespace differs (U+0085, U+FEFF).",
       "type": "string",
       "minLength": 1,
-      "pattern": "\\S"
+      "pattern": "[^\\t-\\r \\u0085\\u00A0\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000]"
+    },
+    "optionalNonBlankString": {
+      "description": "An optional member: an explicit null means the same as leaving it out.",
+      "anyOf": [{ "$ref": "#/$defs/nonBlankString" }, { "type": "null" }]
+    },
+    "optionalProperties": {
+      "description": "An optional member: an explicit null means the same as leaving it out.",
+      "anyOf": [{ "$ref": "#/$defs/properties" }, { "type": "null" }]
     },
     "node": {
       "type": "object",
@@ -39,9 +48,9 @@
       "properties": {
         "id": { "$ref": "#/$defs/nonBlankString" },
         "type": { "$ref": "#/$defs/nonBlankString" },
-        "name": { "$ref": "#/$defs/nonBlankString" },
-        "tool": { "$ref": "#/$defs/nonBlankString" },
-        "properties": { "$ref": "#/$defs/properties" }
+        "name": { "$ref": "#/$defs/optionalNonBlankString" },
+        "tool": { "$ref": "#/$defs/optionalNonBlankString" },
+        "properties": { "$ref": "#/$defs/optionalProperties" }
       }
     },
     "edge": {
@@ -51,8 +60,8 @@
       "properties": {
         "from": { "$ref": "#/$defs/nonBlankString" },
         "to": { "$ref": "#/$defs/nonBlankString" },
-        "condition": { "$ref": "#/$defs/nonBlankString" },
-        "properties": { "$ref": "#/$defs/properties" }
+        "condition": { "$ref": "#/$defs/optionalNonBlankString" },
+        "properties": { "$ref": "#/$defs/optionalProperties" }
       }
     },
     "properties": {
