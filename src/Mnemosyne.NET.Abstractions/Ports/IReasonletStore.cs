@@ -8,7 +8,8 @@ public interface IReasonletStore
     /// <summary>Stores an entry, making the three-way ParentId decision atomically.</summary>
     /// <remarks>
     /// The store decides between a new Reasonlet, an execution only and a new version in one atomic step.
-    /// Error codes: <see cref="MnemosyneErrorCode.NotFound"/> when the parent does not exist in the scope,
+    /// Error codes: <see cref="MnemosyneErrorCode.Validation"/> when an argument breaks an invariant, such as a <c>default</c> scope or ID,
+    /// <see cref="MnemosyneErrorCode.NotFound"/> when the parent does not exist in the scope (including one that exists only in another scope),
     /// <see cref="MnemosyneErrorCode.Conflict"/> when the write loses a race the store detects,
     /// <see cref="MnemosyneErrorCode.Unavailable"/> when the backing store fails.
     /// </remarks>
@@ -19,7 +20,8 @@ public interface IReasonletStore
 
     /// <summary>Gets a Reasonlet definition.</summary>
     /// <remarks>
-    /// Error codes: <see cref="MnemosyneErrorCode.NotFound"/> when the ID does not exist in the scope,
+    /// Error codes: <see cref="MnemosyneErrorCode.Validation"/> when an argument breaks an invariant, such as a <c>default</c> scope or ID,
+    /// <see cref="MnemosyneErrorCode.NotFound"/> when the ID does not exist in the scope (including one that exists only in another scope),
     /// <see cref="MnemosyneErrorCode.Unavailable"/> when the backing store fails.
     /// </remarks>
     /// <param name="scope">The scope to look in.</param>
@@ -30,7 +32,8 @@ public interface IReasonletStore
 
     /// <summary>Appends an execution to a Reasonlet.</summary>
     /// <remarks>
-    /// Error codes: <see cref="MnemosyneErrorCode.NotFound"/> when the Reasonlet does not exist in the scope,
+    /// Error codes: <see cref="MnemosyneErrorCode.Validation"/> when an argument breaks an invariant, such as a <c>default</c> scope or ID,
+    /// <see cref="MnemosyneErrorCode.NotFound"/> when the Reasonlet does not exist in the scope (including one that exists only in another scope),
     /// <see cref="MnemosyneErrorCode.Unavailable"/> when the backing store fails.
     /// </remarks>
     /// <param name="scope">The scope the Reasonlet lives in.</param>
@@ -43,7 +46,8 @@ public interface IReasonletStore
 
     /// <summary>Appends feedback to an execution.</summary>
     /// <remarks>
-    /// Error codes: <see cref="MnemosyneErrorCode.NotFound"/> when the execution does not exist in the scope,
+    /// Error codes: <see cref="MnemosyneErrorCode.Validation"/> when an argument breaks an invariant, such as a <c>default</c> scope or ID,
+    /// <see cref="MnemosyneErrorCode.NotFound"/> when the execution does not exist in the scope (including one that exists only in another scope),
     /// <see cref="MnemosyneErrorCode.Unavailable"/> when the backing store fails.
     /// </remarks>
     /// <param name="scope">The scope the execution lives in.</param>
@@ -55,11 +59,11 @@ public interface IReasonletStore
 
     /// <summary>Searches a scope by embedding similarity.</summary>
     /// <remarks>
-    /// Error codes: <see cref="MnemosyneErrorCode.Validation"/> when the limit is not positive,
+    /// Error codes: <see cref="MnemosyneErrorCode.Validation"/> when the limit is not positive or an argument breaks another invariant, such as a <c>default</c> scope,
     /// <see cref="MnemosyneErrorCode.Unavailable"/> when the backing store fails.
     /// </remarks>
     /// <param name="scope">The scope to search.</param>
-    /// <param name="embedding">The query embedding.</param>
+    /// <param name="embedding">The embedding of the query's question, made by the same generator as the stored embeddings, so stored and query vectors embed the same kind of text.</param>
     /// <param name="intent">An optional intent text to narrow the search.</param>
     /// <param name="limit">The maximum number of candidates to return.</param>
     /// <param name="ct">The cancellation token.</param>
@@ -68,7 +72,8 @@ public interface IReasonletStore
 
     /// <summary>Erases Reasonlets from a scope.</summary>
     /// <remarks>
-    /// Error codes: <see cref="MnemosyneErrorCode.Unavailable"/> when the backing store fails.
+    /// Error codes: <see cref="MnemosyneErrorCode.Validation"/> when an argument breaks an invariant, such as a <c>default</c> scope or ID,
+    /// <see cref="MnemosyneErrorCode.Unavailable"/> when the backing store fails.
     /// </remarks>
     /// <param name="erasure">What to erase.</param>
     /// <param name="ct">The cancellation token.</param>

@@ -15,6 +15,6 @@ public enum MnemosyneErrorCode
     /// <summary>The write lost a race the store detected, such as the parent being erased between lookup and insert.</summary>
     Conflict,
 
-    /// <summary>The backing store or the embedding generator failed.</summary>
+    /// <summary>A backing dependency (store, embedding generator, intent extractor or selector) failed.</summary>
     Unavailable,
 }

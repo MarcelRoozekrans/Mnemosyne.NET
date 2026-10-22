@@ -28,7 +28,7 @@ public interface IReasonletMemory
     /// <summary>Finds and ranks the Reasonlets that best answer a query.</summary>
     /// <remarks>
     /// Error codes: <see cref="MnemosyneErrorCode.Validation"/> when the query breaks an invariant,
-    /// <see cref="MnemosyneErrorCode.Unavailable"/> when the backing store, the embedding generator or the intent extractor fails.
+    /// <see cref="MnemosyneErrorCode.Unavailable"/> when the backing store, the embedding generator, the intent extractor or the selector fails.
     /// </remarks>
     /// <param name="query">The query.</param>
     /// <param name="ct">The cancellation token.</param>

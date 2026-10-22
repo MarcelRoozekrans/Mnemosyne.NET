@@ -26,7 +26,7 @@ public class ContractShapeTests
             foreach (var m in methods)
             {
                 var label = contract.Name + "." + m.Name;
-                Assert.EndsWith("Async", m.Name, StringComparison.Ordinal);
+                Assert.True(m.Name.EndsWith("Async", StringComparison.Ordinal), label + " must end with Async");
 
                 var rt = m.ReturnType;
                 Assert.True(rt.IsGenericType && rt.GetGenericTypeDefinition() == typeof(ValueTask<>), label + " must return ValueTask<>");
@@ -44,9 +44,11 @@ public class ContractShapeTests
                     Assert.Equal(typeof(MnemosyneError), args[0]);
                 }
 
-                var last = m.GetParameters()[^1];
-                Assert.Equal(typeof(CancellationToken), last.ParameterType);
-                Assert.Equal("ct", last.Name);
+                var parameters = m.GetParameters();
+                Assert.True(parameters.Length > 0, label + " must take a CancellationToken ct");
+                var last = parameters[^1];
+                Assert.True(last.ParameterType == typeof(CancellationToken), label + " last parameter must be a CancellationToken");
+                Assert.True(last.Name == "ct", label + " last parameter must be named ct");
                 Assert.False(last.HasDefaultValue, label + " ct must have no default");
             }
         }
