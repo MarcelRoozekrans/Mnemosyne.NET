@@ -35,7 +35,7 @@ public sealed class OptionsTests
     [InlineData(2)]
     [InlineData(100)]
     public void ValidHnswMPasses(int m) =>
-        new MnemosynePostgreSqlOptions { Dimensions = 3, HnswM = m }.Validate();
+        new MnemosynePostgreSqlOptions { Dimensions = 3, HnswM = m, HnswEfConstruction = 2 * m }.Validate();
 
     [Theory]
     [InlineData(1)]
@@ -51,7 +51,25 @@ public sealed class OptionsTests
     [InlineData(4)]
     [InlineData(1000)]
     public void ValidHnswEfConstructionPasses(int ef) =>
-        new MnemosynePostgreSqlOptions { Dimensions = 3, HnswEfConstruction = ef }.Validate();
+        new MnemosynePostgreSqlOptions { Dimensions = 3, HnswM = 2, HnswEfConstruction = ef }.Validate();
+
+    // pgvector refuses an HNSW index whose ef_construction is below 2 * m (SQLSTATE 22023).
+    [Theory]
+    [InlineData(100, 199)]
+    [InlineData(16, 31)]
+    public void HnswEfConstructionBelowTwiceHnswMThrows(int m, int ef)
+    {
+        var ex = Assert.Throws<ArgumentOutOfRangeException>(
+            () => new MnemosynePostgreSqlOptions { Dimensions = 3, HnswM = m, HnswEfConstruction = ef }.Validate());
+        Assert.Equal("HnswEfConstruction", ex.ParamName);
+        Assert.Contains("2 * HnswM", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(100, 200)]
+    [InlineData(16, 32)]
+    public void HnswEfConstructionOfExactlyTwiceHnswMPasses(int m, int ef) =>
+        new MnemosynePostgreSqlOptions { Dimensions = 3, HnswM = m, HnswEfConstruction = ef }.Validate();
 
     [Theory]
     [InlineData(3)]
