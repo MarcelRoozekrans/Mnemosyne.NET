@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Text;
 using ZeroAlloc.Results;
 
 namespace Mnemosyne.NET.Abstractions;
@@ -7,7 +9,7 @@ internal static class Check
 {
     private static UnitResult<MnemosyneError> Ok() => UnitResult<MnemosyneError>.Success();
 
-    private static UnitResult<MnemosyneError> Fail(string path, string reason) =>
+    internal static UnitResult<MnemosyneError> Fail(string path, string reason) =>
         UnitResult<MnemosyneError>.Failure(new MnemosyneError(MnemosyneErrorCode.Validation, $"{path}: {reason}"));
 
     public static UnitResult<MnemosyneError> NotBlank(string? value, string path) =>
@@ -72,5 +74,38 @@ internal static class Check
         }
 
         return Ok();
+    }
+
+    /// <summary>Builds an indexer path such as <c>Tags["k"]</c>, escaping backslash, quote and control characters in the key.</summary>
+    public static string KeyPath(string prefix, string? key)
+    {
+        if (key is null)
+        {
+            return $"{prefix}[null]";
+        }
+
+        var builder = new StringBuilder(prefix.Length + key.Length + 4);
+        builder.Append(prefix).Append("[\"");
+        foreach (var c in key)
+        {
+            if (c == '\\')
+            {
+                builder.Append("\\\\");
+            }
+            else if (c == '"')
+            {
+                builder.Append("\\\"");
+            }
+            else if (char.IsControl(c))
+            {
+                builder.Append("\\u").Append(((int)c).ToString("X4", CultureInfo.InvariantCulture));
+            }
+            else
+            {
+                builder.Append(c);
+            }
+        }
+
+        return builder.Append("\"]").ToString();
     }
 }

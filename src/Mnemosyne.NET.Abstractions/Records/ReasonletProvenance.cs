@@ -1,5 +1,3 @@
-using System.Globalization;
-using System.Text;
 using ZeroAlloc.Results;
 
 namespace Mnemosyne.NET.Abstractions;
@@ -37,7 +35,7 @@ public sealed record ReasonletProvenance
 
         foreach (var tag in Tags)
         {
-            var path = tag.Key is null ? "Tags[null]" : $"Tags[\"{EscapeKey(tag.Key)}\"]";
+            var path = Check.KeyPath(nameof(Tags), tag.Key);
             var result = Check.All(
                 () => Check.NotBlank(tag.Key, path),
                 () => Check.NotNull(tag.Value, path));
@@ -48,31 +46,5 @@ public sealed record ReasonletProvenance
         }
 
         return UnitResult<MnemosyneError>.Success();
-    }
-
-    private static string EscapeKey(string key)
-    {
-        var builder = new StringBuilder(key.Length);
-        foreach (var c in key)
-        {
-            if (c == '\\')
-            {
-                builder.Append("\\\\");
-            }
-            else if (c == '"')
-            {
-                builder.Append("\\\"");
-            }
-            else if (char.IsControl(c))
-            {
-                builder.Append("\\u").Append(((int)c).ToString("X4", CultureInfo.InvariantCulture));
-            }
-            else
-            {
-                builder.Append(c);
-            }
-        }
-
-        return builder.ToString();
     }
 }
