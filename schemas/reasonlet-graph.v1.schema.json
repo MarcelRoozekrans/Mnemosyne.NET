@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/MarcelRoozekrans/Mnemosyne.NET/schemas/reasonlet-graph.v1.schema.json",
+  "title": "Reasonlet graph v1",
+  "description": "A Mnemosyne.NET Reasonlet graph, schema version 1. This schema documents the wire format for writers that are not .NET. It cannot express every rule: unique node ids, edge endpoints that name existing nodes, the 65536-byte limit on the combined size of all properties, and the 32-level depth limit on property values are not checked here. ReasonletGraph.Validate() in Mnemosyne.NET.Abstractions is the full check, and ReasonletGraphJson.Deserialize runs it.",
+  "type": "object",
+  "required": ["schemaVersion", "nodes", "edges"],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {
+      "description": "The graph format version. Must be 1.",
+      "const": 1
+    },
+    "nodes": {
+      "description": "The graph nodes. Ids must be unique (checked by Validate only).",
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 500,
+      "items": { "$ref": "#/$defs/node" }
+    },
+    "edges": {
+      "description": "The directed edges. Each from and to must be a node id (checked by Validate only).",
+      "type": "array",
+      "maxItems": 2000,
+      "items": { "$ref": "#/$defs/edge" }
+    },
+    "properties": { "$ref": "#/$defs/properties" }
+  },
+  "$defs": {
+    "nonBlankString": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S"
+    },
+    "node": {
+      "type": "object",
+      "required": ["id", "type"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/nonBlankString" },
+        "type": { "$ref": "#/$defs/nonBlankString" },
+        "name": { "$ref": "#/$defs/nonBlankString" },
+        "tool": { "$ref": "#/$defs/nonBlankString" },
+        "properties": { "$ref": "#/$defs/properties" }
+      }
+    },
+    "edge": {
+      "type": "object",
+      "required": ["from", "to"],
+      "additionalProperties": false,
+      "properties": {
+        "from": { "$ref": "#/$defs/nonBlankString" },
+        "to": { "$ref": "#/$defs/nonBlankString" },
+        "condition": { "$ref": "#/$defs/nonBlankString" },
+        "properties": { "$ref": "#/$defs/properties" }
+      }
+    },
+    "properties": {
+      "description": "Extension data. Keys are namespaced with dots, for example acme.retries. Values are any JSON up to 32 levels deep (checked by Validate only).",
+      "type": "object",
+      "propertyNames": { "pattern": "^[^.]+(\\.[^.]+)+$" },
+      "additionalProperties": true
+    }
+  }
+}
