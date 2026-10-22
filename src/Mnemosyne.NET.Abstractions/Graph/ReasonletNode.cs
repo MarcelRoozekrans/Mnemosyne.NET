@@ -12,16 +12,28 @@ namespace Mnemosyne.NET.Abstractions;
 /// </remarks>
 public sealed record ReasonletNode
 {
-    /// <summary>Gets the node identifier. Must not be blank.</summary>
+    /// <summary>
+    /// Gets the node identifier. Must not be blank, and at most <see cref="ReasonletGraphLimits.MaxIdentifierLength"/>
+    /// code points.
+    /// </summary>
     public required string Id { get; init; }
 
-    /// <summary>Gets the node type. Must not be blank.</summary>
+    /// <summary>
+    /// Gets the node type. Must not be blank, and at most <see cref="ReasonletGraphLimits.MaxIdentifierLength"/> code
+    /// points.
+    /// </summary>
     public required string Type { get; init; }
 
-    /// <summary>Gets the optional display name. Must not be blank when present.</summary>
+    /// <summary>
+    /// Gets the optional display name. When present, must not be blank, and at most
+    /// <see cref="ReasonletGraphLimits.MaxTextLength"/> code points.
+    /// </summary>
     public string? Name { get; init; }
 
-    /// <summary>Gets the optional name of the tool this node invokes. Must not be blank when present.</summary>
+    /// <summary>
+    /// Gets the optional name of the tool this node invokes. When present, must not be blank, and at most
+    /// <see cref="ReasonletGraphLimits.MaxIdentifierLength"/> code points.
+    /// </summary>
     public string? Tool { get; init; }
 
     /// <summary>Gets the optional free-form properties of the node.</summary>
@@ -32,10 +44,14 @@ public sealed record ReasonletNode
     public UnitResult<MnemosyneError> Validate() => Check.All(
         () => Check.NotBlank(Id, nameof(Id)),
         () => Check.ValidUtf16(Id, nameof(Id)),
+        () => Check.MaxLength(Id, ReasonletGraphLimits.MaxIdentifierLength, nameof(Id)),
         () => Check.NotBlank(Type, nameof(Type)),
         () => Check.ValidUtf16(Type, nameof(Type)),
+        () => Check.MaxLength(Type, ReasonletGraphLimits.MaxIdentifierLength, nameof(Type)),
         () => Name is null ? UnitResult<MnemosyneError>.Success() : Check.NotBlank(Name, nameof(Name)),
         () => Check.ValidUtf16(Name, nameof(Name)),
+        () => Check.MaxLength(Name, ReasonletGraphLimits.MaxTextLength, nameof(Name)),
         () => Tool is null ? UnitResult<MnemosyneError>.Success() : Check.NotBlank(Tool, nameof(Tool)),
-        () => Check.ValidUtf16(Tool, nameof(Tool)));
+        () => Check.ValidUtf16(Tool, nameof(Tool)),
+        () => Check.MaxLength(Tool, ReasonletGraphLimits.MaxIdentifierLength, nameof(Tool)));
 }

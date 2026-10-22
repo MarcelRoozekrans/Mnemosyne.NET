@@ -33,9 +33,23 @@
       "minLength": 1,
       "pattern": "[^\\t-\\r \\u0085\\u00A0\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000]"
     },
-    "optionalNonBlankString": {
+    "identifier": {
+      "description": "A non-blank identifier of at most 256 code points.",
+      "$ref": "#/$defs/nonBlankString",
+      "maxLength": 256
+    },
+    "text": {
+      "description": "A non-blank text of at most 1024 code points.",
+      "$ref": "#/$defs/nonBlankString",
+      "maxLength": 1024
+    },
+    "optionalIdentifier": {
       "description": "An optional member: an explicit null means the same as leaving it out.",
-      "anyOf": [{ "$ref": "#/$defs/nonBlankString" }, { "type": "null" }]
+      "anyOf": [{ "$ref": "#/$defs/identifier" }, { "type": "null" }]
+    },
+    "optionalText": {
+      "description": "An optional member: an explicit null means the same as leaving it out.",
+      "anyOf": [{ "$ref": "#/$defs/text" }, { "type": "null" }]
     },
     "optionalProperties": {
       "description": "An optional member: an explicit null means the same as leaving it out.",
@@ -46,10 +60,10 @@
       "required": ["id", "type"],
       "additionalProperties": false,
       "properties": {
-        "id": { "$ref": "#/$defs/nonBlankString" },
-        "type": { "$ref": "#/$defs/nonBlankString" },
-        "name": { "$ref": "#/$defs/optionalNonBlankString" },
-        "tool": { "$ref": "#/$defs/optionalNonBlankString" },
+        "id": { "$ref": "#/$defs/identifier" },
+        "type": { "$ref": "#/$defs/identifier" },
+        "name": { "$ref": "#/$defs/optionalText" },
+        "tool": { "$ref": "#/$defs/optionalIdentifier" },
         "properties": { "$ref": "#/$defs/optionalProperties" }
       }
     },
@@ -58,9 +72,9 @@
       "required": ["from", "to"],
       "additionalProperties": false,
       "properties": {
-        "from": { "$ref": "#/$defs/nonBlankString" },
-        "to": { "$ref": "#/$defs/nonBlankString" },
-        "condition": { "$ref": "#/$defs/optionalNonBlankString" },
+        "from": { "$ref": "#/$defs/identifier" },
+        "to": { "$ref": "#/$defs/identifier" },
+        "condition": { "$ref": "#/$defs/optionalText" },
         "properties": { "$ref": "#/$defs/optionalProperties" }
       }
     },

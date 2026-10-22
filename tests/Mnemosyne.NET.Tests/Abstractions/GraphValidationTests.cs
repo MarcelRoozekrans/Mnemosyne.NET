@@ -489,4 +489,74 @@ public class GraphValidationTests
         var edges = Enumerable.Range(0, ReasonletGraphLimits.MaxEdges + 1).Select(_ => new ReasonletEdge { From = " ", To = "a" }).ToArray();
         AssertInvalid(Graph([Node(" ")], edges).Validate(), "Edges");
     }
+
+    private const string Emoji = "\U0001F600";
+
+    /// <summary>"e" plus a combining acute: two code points, one text element.</summary>
+    private const string Combining = "e\u0301";
+
+    private static string Repeat(string text, int times) => string.Concat(Enumerable.Repeat(text, times));
+
+    /// <summary>Builds a valid graph whose <paramref name="field"/> is <paramref name="value"/>.</summary>
+    /// <param name="fits">Whether the value is within its limit, so a node can carry it as its id for an edge to name.</param>
+    private static ReasonletGraph WithField(string field, string value, bool fits) => field switch
+    {
+        "Id" => Graph([Node(value)]),
+        "Type" => Graph([Node("a") with { Type = value }]),
+        "Name" => Graph([Node("a") with { Name = value }]),
+        "Tool" => Graph([Node("a") with { Tool = value }]),
+        "From" => Graph([Node(fits ? value : "a"), Node("b")], [new ReasonletEdge { From = value, To = "b" }]),
+        "To" => Graph([Node("a"), Node(fits ? value : "b")], [new ReasonletEdge { From = "a", To = value }]),
+        _ => Graph([Node("a")], [new ReasonletEdge { From = "a", To = "a", Condition = value }]),
+    };
+
+    private static string PathOf(string field) =>
+        field is "From" or "To" or "Condition" ? $"Edges[0].{field}" : $"Nodes[0].{field}";
+
+    [Theory]
+    [InlineData("Id", ReasonletGraphLimits.MaxIdentifierLength)]
+    [InlineData("Type", ReasonletGraphLimits.MaxIdentifierLength)]
+    [InlineData("Tool", ReasonletGraphLimits.MaxIdentifierLength)]
+    [InlineData("From", ReasonletGraphLimits.MaxIdentifierLength)]
+    [InlineData("To", ReasonletGraphLimits.MaxIdentifierLength)]
+    [InlineData("Name", ReasonletGraphLimits.MaxTextLength)]
+    [InlineData("Condition", ReasonletGraphLimits.MaxTextLength)]
+    public void FieldAtLengthLimit_Passes(string field, int limit)
+    {
+        Assert.True(WithField(field, new string('x', limit), fits: true).Validate().IsSuccess);
+
+        // Twice as many UTF-16 units as the limit, but exactly the limit in code points.
+        var astral = Repeat(Emoji, limit);
+        Assert.Equal(2 * limit, astral.Length);
+        Assert.True(WithField(field, astral, fits: true).Validate().IsSuccess);
+
+        // Exactly the limit in code points, half of it in text elements.
+        Assert.True(WithField(field, Repeat(Combining, limit / 2), fits: true).Validate().IsSuccess);
+    }
+
+    [Theory]
+    [InlineData("Id", ReasonletGraphLimits.MaxIdentifierLength)]
+    [InlineData("Type", ReasonletGraphLimits.MaxIdentifierLength)]
+    [InlineData("Tool", ReasonletGraphLimits.MaxIdentifierLength)]
+    [InlineData("From", ReasonletGraphLimits.MaxIdentifierLength)]
+    [InlineData("To", ReasonletGraphLimits.MaxIdentifierLength)]
+    [InlineData("Name", ReasonletGraphLimits.MaxTextLength)]
+    [InlineData("Condition", ReasonletGraphLimits.MaxTextLength)]
+    public void FieldOverLengthLimit_Fails(string field, int limit)
+    {
+        foreach (var value in new[] { new string('x', limit + 1), Repeat(Emoji, limit) + "x", Repeat(Combining, limit / 2) + "x" })
+        {
+            var r = WithField(field, value, fits: false).Validate();
+            AssertInvalid(r, PathOf(field));
+            Assert.Contains($"must not be longer than {limit} code points", r.Error.Message);
+        }
+    }
+
+    [Fact]
+    public void BlankCondition_ReportedBeforeItsLength()
+    {
+        var r = Graph([Node("a")], [new ReasonletEdge { From = "a", To = "a", Condition = new string(' ', ReasonletGraphLimits.MaxTextLength + 1) }]).Validate();
+        AssertInvalid(r, "Edges[0].Condition");
+        Assert.Contains("must not be blank", r.Error.Message);
+    }
 }

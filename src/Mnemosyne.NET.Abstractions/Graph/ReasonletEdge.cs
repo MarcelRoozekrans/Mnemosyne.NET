@@ -10,15 +10,21 @@ namespace Mnemosyne.NET.Abstractions;
 /// </remarks>
 public sealed record ReasonletEdge
 {
-    /// <summary>Gets the source node identifier. Must not be blank.</summary>
+    /// <summary>
+    /// Gets the source node identifier. Must not be blank, and at most
+    /// <see cref="ReasonletGraphLimits.MaxIdentifierLength"/> code points.
+    /// </summary>
     public required string From { get; init; }
 
-    /// <summary>Gets the target node identifier. Must not be blank.</summary>
+    /// <summary>
+    /// Gets the target node identifier. Must not be blank, and at most
+    /// <see cref="ReasonletGraphLimits.MaxIdentifierLength"/> code points.
+    /// </summary>
     public required string To { get; init; }
 
     /// <summary>
     /// Gets the optional condition under which this edge is followed; null means unconditional. When present, must
-    /// not be blank.
+    /// not be blank, and at most <see cref="ReasonletGraphLimits.MaxTextLength"/> code points.
     /// </summary>
     public string? Condition { get; init; }
 
@@ -30,8 +36,11 @@ public sealed record ReasonletEdge
     public UnitResult<MnemosyneError> Validate() => Check.All(
         () => Check.NotBlank(From, nameof(From)),
         () => Check.ValidUtf16(From, nameof(From)),
+        () => Check.MaxLength(From, ReasonletGraphLimits.MaxIdentifierLength, nameof(From)),
         () => Check.NotBlank(To, nameof(To)),
         () => Check.ValidUtf16(To, nameof(To)),
+        () => Check.MaxLength(To, ReasonletGraphLimits.MaxIdentifierLength, nameof(To)),
         () => Check.ValidUtf16(Condition, nameof(Condition)),
-        () => Condition is null ? UnitResult<MnemosyneError>.Success() : Check.NotBlank(Condition, nameof(Condition)));
+        () => Condition is null ? UnitResult<MnemosyneError>.Success() : Check.NotBlank(Condition, nameof(Condition)),
+        () => Check.MaxLength(Condition, ReasonletGraphLimits.MaxTextLength, nameof(Condition)));
 }

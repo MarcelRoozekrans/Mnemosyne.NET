@@ -37,6 +37,28 @@ internal static class Check
         return true;
     }
 
+    /// <summary>
+    /// Fails when a non-null string has more than <paramref name="max"/> Unicode code points, the unit JSON Schema
+    /// <c>maxLength</c> counts. The string must already be valid UTF-16.
+    /// </summary>
+    public static UnitResult<MnemosyneError> MaxLength(string? value, int max, string path) =>
+        value is null || CodePointCount(value) <= max ? Ok() : Fail(path, $"must not be longer than {max} code points");
+
+    /// <summary>Returns the number of code points in valid UTF-16 text: a surrogate pair counts once.</summary>
+    public static int CodePointCount(string value)
+    {
+        var count = value.Length;
+        foreach (var c in value)
+        {
+            if (char.IsLowSurrogate(c))
+            {
+                count--;
+            }
+        }
+
+        return count;
+    }
+
     public static UnitResult<MnemosyneError> UnitInterval(double value, string path) =>
         double.IsFinite(value) && value >= 0.0 && value <= 1.0 ? Ok() : Fail(path, "must be a finite number between 0 and 1");
 

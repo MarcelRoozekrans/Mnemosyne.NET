@@ -10,6 +10,18 @@ public static class ReasonletGraphLimits
     public const int MaxEdges = 2000;
 
     /// <summary>
+    /// The maximum length of a node <c>Id</c>, <c>Type</c> or <c>Tool</c> and an edge <c>From</c> or <c>To</c>, in
+    /// Unicode code points, the unit JSON Schema <c>maxLength</c> counts. A surrogate pair counts as one.
+    /// </summary>
+    public const int MaxIdentifierLength = 256;
+
+    /// <summary>
+    /// The maximum length of a node <c>Name</c> or an edge <c>Condition</c>, in Unicode code points, the unit JSON
+    /// Schema <c>maxLength</c> counts. A surrogate pair counts as one.
+    /// </summary>
+    public const int MaxTextLength = 1024;
+
+    /// <summary>
     /// The maximum total size in bytes of all <c>Properties</c> dictionaries in a graph (graph, nodes and edges).
     /// Each dictionary is measured as the UTF-8 length of its canonical JSON object, the form the content hash uses:
     /// compact, with the fixed RFC 8785 escape set, so a supplementary character counts as its 4 raw UTF-8 bytes.

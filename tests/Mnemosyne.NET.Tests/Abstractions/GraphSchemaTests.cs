@@ -163,4 +163,54 @@ public class GraphSchemaTests
             "https://github.com/MarcelRoozekrans/Mnemosyne.NET/schemas/reasonlet-graph.v1.schema.json",
             Json(SchemaText).GetProperty("$id").GetString());
     }
+
+    /// <summary>A document whose <paramref name="member"/> holds <paramref name="value"/>, which needs no escaping.</summary>
+    private static string WithMember(string member, string value)
+    {
+        var quoted = "\"" + value + "\"";
+        return member switch
+        {
+            "id" => $$"""{"schemaVersion":1,"nodes":[{"id":{{quoted}},"type":"t"}],"edges":[]}""",
+            "type" => $$"""{"schemaVersion":1,"nodes":[{"id":"a","type":{{quoted}}}],"edges":[]}""",
+            "name" => $$"""{"schemaVersion":1,"nodes":[{"id":"a","type":"t","name":{{quoted}}}],"edges":[]}""",
+            "tool" => $$"""{"schemaVersion":1,"nodes":[{"id":"a","type":"t","tool":{{quoted}}}],"edges":[]}""",
+            "from" => $$"""{"schemaVersion":1,"nodes":[{"id":{{quoted}},"type":"t"}],"edges":[{"from":{{quoted}},"to":{{quoted}}}]}""",
+            "to" => $$"""{"schemaVersion":1,"nodes":[{"id":"a","type":"t"},{"id":{{quoted}},"type":"t"}],"edges":[{"from":"a","to":{{quoted}}}]}""",
+            _ => $$"""{"schemaVersion":1,"nodes":[{"id":"a","type":"t"}],"edges":[{"from":"a","to":"a","condition":{{quoted}}}]}""",
+        };
+    }
+
+    /// <remarks>
+    /// JSON Schema counts <c>maxLength</c> in code points, as <see cref="ReasonletGraph.Validate"/> does. JsonSchema.Net
+    /// 9.4.1 counts text elements instead (<c>StringInfo.LengthInTextElements</c>), so this test does not probe a
+    /// combining sequence over the limit: that library would accept it. A supplementary character is one code point
+    /// and one text element, so the astral cases do prove that UTF-16 units are not counted.
+    /// <see cref="GraphValidationTests"/> covers the combining case for Validate.
+    /// </remarks>
+    [Theory]
+    [InlineData("id", ReasonletGraphLimits.MaxIdentifierLength)]
+    [InlineData("type", ReasonletGraphLimits.MaxIdentifierLength)]
+    [InlineData("tool", ReasonletGraphLimits.MaxIdentifierLength)]
+    [InlineData("from", ReasonletGraphLimits.MaxIdentifierLength)]
+    [InlineData("to", ReasonletGraphLimits.MaxIdentifierLength)]
+    [InlineData("name", ReasonletGraphLimits.MaxTextLength)]
+    [InlineData("condition", ReasonletGraphLimits.MaxTextLength)]
+    public void LengthLimits_MatchValidate(string member, int limit)
+    {
+        var astral = string.Concat(Enumerable.Repeat("\U0001F600", limit));
+        var atLimit = new[] { new string('x', limit), astral };
+        var overLimit = new[] { new string('x', limit + 1), astral + "x" };
+
+        foreach (var value in atLimit)
+        {
+            Assert.True(IsValid(WithMember(member, value)));
+            Assert.True(ReasonletGraphJson.Deserialize(WithMember(member, value)).IsSuccess);
+        }
+
+        foreach (var value in overLimit)
+        {
+            Assert.False(IsValid(WithMember(member, value)));
+            Assert.True(ReasonletGraphJson.Deserialize(WithMember(member, value)).IsFailure);
+        }
+    }
 }

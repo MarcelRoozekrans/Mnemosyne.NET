@@ -36,7 +36,8 @@ public sealed record ReasonletGraph
     /// </description></item>
     /// <item><description>
     /// Each node, then each edge, is not null and passes its own <c>Validate</c>: required strings not blank, optional
-    /// <c>Name</c>, <c>Tool</c> and <c>Condition</c> not blank when present, and every string valid UTF-16.
+    /// <c>Name</c>, <c>Tool</c> and <c>Condition</c> not blank when present, every string valid UTF-16 and within its
+    /// length limit.
     /// </description></item>
     /// <item><description>Node ids are unique.</description></item>
     /// <item><description>Every edge's <c>From</c> and <c>To</c> name an existing node.</description></item>
