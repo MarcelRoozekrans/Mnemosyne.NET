@@ -6,6 +6,7 @@ using System.Runtime.InteropServices;
 using System.Text.Json;
 using Mnemosyne.NET.Abstractions;
 using Mnemosyne.NET.PostgreSql.Repositories;
+using Mnemosyne.NET.PostgreSql.Rows;
 using Npgsql;
 using ZeroAlloc.ORM.Migrations;
 using ZeroAlloc.Results;
@@ -20,6 +21,7 @@ namespace Mnemosyne.NET.PostgreSql;
 /// </remarks>
 public sealed class ReasonletPostgreSqlStore : IReasonletStore
 {
+    private const int MaxSearchLimit = 200;
     private const string MigrationResourcePrefix = "Mnemosyne.NET.PostgreSql.Migrations.";
 
     private readonly NpgsqlDataSource _dataSource;
@@ -309,6 +311,11 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
             return new MnemosyneError(MnemosyneErrorCode.NotFound, "The Reasonlet does not exist in the scope.");
         }
 
+        return ToDefinition(row);
+    }
+
+    private static ReasonletDefinition ToDefinition(ReasonletRow row)
+    {
         return new ReasonletDefinition
         {
             Id = new ReasonletId(row.Id),
@@ -443,7 +450,59 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
             return migrated.Error;
         }
 
-        throw new NotImplementedException();
+        var invalid = ValidateScope(scope) ?? ValidateSearch(embedding.Span, intent, limit);
+        if (invalid is not null)
+        {
+            return invalid.Value;
+        }
+
+        return await GuardAsync(SearchCoreAsync(scope, embedding, intent, limit, ct)).ConfigureAwait(false);
+    }
+
+    private MnemosyneError? ValidateSearch(ReadOnlySpan<float> embedding, string? intent, int limit)
+    {
+        if (limit is < 1 or > MaxSearchLimit)
+        {
+            return new MnemosyneError(MnemosyneErrorCode.Validation, $"limit: must be from 1 to {MaxSearchLimit}");
+        }
+
+        if (intent is not null && string.IsNullOrWhiteSpace(intent))
+        {
+            return new MnemosyneError(MnemosyneErrorCode.Validation, "intent: must not be blank");
+        }
+
+        if (embedding.Length != _options.Dimensions)
+        {
+            return new MnemosyneError(
+                MnemosyneErrorCode.Validation,
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"embedding: must have {_options.Dimensions} values, the store's dimension, but has {embedding.Length}"));
+        }
+
+        foreach (var value in embedding)
+        {
+            if (!float.IsFinite(value))
+            {
+                return new MnemosyneError(MnemosyneErrorCode.Validation, "embedding: must contain only finite numbers");
+            }
+        }
+
+        return null;
+    }
+
+    private async Task<Result<IReadOnlyList<ReasonletCandidate>, MnemosyneError>> SearchCoreAsync(
+        ReasonletScope scope, ReadOnlyMemory<float> embedding, string? intent, int limit, CancellationToken ct)
+    {
+        await using var connection = (await _dataSource.OpenConnectionAsync(ct).ConfigureAwait(false)).AsAsync();
+        var rows = await new ReasonletRepository(connection).SearchAsync(scope.Value, ToArray(embedding), intent, limit, ct).ConfigureAwait(false);
+        var candidates = new List<ReasonletCandidate>(rows.Count);
+        foreach (var row in rows)
+        {
+            candidates.Add(new ReasonletCandidate(ToDefinition(row.ToReasonletRow()), row.Similarity, new ReasonletMetrics(row.Runs, row.Successes, row.LastSuccessAt)));
+        }
+
+        return candidates;
     }
 
     /// <inheritdoc />

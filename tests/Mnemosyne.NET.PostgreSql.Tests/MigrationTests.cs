@@ -201,7 +201,6 @@ public sealed class MigrationTests(PgVectorFixture fixture) : IClassFixture<PgVe
         Assert.True((await store.MigrateAsync(Ct)).IsSuccess);
         var scope = PgVectorFixture.NewScope();
 
-        await Assert.ThrowsAsync<NotImplementedException>(async () => await store.SearchAsync(scope, new float[] { 1, 0, 0 }, null, 10, Ct));
         await Assert.ThrowsAsync<NotImplementedException>(async () => await store.EraseAsync(new ReasonletErasure(scope, null), Ct));
     }
 

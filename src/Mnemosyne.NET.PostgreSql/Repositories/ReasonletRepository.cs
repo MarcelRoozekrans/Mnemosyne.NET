@@ -16,6 +16,26 @@ internal sealed partial class ReasonletRepository(IAsyncDbConnection connection)
         """)]
     public partial Task<ReasonletRow?> GetAsync(string scope, Guid id, CancellationToken ct);
 
+    /// <summary>
+    /// The nearest Active Reasonlets of a scope to an embedding, nearest first, each with its similarity and execution
+    /// metrics. The <c>ORDER BY</c> uses the bare distance operator so the HNSW index can serve it. The counts are cast
+    /// to <c>int</c> because <c>count</c> answers <c>bigint</c>. A null intent applies no intent filter.
+    /// </summary>
+    [Query("""
+        SELECT r.id, r.scope, r.name, r.intent, r.version, r.graph, r.parent_id, r.status,
+               r.source, r.run_id, r.subject_id, r.tags, r.created_at,
+               greatest(0, 1 - (r.embedding <=> @embedding::vector)) AS similarity,
+               m.runs::int, m.successes::int, m.last_success_at
+        FROM mnemosyne.reasonlets r
+        LEFT JOIN LATERAL (SELECT count(*) AS runs, count(*) FILTER (WHERE success) AS successes,
+                                  max(executed_at) FILTER (WHERE success) AS last_success_at
+                           FROM mnemosyne.reasonlet_executions e WHERE e.reasonlet_id = r.id) m ON true
+        WHERE r.scope = @scope AND r.status = 1 AND (@intent::text IS NULL OR r.intent = @intent)
+        ORDER BY r.embedding <=> @embedding::vector
+        LIMIT @limit
+        """)]
+    public partial Task<List<CandidateRow>> SearchAsync(string scope, float[] embedding, string? intent, int limit, CancellationToken ct);
+
     /// <summary>Locks a parent in its scope until the transaction ends. A parent in another scope reads as missing.</summary>
     [Query("""
         SELECT id, version, content_hash, status
