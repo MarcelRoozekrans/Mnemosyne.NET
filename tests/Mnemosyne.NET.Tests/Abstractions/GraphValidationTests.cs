@@ -1,0 +1,225 @@
+using System.Text;
+using System.Text.Json;
+using Mnemosyne.NET.Abstractions;
+using Xunit;
+using ZeroAlloc.Results;
+
+namespace Mnemosyne.NET.Tests.Abstractions;
+
+public class GraphValidationTests
+{
+    private static void AssertInvalid(UnitResult<MnemosyneError> r, string path)
+    {
+        Assert.True(r.IsFailure);
+        Assert.Equal(MnemosyneErrorCode.Validation, r.Error.Code);
+        Assert.StartsWith(path + ": ", r.Error.Message);
+    }
+
+    private static ReasonletNode Node(string id, IReadOnlyDictionary<string, JsonElement>? props = null) =>
+        new() { Id = id, Type = "step", Properties = props };
+
+    private static ReasonletGraph Graph(IReadOnlyList<ReasonletNode> nodes, IReadOnlyList<ReasonletEdge>? edges = null) =>
+        new() { Nodes = nodes, Edges = edges ?? [], SchemaVersion = 1 };
+
+    private static JsonElement Json(string json)
+    {
+        using var doc = JsonDocument.Parse(json);
+        return doc.RootElement.Clone();
+    }
+
+    /// <summary>A scalar is level 1, so a value of <paramref name="levels"/> levels is <paramref name="levels"/> - 1 arrays around a scalar.</summary>
+    private static JsonElement Nested(int levels) =>
+        Json(new string('[', levels - 1) + "1" + new string(']', levels - 1));
+
+    [Fact]
+    public void UnsupportedSchemaVersion_Fails()
+    {
+        var r = (Graph([Node("a")]) with { SchemaVersion = 2 }).Validate();
+        AssertInvalid(r, "SchemaVersion");
+        Assert.Contains("unsupported schema version", r.Error.Message);
+    }
+
+    [Fact]
+    public void EmptyNodes_Fails() => AssertInvalid(Graph([]).Validate(), "Nodes");
+
+    [Fact]
+    public void DuplicateNodeId_Fails() =>
+        AssertInvalid(Graph([Node("a"), Node("a")]).Validate(), "Nodes[1].Id");
+
+    [Fact]
+    public void EdgeToMissingNode_Fails() =>
+        AssertInvalid(Graph([Node("a")], [new ReasonletEdge { From = "a", To = "zz" }]).Validate(), "Edges[0].To");
+
+    [Fact]
+    public void EdgeFromMissingNode_Fails() =>
+        AssertInvalid(Graph([Node("a")], [new ReasonletEdge { From = "zz", To = "a" }]).Validate(), "Edges[0].From");
+
+    [Fact]
+    public void BlankCondition_Fails() =>
+        AssertInvalid(Graph([Node("a")], [new ReasonletEdge { From = "a", To = "a", Condition = " " }]).Validate(), "Edges[0].Condition");
+
+    [Fact]
+    public void NullCondition_Passes() =>
+        Assert.True(Graph([Node("a")], [new ReasonletEdge { From = "a", To = "a", Condition = null }]).Validate().IsSuccess);
+
+    [Fact]
+    public void DuplicateEdge_Fails() =>
+        AssertInvalid(
+            Graph([Node("a"), Node("b")], [new ReasonletEdge { From = "a", To = "b" }, new ReasonletEdge { From = "a", To = "b" }]).Validate(),
+            "Edges[1]");
+
+    [Fact]
+    public void SameEndpointsDifferentConditions_Passes() =>
+        Assert.True(Graph(
+            [Node("a"), Node("b")],
+            [new ReasonletEdge { From = "a", To = "b", Condition = "x" }, new ReasonletEdge { From = "a", To = "b", Condition = "y" }]).Validate().IsSuccess);
+
+    [Fact]
+    public void SelfLoopAndCycle_Pass()
+    {
+        var edges = new[]
+        {
+            new ReasonletEdge { From = "a", To = "a" },
+            new ReasonletEdge { From = "a", To = "b" },
+            new ReasonletEdge { From = "b", To = "a" },
+        };
+        Assert.True(Graph([Node("a"), Node("b")], edges).Validate().IsSuccess);
+    }
+
+    [Theory]
+    [InlineData("a")]
+    [InlineData(".")]
+    [InlineData("a.")]
+    [InlineData(".a")]
+    [InlineData("a..b")]
+    [InlineData("")]
+    public void PropertyKeyGrammar_Enforced(string key)
+    {
+        var props = new Dictionary<string, JsonElement> { [key] = Json("1") };
+        var r = Graph([Node("a", props)]).Validate();
+        if (key is "a")
+        {
+            Assert.True(r.IsSuccess);
+        }
+        else
+        {
+            AssertInvalid(r, $"Nodes[0].Properties[\"{key}\"]");
+        }
+    }
+
+    [Theory]
+    [InlineData("daedalus.process")]
+    [InlineData("a.b.c")]
+    public void ValidDottedKeys_Pass(string key) =>
+        Assert.True(Graph([Node("a", new Dictionary<string, JsonElement> { [key] = Json("1") })]).Validate().IsSuccess);
+
+    [Fact]
+    public void UndefinedPropertyValue_Fails()
+    {
+        var props = new Dictionary<string, JsonElement> { ["x.y"] = default };
+        AssertInvalid(Graph([Node("a", props)]).Validate(), "Nodes[0].Properties[\"x.y\"]");
+    }
+
+    [Fact]
+    public void GraphAndEdgeProperties_AreChecked()
+    {
+        var bad = new Dictionary<string, JsonElement> { [".k"] = Json("1") };
+        AssertInvalid((Graph([Node("a")]) with { Properties = bad }).Validate(), "Properties[\".k\"]");
+        AssertInvalid(
+            Graph([Node("a")], [new ReasonletEdge { From = "a", To = "a", Properties = bad }]).Validate(),
+            "Edges[0].Properties[\".k\"]");
+    }
+
+    [Fact]
+    public void PropertyKeyPath_IsEscaped()
+    {
+        var props = new Dictionary<string, JsonElement> { ["a\"b."] = Json("1") };
+        AssertInvalid(Graph([Node("a", props)]).Validate(), "Nodes[0].Properties[\"a\\\"b.\"]");
+    }
+
+    [Fact]
+    public void Depth32_Passes() =>
+        Assert.True(Graph([Node("a", new Dictionary<string, JsonElement> { ["k"] = Nested(32) })]).Validate().IsSuccess);
+
+    [Fact]
+    public void Depth33_Fails() =>
+        AssertInvalid(Graph([Node("a", new Dictionary<string, JsonElement> { ["k"] = Nested(33) })]).Validate(), "Nodes[0].Properties[\"k\"]");
+
+    [Fact]
+    public void ObjectNesting_CountsLikeArrays()
+    {
+        var obj32 = Json(string.Concat(Enumerable.Repeat("{\"a\":", 31)) + "1" + new string('}', 31));
+        var obj33 = Json(string.Concat(Enumerable.Repeat("{\"a\":", 32)) + "1" + new string('}', 32));
+        Assert.True(Graph([Node("a", new Dictionary<string, JsonElement> { ["k"] = obj32 })]).Validate().IsSuccess);
+        Assert.True(Graph([Node("a", new Dictionary<string, JsonElement> { ["k"] = obj33 })]).Validate().IsFailure);
+    }
+
+    [Fact]
+    public void TooManyNodes_Fails()
+    {
+        var nodes = Enumerable.Range(0, ReasonletGraphLimits.MaxNodes + 1).Select(i => Node($"n{i}")).ToArray();
+        AssertInvalid(Graph(nodes).Validate(), "Nodes");
+        Assert.True(Graph(nodes.Take(ReasonletGraphLimits.MaxNodes).ToArray()).Validate().IsSuccess);
+    }
+
+    [Fact]
+    public void TooManyEdges_Fails()
+    {
+        var nodes = new[] { Node("a") };
+        var edges = Enumerable.Range(0, ReasonletGraphLimits.MaxEdges + 1)
+            .Select(i => new ReasonletEdge { From = "a", To = "a", Condition = $"c{i}" }).ToArray();
+        AssertInvalid(Graph(nodes, edges).Validate(), "Edges");
+        Assert.True(Graph(nodes, edges.Take(ReasonletGraphLimits.MaxEdges).ToArray()).Validate().IsSuccess);
+    }
+
+    /// <summary>A dictionary {"k": "xxx"} serializes to <c>{"k":"xxx"}</c>, which is 8 bytes more than the string length.</summary>
+    private static Dictionary<string, JsonElement> OfSize(int bytes) =>
+        new() { ["k"] = Json("\"" + new string('x', bytes - 8) + "\"") };
+
+    [Fact]
+    public void SerializedSize_IsCompactUtf8()
+    {
+        Assert.Equal(0, PropertyChecks.SerializedSize(null));
+        Assert.Equal(0, PropertyChecks.SerializedSize(new Dictionary<string, JsonElement>()));
+        Assert.Equal(11, PropertyChecks.SerializedSize(OfSize(11)));
+        var props = new Dictionary<string, JsonElement> { ["k"] = Json("{ \"a\" : [ 1 , 2 ] }") };
+        Assert.Equal(Encoding.UTF8.GetByteCount("{\"k\":{\"a\":[1,2]}}"), PropertyChecks.SerializedSize(props));
+    }
+
+    [Fact]
+    public void PropertiesAtLimit_Pass()
+    {
+        var graph = Graph([Node("a", OfSize(30000))]) with { Properties = OfSize(ReasonletGraphLimits.MaxPropertiesBytes - 30000) };
+        Assert.True(graph.Validate().IsSuccess);
+    }
+
+    [Fact]
+    public void PropertiesOverLimit_FailAcrossDictionaries()
+    {
+        var graph = Graph([Node("a", OfSize(30000))]) with { Properties = OfSize(ReasonletGraphLimits.MaxPropertiesBytes - 30000 + 1) };
+        AssertInvalid(graph.Validate(), "Properties");
+    }
+
+    [Fact]
+    public void EdgePropertiesCountTowardLimit()
+    {
+        var graph = Graph(
+            [Node("a")],
+            [new ReasonletEdge { From = "a", To = "a", Properties = OfSize(ReasonletGraphLimits.MaxPropertiesBytes + 1) }]);
+        AssertInvalid(graph.Validate(), "Properties");
+    }
+
+    [Fact]
+    public void MultipleFailures_ReportFirstInOrder()
+    {
+        var graph = Graph([Node("a"), Node("a")], [new ReasonletEdge { From = "a", To = "zz" }]);
+        AssertInvalid(graph.Validate(), "Nodes[1].Id");
+    }
+
+    [Fact]
+    public void KeyPath_EscapesAndHandlesNull()
+    {
+        Assert.Equal("P[null]", Check.KeyPath("P", null));
+        Assert.Equal("P[\"a\\\\b\\u000A\"]", Check.KeyPath("P", "a\\b\n"));
+    }
+}

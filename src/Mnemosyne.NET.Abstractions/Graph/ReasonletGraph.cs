@@ -16,7 +16,7 @@ public sealed record ReasonletGraph
     /// <summary>Gets the edges. Must not be null and no element may be null.</summary>
     public required IReadOnlyList<ReasonletEdge> Edges { get; init; }
 
-    /// <summary>Gets the graph schema version. Must be at least 1.</summary>
+    /// <summary>Gets the graph schema version. Must equal <see cref="CurrentSchemaVersion"/>.</summary>
     public required int SchemaVersion { get; init; }
 
     /// <summary>Gets the optional free-form properties of the graph.</summary>
@@ -57,6 +57,139 @@ public sealed record ReasonletGraph
             }
         }
 
+        return Check.All(
+            CheckVersion,
+            CheckHasNodes,
+            CheckUniqueNodeIds,
+            CheckEdgeEndpoints,
+            CheckConditions,
+            CheckDuplicateEdges,
+            CheckProperties,
+            CheckLimits);
+    }
+
+    private UnitResult<MnemosyneError> CheckVersion() =>
+        SchemaVersion == CurrentSchemaVersion
+            ? UnitResult<MnemosyneError>.Success()
+            : Check.Fail(nameof(SchemaVersion), $"unsupported schema version {SchemaVersion}; supported version is {CurrentSchemaVersion}");
+
+    private UnitResult<MnemosyneError> CheckHasNodes() =>
+        Nodes.Count == 0 ? Check.Fail(nameof(Nodes), "must contain at least one node") : UnitResult<MnemosyneError>.Success();
+
+    private UnitResult<MnemosyneError> CheckUniqueNodeIds()
+    {
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        for (var i = 0; i < Nodes.Count; i++)
+        {
+            if (!seen.Add(Nodes[i].Id))
+            {
+                return Check.Fail($"Nodes[{i}].Id", $"duplicate node id \"{Nodes[i].Id}\"");
+            }
+        }
+
         return UnitResult<MnemosyneError>.Success();
+    }
+
+    private UnitResult<MnemosyneError> CheckEdgeEndpoints()
+    {
+        var ids = new HashSet<string>(Nodes.Select(n => n.Id), StringComparer.Ordinal);
+        for (var i = 0; i < Edges.Count; i++)
+        {
+            if (!ids.Contains(Edges[i].From))
+            {
+                return Check.Fail($"Edges[{i}].From", $"refers to unknown node \"{Edges[i].From}\"");
+            }
+
+            if (!ids.Contains(Edges[i].To))
+            {
+                return Check.Fail($"Edges[{i}].To", $"refers to unknown node \"{Edges[i].To}\"");
+            }
+        }
+
+        return UnitResult<MnemosyneError>.Success();
+    }
+
+    private UnitResult<MnemosyneError> CheckConditions()
+    {
+        for (var i = 0; i < Edges.Count; i++)
+        {
+            if (Edges[i].Condition is { } condition && string.IsNullOrWhiteSpace(condition))
+            {
+                return Check.Fail($"Edges[{i}].Condition", "must not be blank when present");
+            }
+        }
+
+        return UnitResult<MnemosyneError>.Success();
+    }
+
+    private UnitResult<MnemosyneError> CheckDuplicateEdges()
+    {
+        var seen = new HashSet<(string, string, string?)>();
+        for (var i = 0; i < Edges.Count; i++)
+        {
+            if (!seen.Add((Edges[i].From, Edges[i].To, Edges[i].Condition)))
+            {
+                return Check.Fail($"Edges[{i}]", "duplicate edge with the same From, To and Condition");
+            }
+        }
+
+        return UnitResult<MnemosyneError>.Success();
+    }
+
+    private UnitResult<MnemosyneError> CheckProperties()
+    {
+        var graph = PropertyChecks.Validate(Properties, nameof(Properties));
+        if (graph.IsFailure)
+        {
+            return graph;
+        }
+
+        for (var i = 0; i < Nodes.Count; i++)
+        {
+            var result = PropertyChecks.Validate(Nodes[i].Properties, $"Nodes[{i}].Properties");
+            if (result.IsFailure)
+            {
+                return result;
+            }
+        }
+
+        for (var i = 0; i < Edges.Count; i++)
+        {
+            var result = PropertyChecks.Validate(Edges[i].Properties, $"Edges[{i}].Properties");
+            if (result.IsFailure)
+            {
+                return result;
+            }
+        }
+
+        return UnitResult<MnemosyneError>.Success();
+    }
+
+    private UnitResult<MnemosyneError> CheckLimits()
+    {
+        if (Nodes.Count > ReasonletGraphLimits.MaxNodes)
+        {
+            return Check.Fail(nameof(Nodes), $"must not contain more than {ReasonletGraphLimits.MaxNodes} nodes");
+        }
+
+        if (Edges.Count > ReasonletGraphLimits.MaxEdges)
+        {
+            return Check.Fail(nameof(Edges), $"must not contain more than {ReasonletGraphLimits.MaxEdges} edges");
+        }
+
+        long total = PropertyChecks.SerializedSize(Properties);
+        foreach (var node in Nodes)
+        {
+            total += PropertyChecks.SerializedSize(node.Properties);
+        }
+
+        foreach (var edge in Edges)
+        {
+            total += PropertyChecks.SerializedSize(edge.Properties);
+        }
+
+        return total > ReasonletGraphLimits.MaxPropertiesBytes
+            ? Check.Fail(nameof(Properties), $"total serialized size of all properties must not exceed {ReasonletGraphLimits.MaxPropertiesBytes} bytes")
+            : UnitResult<MnemosyneError>.Success();
     }
 }
