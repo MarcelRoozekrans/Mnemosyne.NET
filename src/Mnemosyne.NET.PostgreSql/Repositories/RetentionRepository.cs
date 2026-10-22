@@ -20,11 +20,21 @@ internal sealed partial class RetentionRepository(IAsyncDbConnection connection)
     /// </summary>
     /// <remarks>
     /// <para>
-    /// The executions are locked <c>FOR UPDATE</c> in id order before the delete, the order an erase locks the
-    /// executions it removes, so a prune and an erase that meet on the same runs take them in one order. Execution ids
-    /// are version 7 UUIDs, which grow with time, so the primary-key walk in id order reaches the old runs first and a
-    /// batch reads little more than it deletes. A run that a concurrent erase deleted while this statement waited for
-    /// it is skipped.
+    /// The statement picks the oldest <paramref name="batchSize"/> candidates, then locks them <c>FOR UPDATE</c> in id
+    /// order, the order an erase locks the executions it removes, so a prune and an erase that meet on the same runs
+    /// take them in one order. A candidate that a concurrent erase deleted while this statement waited for it is
+    /// skipped rather than replaced, so a batch can come back short while older runs remain: only a batch that
+    /// deletes nothing shows that the prune is done.
+    /// </para>
+    /// <para>
+    /// The candidates are a separate subquery ordered by <c>executed_at</c>, so that the planner can walk the
+    /// <c>executed_at</c> index from the oldest run and stop at the batch size, and the lock and the delete look the
+    /// chosen ids up by primary key. Locking straight from a filter ordered by id left the plan to the estimates: a
+    /// generic plan walked the whole primary key for a scope with no old runs, and the delete joined the batch against
+    /// a sequential scan of the table. Without a scope a batch reads about what it deletes. With one, the
+    /// <c>executed_at</c> walk also passes over other scopes' old runs, so in the worst case it reads every old run in
+    /// the database, but never a recent one. The planner may still choose otherwise; these are the plans PostgreSQL 17
+    /// chose in testing.
     /// </para>
     /// <para>
     /// The metrics rows are left alone on purpose: a pruned run still happened, so the counters and timestamps keep
@@ -37,15 +47,18 @@ internal sealed partial class RetentionRepository(IAsyncDbConnection connection)
         WITH doomed AS (
             SELECT e.id
             FROM mnemosyne.reasonlet_executions e
-            WHERE e.executed_at < @cutoff
-              AND (@scope::text IS NULL OR e.scope = @scope)
+            WHERE e.id = ANY(ARRAY(
+                SELECT c.id
+                FROM mnemosyne.reasonlet_executions c
+                WHERE c.executed_at < @cutoff
+                  AND (@scope::text IS NULL OR c.scope = @scope)
+                ORDER BY c.executed_at
+                LIMIT @batchSize))
             ORDER BY e.id
-            LIMIT @batchSize
             FOR UPDATE OF e
         ), deleted AS (
             DELETE FROM mnemosyne.reasonlet_executions e
-            USING doomed d
-            WHERE e.id = d.id
+            WHERE e.id = ANY(ARRAY(SELECT d.id FROM doomed d))
             RETURNING e.id
         )
         SELECT count(*)::int FROM deleted

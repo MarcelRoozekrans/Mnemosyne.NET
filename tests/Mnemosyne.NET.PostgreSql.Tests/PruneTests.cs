@@ -88,7 +88,7 @@ public sealed class PruneTests(PgVectorFixture fixture) : IClassFixture<PgVector
     [Fact]
     public async Task PruningBatchesUntilDone()
     {
-        // Ten runs in batches of three: three full batches and a short one, which ends the loop.
+        // Ten runs in batches of three: three full batches, a short one, and an empty one, which ends the loop.
         var store = await MigratedStoreAsync();
         store.PruneBatchSizeOverride = 3;
         var batches = 0;
@@ -103,7 +103,7 @@ public sealed class PruneTests(PgVectorFixture fixture) : IClassFixture<PgVector
         var result = await PruneAsync(store, new ReasonletRetention { Scope = scope, ExecutionsOlderThan = FiveDays });
 
         Assert.Equal((0, 10), (result.Reasonlets, result.Executions));
-        Assert.Equal(4, batches);
+        Assert.Equal(5, batches);
         Assert.Equal((1L, 0L), await CountsAsync(fixture.DataSource, scope));
     }
 
@@ -233,7 +233,8 @@ public sealed class PruneTests(PgVectorFixture fixture) : IClassFixture<PgVector
     [Fact]
     public async Task ADeadlockedBatchIsRetried()
     {
-        // The first try rolls back, so the retry finds every run still there and deletes them all.
+        // The first try rolls back, so the retry finds every run still there and deletes them all; an empty batch
+        // then ends the prune.
         var store = await MigratedStoreAsync();
         var calls = 0;
         store.BeforePruneBatchCommit = () => ++calls == 1 ? throw Pg("40P01") : Task.CompletedTask;
@@ -243,7 +244,7 @@ public sealed class PruneTests(PgVectorFixture fixture) : IClassFixture<PgVector
         var result = await PruneAsync(store, new ReasonletRetention { Scope = scope, ExecutionsOlderThan = FiveDays });
 
         Assert.Equal((0, 3), (result.Reasonlets, result.Executions));
-        Assert.Equal(2, calls);
+        Assert.Equal(3, calls);
         Assert.Equal((1L, 0L), await CountsAsync(fixture.DataSource, scope));
     }
 
@@ -304,6 +305,30 @@ public sealed class PruneTests(PgVectorFixture fixture) : IClassFixture<PgVector
         var result = await store.PruneAsync(new ReasonletRetention { Scope = scope, ExecutionsOlderThan = FiveDays }, Ct);
 
         Assert.Equal(MnemosyneErrorCode.Unavailable, result.Error.Code);
+        Assert.Equal(1, calls);
+        Assert.Equal((1L, 2L), await CountsAsync(fixture.DataSource, scope));
+    }
+
+    [Fact]
+    public async Task CancellationInsideABatchPropagatesAndIsNotRetried()
+    {
+        // The batch is cancelled after its delete and before its commit. The cancellation is neither retried nor
+        // mapped to an error, and the batch rolls back.
+        var store = await MigratedStoreAsync();
+        using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(Ct);
+        var calls = 0;
+        store.BeforePruneBatchCommit = async () =>
+        {
+            calls++;
+            await cancellation.CancelAsync();
+            cancellation.Token.ThrowIfCancellationRequested();
+        };
+        var scope = PgVectorFixture.NewScope();
+        await OldRunsAsync(store, scope, 2);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            async () => await store.PruneAsync(new ReasonletRetention { Scope = scope, ExecutionsOlderThan = FiveDays }, cancellation.Token));
+
         Assert.Equal(1, calls);
         Assert.Equal((1L, 2L), await CountsAsync(fixture.DataSource, scope));
     }

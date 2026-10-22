@@ -719,9 +719,9 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
     /// <para>
     /// The prune reads the database's clock once and measures each window back from it, so a long prune has a fixed
     /// target and ends. Executions recorded before <c>now - </c><see cref="ReasonletRetention.ExecutionsOlderThan"/> are
-    /// deleted, with their feedback, in batches of at most 1,000, each its own READ COMMITTED transaction; the
-    /// Reasonlets' counters keep them, because a pruned run still happened. A batch locks its executions in id order,
-    /// as an erase does, and takes no metrics lock, so it never waits for an append.
+    /// deleted, with their feedback, in batches of at most 1,000, each its own READ COMMITTED transaction, until a
+    /// batch deletes nothing; the Reasonlets' counters keep them, because a pruned run still happened. A batch locks
+    /// its executions in id order, as an erase does, and takes no metrics lock, so it never waits for an append.
     /// </para>
     /// <para>
     /// A batch that hits a deadlock or a serialization failure rolls back and is retried, up to three times, before
@@ -777,6 +777,9 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
         if (retention.ExecutionsOlderThan is { } window)
         {
             var cutoff = Cutoff(now, window);
+
+            // Until a batch deletes nothing, not until one comes back short: a batch skips the runs a concurrent erase
+            // deleted while it waited for them, so a short batch does not prove that no old run is left.
             int deleted;
             do
             {
@@ -785,7 +788,7 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
                     ct).ConfigureAwait(false);
                 progress.Executions += deleted;
             }
-            while (deleted == batchSize);
+            while (deleted > 0);
         }
 
         return new ReasonletPruneResult { Reasonlets = progress.Reasonlets, Executions = progress.Executions };
