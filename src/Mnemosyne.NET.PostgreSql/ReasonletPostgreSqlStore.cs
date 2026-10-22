@@ -547,6 +547,16 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// One transaction at READ COMMITTED. An erasure by subject deletes the subject's Reasonlets in the scope with
+    /// every execution and feedback on them, other subjects' runs included, then the subject's executions on the
+    /// Reasonlets it keeps. Other subjects' children of a deleted Reasonlet survive with a null parent, each the top
+    /// of its own lineage. The counts are of rows removed, each once; a cut lineage link is not a removal. The rows
+    /// are locked deepest first, the order a remember's path locks take, so an erase waits behind a remember rather
+    /// than deadlocking with it; a deadlock that still happens, with a remember that raced the lock walk or with a
+    /// hand-written transaction, answers <see cref="MnemosyneErrorCode.Conflict"/>.
+    /// </remarks>
+    /// <exception cref="ArgumentNullException"><paramref name="erasure"/> is null.</exception>
     public async ValueTask<Result<ReasonletErasureResult, MnemosyneError>> EraseAsync(ReasonletErasure erasure, CancellationToken ct)
     {
         var migrated = await EnsureMigratedAsync(ct).ConfigureAwait(false);
@@ -555,7 +565,32 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
             return migrated.Error;
         }
 
-        throw new NotImplementedException();
+        ArgumentNullException.ThrowIfNull(erasure);
+        var valid = erasure.Validate();
+        if (valid.IsFailure)
+        {
+            return valid.Error;
+        }
+
+        return await GuardAsync(EraseCoreAsync(erasure, ct)).ConfigureAwait(false);
+    }
+
+    private async Task<Result<ReasonletErasureResult, MnemosyneError>> EraseCoreAsync(ReasonletErasure erasure, CancellationToken ct)
+    {
+        var scope = erasure.Scope.Value;
+        await using var connection = (await _dataSource.OpenConnectionAsync(ct).ConfigureAwait(false)).AsAsync();
+        await using var transaction = await connection.BeginTransactionAsync(IsolationLevel.ReadCommitted, ct).ConfigureAwait(false);
+        var reasonlets = new ReasonletRepository(connection);
+
+        // Lock first, deepest first, and keep the ids: the later statements take fresh snapshots, and must delete the
+        // set that was locked, not Reasonlets remembered since. The executions go before the Reasonlets, so that none
+        // is left to cascade uncounted.
+        var doomed = await reasonlets.LockForErasureAsync(scope, erasure.SubjectId, transaction, ct).ConfigureAwait(false);
+        var executions = await new ExecutionRepository(connection)
+            .DeleteForErasureAsync(scope, doomed, erasure.SubjectId, transaction, ct).ConfigureAwait(false);
+        var removed = await reasonlets.DeleteAsync(scope, doomed, transaction, ct).ConfigureAwait(false);
+        await transaction.CommitAsync(ct).ConfigureAwait(false);
+        return new ReasonletErasureResult { Reasonlets = removed, Executions = executions };
     }
 
     /// <summary>

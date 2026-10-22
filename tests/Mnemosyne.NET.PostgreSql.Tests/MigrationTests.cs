@@ -221,17 +221,6 @@ public sealed class MigrationTests(PgVectorFixture fixture) : IClassFixture<PgVe
         Assert.Equal(MnemosyneErrorCode.NotFound, result.Error.Code);
     }
 
-    // Placeholders: these members are stubs until the tasks that implement them replace this test.
-    [Fact]
-    public async Task UnimplementedMembersThrowOnceMigrated()
-    {
-        var store = fixture.CreateStore();
-        Assert.True((await store.MigrateAsync(Ct)).IsSuccess);
-        var scope = PgVectorFixture.NewScope();
-
-        await Assert.ThrowsAsync<NotImplementedException>(async () => await store.EraseAsync(new ReasonletErasure(scope, null), Ct));
-    }
-
     private static void AssertNotMigrated(MnemosyneError error)
     {
         Assert.Equal(MnemosyneErrorCode.Unavailable, error.Code);

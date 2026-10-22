@@ -4,7 +4,7 @@ using ZeroAlloc.ORM;
 
 namespace Mnemosyne.NET.PostgreSql.Repositories;
 
-/// <summary>Reads, locks and inserts rows of <c>mnemosyne.reasonlets</c>.</summary>
+/// <summary>Reads, locks, inserts and deletes rows of <c>mnemosyne.reasonlets</c>.</summary>
 /// <remarks>Every select names its columns: Npgsql cannot read the <c>vector</c> embedding column into a CLR type.</remarks>
 [Dialect(SqlDialect.PostgreSql)]
 internal sealed partial class ReasonletRepository(IAsyncDbConnection connection)
@@ -101,6 +101,56 @@ internal sealed partial class ReasonletRepository(IAsyncDbConnection connection)
         SELECT coalesce(array_agg(version) FILTER (WHERE NOT is_cycle), '{}') FROM down
         """)]
     public partial Task<string[]> GetLineageVersionsAsync(string scope, Guid topId, IAsyncDbTransaction transaction, CancellationToken ct);
+
+    /// <summary>
+    /// Locks, until the transaction ends, what an erasure changes in the scope: the Reasonlets it deletes, every one
+    /// or the subject's, and their children that it keeps, whose <c>parent_id</c> the delete cuts. Answers the ids
+    /// to delete. A null subject selects the whole scope.
+    /// </summary>
+    /// <remarks>
+    /// The rows are locked deepest first, by the length of their walk up <c>parent_id</c> in the scope, and by id
+    /// within a depth. A remember takes its path locks bottom-up and only ever waits for a row above every row it
+    /// holds, so an erase that locks in the same direction waits behind it rather than deadlocking with it, and two
+    /// erases lock overlapping rows in one order. <c>FOR UPDATE</c> above an <c>ORDER BY</c> locks the rows in
+    /// sorted order. A row a concurrent erase deleted first is skipped, so it is neither returned nor counted twice.
+    /// Holding the deleted rows blocks every new child and execution of them until commit. The <c>CYCLE</c> clause
+    /// only keeps hand-written <c>parent_id</c> cycles from looping forever.
+    /// </remarks>
+    [Query("""
+        WITH RECURSIVE doomed AS (
+            SELECT id FROM mnemosyne.reasonlets
+            WHERE scope = @scope AND (@subjectId::text IS NULL OR subject_id = @subjectId)
+        ), target (id) AS (
+            SELECT id FROM doomed
+            UNION
+            SELECT c.id FROM mnemosyne.reasonlets c JOIN doomed d ON c.parent_id = d.id
+            WHERE c.scope = @scope
+        ), up (target_id, id, parent_id, depth) AS (
+            SELECT r.id, r.id, r.parent_id, 0
+            FROM mnemosyne.reasonlets r JOIN target t ON r.id = t.id
+            UNION ALL
+            SELECT up.target_id, r.id, r.parent_id, up.depth + 1
+            FROM mnemosyne.reasonlets r JOIN up ON r.id = up.parent_id
+            WHERE r.scope = @scope
+        ) CYCLE id SET is_cycle USING path,
+        depths AS (
+            SELECT target_id, max(depth) AS depth FROM up GROUP BY target_id
+        ), locked AS (
+            SELECT r.id
+            FROM mnemosyne.reasonlets r JOIN depths d ON r.id = d.target_id
+            ORDER BY d.depth DESC, r.id
+            FOR UPDATE OF r
+        )
+        SELECT coalesce(array_agg(l.id) FILTER (WHERE l.id IN (SELECT id FROM doomed)), '{}') FROM locked l
+        """)]
+    public partial Task<Guid[]> LockForErasureAsync(string scope, string? subjectId, IAsyncDbTransaction transaction, CancellationToken ct);
+
+    /// <summary>
+    /// Deletes Reasonlets of the scope that <see cref="LockForErasureAsync"/> locked, and answers how many it deleted.
+    /// Their children's <c>parent_id</c> is cut by <c>ON DELETE SET NULL</c>, which the count leaves out.
+    /// </summary>
+    [Command("DELETE FROM mnemosyne.reasonlets WHERE scope = @scope AND id = ANY(@ids)")]
+    public partial Task<int> DeleteAsync(string scope, Guid[] ids, IAsyncDbTransaction transaction, CancellationToken ct);
 
     [Command("""
         INSERT INTO mnemosyne.reasonlets
