@@ -206,19 +206,19 @@ public sealed record ReasonletGraph
             return Check.Fail(nameof(Edges), $"must not contain more than {ReasonletGraphLimits.MaxEdges} edges");
         }
 
-        long total = PropertyChecks.SerializedSize(Properties);
+        long total = CanonicalGraphWriter.PropertiesSize(Properties);
         foreach (var node in Nodes)
         {
-            total += PropertyChecks.SerializedSize(node.Properties);
+            total += CanonicalGraphWriter.PropertiesSize(node.Properties);
         }
 
         foreach (var edge in Edges)
         {
-            total += PropertyChecks.SerializedSize(edge.Properties);
+            total += CanonicalGraphWriter.PropertiesSize(edge.Properties);
         }
 
         return total > ReasonletGraphLimits.MaxPropertiesBytes
-            ? Check.Fail(nameof(Properties), $"total serialized size of all properties must not exceed {ReasonletGraphLimits.MaxPropertiesBytes} bytes")
+            ? Check.Fail(nameof(Properties), $"total canonical size of all properties must not exceed {ReasonletGraphLimits.MaxPropertiesBytes} bytes")
             : UnitResult<MnemosyneError>.Success();
     }
 }

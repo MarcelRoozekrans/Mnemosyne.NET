@@ -11,7 +11,9 @@ public static class ReasonletGraphLimits
 
     /// <summary>
     /// The maximum total size in bytes of all <c>Properties</c> dictionaries in a graph (graph, nodes and edges).
-    /// Each dictionary is measured as the UTF-8 length of its compact JSON serialization, and the lengths are summed.
+    /// Each dictionary is measured as the UTF-8 length of its canonical JSON object, the form the content hash uses:
+    /// compact, with the fixed RFC 8785 escape set, so a supplementary character counts as its 4 raw UTF-8 bytes.
+    /// The lengths are summed.
     /// </summary>
     public const int MaxPropertiesBytes = 65536;
 

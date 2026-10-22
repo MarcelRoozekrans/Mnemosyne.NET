@@ -120,7 +120,25 @@ internal static class CanonicalGraphWriter
     }
 
     /// <summary>
-    /// Writes <c>,"properties":{…}</c> with the keys in ordinal order, or nothing when null or empty.
+    /// Returns the UTF-8 byte length of a properties dictionary as a canonical JSON object, or 0 when null or empty.
+    /// This is the measure of <see cref="ReasonletGraphLimits.MaxPropertiesBytes"/>.
+    /// </summary>
+    /// <param name="props">A dictionary that has passed property validation.</param>
+    /// <returns>The byte length of <c>{…}</c> as the content hash writes it.</returns>
+    public static int PropertiesSize(IReadOnlyDictionary<string, JsonElement>? props)
+    {
+        if (props is null || props.Count == 0)
+        {
+            return 0;
+        }
+
+        var output = new ArrayBufferWriter<byte>();
+        WritePropertiesObject(output, props);
+        return output.WrittenCount;
+    }
+
+    /// <summary>
+    /// Writes <c>,"properties":{…}</c>, or nothing when null or empty.
     /// It is never the first member of its object, so it always starts with a comma.
     /// </summary>
     private static void WriteProperties(ArrayBufferWriter<byte> output, IReadOnlyDictionary<string, JsonElement>? props)
@@ -130,7 +148,14 @@ internal static class CanonicalGraphWriter
             return;
         }
 
-        output.Write(",\"properties\":{"u8);
+        output.Write(",\"properties\":"u8);
+        WritePropertiesObject(output, props);
+    }
+
+    /// <summary>Writes a non-empty properties dictionary as <c>{…}</c> with the keys in ordinal order.</summary>
+    private static void WritePropertiesObject(ArrayBufferWriter<byte> output, IReadOnlyDictionary<string, JsonElement> props)
+    {
+        output.Write("{"u8);
         var first = true;
         foreach (var entry in props.OrderBy(p => p.Key, StringComparer.Ordinal))
         {

@@ -1,15 +1,13 @@
-using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Runtime.InteropServices;
-using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Unicode;
 using ZeroAlloc.Results;
 
 namespace Mnemosyne.NET.Abstractions;
 
-/// <summary>Validation and measurement of free-form <c>Properties</c> dictionaries.</summary>
+/// <summary>Validation of free-form <c>Properties</c> dictionaries. <see cref="CanonicalGraphWriter.PropertiesSize"/> measures them.</summary>
 internal static class PropertyChecks
 {
     private const string InvalidText = "value must contain only valid UTF-8 and UTF-16 in its strings and member names";
@@ -38,32 +36,6 @@ internal static class PropertyChecks
         }
 
         return UnitResult<MnemosyneError>.Success();
-    }
-
-    /// <summary>Returns the UTF-8 byte length of the compact JSON serialization, or 0 for null or empty.</summary>
-    /// <remarks>Values must be defined. Written by hand with <see cref="Utf8JsonWriter"/> so no reflection is needed.</remarks>
-    public static int SerializedSize(IReadOnlyDictionary<string, JsonElement>? props)
-    {
-        if (props is null || props.Count == 0)
-        {
-            return 0;
-        }
-
-        var buffer = new ArrayBufferWriter<byte>();
-        var options = new JsonWriterOptions { Indented = false, Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
-        using (var writer = new Utf8JsonWriter(buffer, options))
-        {
-            writer.WriteStartObject();
-            foreach (var entry in props)
-            {
-                writer.WritePropertyName(entry.Key);
-                entry.Value.WriteTo(writer);
-            }
-
-            writer.WriteEndObject();
-        }
-
-        return buffer.WrittenCount;
     }
 
     private static string? FindProblem(string? key, JsonElement value)

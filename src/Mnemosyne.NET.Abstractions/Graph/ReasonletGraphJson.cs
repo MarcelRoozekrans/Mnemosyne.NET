@@ -10,10 +10,10 @@ namespace Mnemosyne.NET.Abstractions;
 /// <summary>Reads and writes <see cref="ReasonletGraph"/> as JSON without reflection, so it is safe for Native AOT.</summary>
 /// <remarks>
 /// The JSON uses camelCase member names and leaves out null members and null or empty <c>properties</c>.
-/// Strings are written with <see cref="JavaScriptEncoder.UnsafeRelaxedJsonEscaping"/>, the same encoder the
-/// <see cref="ReasonletGraphLimits.MaxPropertiesBytes"/> limit measures with. The output is meant to be stored, not
-/// embedded in HTML. <see cref="ReasonletGraph.ComputeContentHash"/> does not hash this text: it uses its own canonical
-/// form with a fixed escape set.
+/// Strings are written with <see cref="JavaScriptEncoder.UnsafeRelaxedJsonEscaping"/>. The output is meant to be stored,
+/// not embedded in HTML. <see cref="ReasonletGraph.ComputeContentHash"/> does not hash this text, and the
+/// <see cref="ReasonletGraphLimits.MaxPropertiesBytes"/> limit does not measure it: both use the canonical form with its
+/// fixed RFC 8785 escape set.
 /// </remarks>
 public static class ReasonletGraphJson
 {

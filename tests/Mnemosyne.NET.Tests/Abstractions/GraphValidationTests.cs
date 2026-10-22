@@ -165,18 +165,36 @@ public class GraphValidationTests
         Assert.True(Graph(nodes, edges.Take(ReasonletGraphLimits.MaxEdges).ToArray()).Validate().IsSuccess);
     }
 
-    /// <summary>A dictionary {"a.k": "xxx"} serializes to <c>{"a.k":"xxx"}</c>, which is 10 bytes more than the string length.</summary>
+    /// <summary>A dictionary {"a.k": "xxx"} is <c>{"a.k":"xxx"}</c> in canonical form, 10 bytes more than the string.</summary>
     private static Dictionary<string, JsonElement> OfSize(int bytes) =>
         new() { ["a.k"] = Json("\"" + new string('x', bytes - 10) + "\"") };
 
-    [Fact]
-    public void SerializedSize_IsCompactUtf8()
+    /// <summary>
+    /// Like <see cref="OfSize"/>, but filled with as many U+1F600 as fit, 4 raw UTF-8 bytes each in canonical form,
+    /// topped up with x. The relaxed encoder would have written each as a 12-byte escape pair.
+    /// </summary>
+    private static Dictionary<string, JsonElement> OfSizeAstral(int bytes)
     {
-        Assert.Equal(0, PropertyChecks.SerializedSize(null));
-        Assert.Equal(0, PropertyChecks.SerializedSize(new Dictionary<string, JsonElement>()));
-        Assert.Equal(11, PropertyChecks.SerializedSize(OfSize(11)));
-        var props = new Dictionary<string, JsonElement> { ["a.k"] = Json("{ \"a\" : [ 1 , 2 ] }") };
-        Assert.Equal(Encoding.UTF8.GetByteCount("{\"a.k\":{\"a\":[1,2]}}"), PropertyChecks.SerializedSize(props));
+        var fill = bytes - 10;
+        var text = string.Concat(Enumerable.Repeat("\U0001F600", fill / 4)) + new string('x', fill % 4);
+        return new() { ["a.k"] = Json("\"" + text + "\"") };
+    }
+
+    [Fact]
+    public void PropertiesSize_IsCanonicalUtf8()
+    {
+        Assert.Equal(0, CanonicalGraphWriter.PropertiesSize(null));
+        Assert.Equal(0, CanonicalGraphWriter.PropertiesSize(new Dictionary<string, JsonElement>()));
+        Assert.Equal(11, CanonicalGraphWriter.PropertiesSize(OfSize(11)));
+        var props = new Dictionary<string, JsonElement> { ["a.k"] = Json("{ \"b\" : [ 1 , 2 ], \"a\" : \"\\u0041\" }") };
+        Assert.Equal(Encoding.UTF8.GetByteCount("{\"a.k\":{\"a\":\"A\",\"b\":[1,2]}}"), CanonicalGraphWriter.PropertiesSize(props));
+    }
+
+    [Fact]
+    public void PropertiesSize_CountsAstralCharacterAsFourBytes()
+    {
+        var props = new Dictionary<string, JsonElement> { ["a.k"] = Json("\"\\uD83D\\uDE00\"") };
+        Assert.Equal(14, CanonicalGraphWriter.PropertiesSize(props));
     }
 
     [Fact]
@@ -192,6 +210,18 @@ public class GraphValidationTests
         var graph = Graph([Node("a", OfSize(30000))]) with { Properties = OfSize(ReasonletGraphLimits.MaxPropertiesBytes - 30000 + 1) };
         AssertInvalid(graph.Validate(), "Properties");
     }
+
+    [Fact]
+    public void AstralPropertiesAtLimit_Pass()
+    {
+        var props = OfSizeAstral(ReasonletGraphLimits.MaxPropertiesBytes);
+        Assert.Equal(ReasonletGraphLimits.MaxPropertiesBytes, CanonicalGraphWriter.PropertiesSize(props));
+        Assert.True(Graph([Node("a", props)]).Validate().IsSuccess);
+    }
+
+    [Fact]
+    public void AstralPropertiesOverLimit_Fail() =>
+        AssertInvalid(Graph([Node("a", OfSizeAstral(ReasonletGraphLimits.MaxPropertiesBytes + 1))]).Validate(), "Properties");
 
     [Fact]
     public void EdgePropertiesCountTowardLimit()
