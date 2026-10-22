@@ -24,6 +24,19 @@ public sealed class LineageVersionsTests
     [InlineData("2.1")]
     [InlineData("1.x")]
     [InlineData("1.-1")]
+    [InlineData("1.01")]
+    [InlineData("1.007")]
+    [InlineData(" 1.2")]
+    [InlineData("1.2 ")]
     public void MalformedThrows(string version) =>
         Assert.Throws<FormatException>(() => LineageVersions.Minor(version));
+
+    [Fact]
+    public void NextOfEmptyLineageIsOneOne() =>
+        // Only reachable for a lineage with no rows. A brand new Reasonlet uses Initial, not Next.
+        Assert.Equal("1.1", LineageVersions.Next([]));
+
+    [Fact]
+    public void NextThrowsRatherThanOverflow() =>
+        Assert.Throws<OverflowException>(() => LineageVersions.Next(["1.2147483647"]));
 }

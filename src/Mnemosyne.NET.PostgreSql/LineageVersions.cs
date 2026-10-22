@@ -10,6 +10,7 @@ internal static class LineageVersions
     internal static int Minor(string version)
     {
         if (version.StartsWith("1.", StringComparison.Ordinal)
+            && !(version.Length > 3 && version[2] == '0')
             && int.TryParse(version.AsSpan(2), NumberStyles.None, CultureInfo.InvariantCulture, out var minor))
         {
             return minor;
@@ -18,7 +19,8 @@ internal static class LineageVersions
         throw new FormatException($"'{version}' is not a lineage version of the form 1.k.");
     }
 
-    /// <summary>Returns <c>1.k</c> where k is one more than the highest minor in the lineage.</summary>
+    /// <summary>Returns <c>1.k</c> where k is one more than the highest minor in the lineage.
+    /// Throws <see cref="OverflowException"/> when the highest minor is <see cref="int.MaxValue"/>.</summary>
     internal static string Next(IEnumerable<string> lineageVersions)
     {
         var max = 0;
@@ -27,6 +29,6 @@ internal static class LineageVersions
             max = Math.Max(max, Minor(version));
         }
 
-        return string.Create(CultureInfo.InvariantCulture, $"1.{max + 1}");
+        return string.Create(CultureInfo.InvariantCulture, $"1.{checked(max + 1)}");
     }
 }

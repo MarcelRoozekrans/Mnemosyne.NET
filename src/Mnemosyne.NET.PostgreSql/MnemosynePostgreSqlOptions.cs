@@ -22,7 +22,7 @@ public sealed class MnemosynePostgreSqlOptions
         if (Dimensions is < 1 or > MaxDimensions)
         {
             throw new ArgumentOutOfRangeException(
-                nameof(Dimensions), Dimensions, $"{nameof(Dimensions)} must be from 1 to {MaxDimensions}, the HNSW index limit of {MaxDimensions} dimensions.");
+                nameof(Dimensions), Dimensions, $"{nameof(Dimensions)} must be from 1 to {MaxDimensions}, the most that an HNSW index can hold.");
         }
 
         if (HnswM is < 2 or > 100)

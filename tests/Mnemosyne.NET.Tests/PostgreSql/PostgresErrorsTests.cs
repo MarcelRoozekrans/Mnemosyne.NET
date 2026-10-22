@@ -41,6 +41,19 @@ public sealed class PostgresErrorsTests
     }
 
     [Fact]
+    public void WrappedTimeoutIsUnavailable() => AssertUnavailable(new NpgsqlException("timed out", new TimeoutException()));
+
+    [Fact]
+    public void WrappedIoErrorIsUnavailable() => AssertUnavailable(new NpgsqlException("io", new IOException()));
+
+    private static void AssertUnavailable(Exception ex)
+    {
+        var error = PostgresErrors.Map(ex);
+        Assert.NotNull(error);
+        Assert.Equal(MnemosyneErrorCode.Unavailable, error.Value.Code);
+    }
+
+    [Fact]
     public void OtherPostgresStateIsNull() => Assert.Null(PostgresErrors.Map(Pg("42P01")));
 
     [Fact]
