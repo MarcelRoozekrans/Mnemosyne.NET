@@ -41,7 +41,7 @@ Design: [roadmap design](../superpowers/specs/2026-10-21-roadmap-design.md), bui
 **Plan:** `docs/superpowers/plans/2026-10-22-phase-1.4-postgres-store.md`
 **Completed:** 2026-10-22
 
-### Phase 1.5: Telemetry and retention [status: pending]
+### Phase 1.5: Telemetry and retention [status: active]
 **Goal:** OpenTelemetry activities and events for capture, recall, erasure and retention, and a retention policy. Erasure itself moved to phase 1.4.
 **Surface:** Data
 **HelpWanted:** no

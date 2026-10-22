@@ -27,7 +27,7 @@ with getting-started docs and a sample. See the
 2. Phase 1.2 — Abstractions [complete]
 3. Phase 1.3 — Graph JSON schema v1 [complete]
 4. Phase 1.4 — PostgreSQL + pgvector store [complete]
-5. Phase 1.5 — Telemetry and retention [pending]
+5. Phase 1.5 — Telemetry and retention [active]
 6. Phase 1.6 — Selector and ranking [pending]
 7. Phase 1.7 — Docsite skeleton and first sample [pending]
 
