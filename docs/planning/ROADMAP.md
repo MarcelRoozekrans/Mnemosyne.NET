@@ -27,7 +27,7 @@ Design: [roadmap design](../superpowers/specs/2026-10-21-roadmap-design.md), bui
 **Plan:** `docs/superpowers/plans/2026-10-22-phase-1.2-abstractions.md`
 **Completed:** 2026-10-22
 
-### Phase 1.3: Graph JSON schema v1 [status: pending]
+### Phase 1.3: Graph JSON schema v1 [status: active]
 **Goal:** A minimal, versioned node-and-edge schema that Mnemosyne owns and callers may extend.
 **Surface:** Backend
 **HelpWanted:** no
