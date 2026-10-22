@@ -750,16 +750,25 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
         // Lock first, deepest first, and keep the ids: the later statements take fresh snapshots, and must delete the
         // set that was locked, not rows written since. The locks go Reasonlets, then executions, then the metrics rows
         // of the kept Reasonlets that lose runs, each in a fixed order, so overlapping erases meet on the same rows in
-        // the same order and cannot deadlock. The delete then takes its snapshot after the metrics locks, so it sees
-        // every append that committed before, and it goes before the Reasonlets, so that no execution is left to
-        // cascade uncounted. A scope erase keeps no Reasonlet, so it has no metrics row to lock and skips the call
-        // rather than send every execution id of the scope for an answer that is certain to be empty.
+        // the same order and cannot deadlock. The executions go before the Reasonlets, so that none is left to cascade
+        // uncounted. A scope erase keeps no Reasonlet, so it locks and deletes the doomed Reasonlets' executions in one
+        // statement and has no metrics row to subtract from. A subject erase keeps the executions it locked in a
+        // temporary table, so the set stays on the server, and its delete takes its snapshot after the metrics locks,
+        // so it sees every append that committed before.
         var doomed = await reasonlets.LockForErasureAsync(scope, erasure.SubjectId, transaction, ct).ConfigureAwait(false);
-        var executionIds = await executions.LockExecutionsForErasureAsync(scope, doomed, erasure.SubjectId, transaction, ct).ConfigureAwait(false);
-        var kept = erasure.SubjectId is null
-            ? []
-            : await executions.LockMetricsForErasureAsync(scope, executionIds, doomed, transaction, ct).ConfigureAwait(false);
-        var erased = await executions.DeleteForErasureAsync(scope, executionIds, kept, transaction, ct).ConfigureAwait(false);
+        int? erased;
+        if (erasure.SubjectId is not { } subjectId)
+        {
+            erased = await executions.DeleteScopeExecutionsAsync(scope, doomed, transaction, ct).ConfigureAwait(false);
+        }
+        else
+        {
+            await executions.CreateErasedExecutionsAsync(transaction, ct).ConfigureAwait(false);
+            await executions.LockExecutionsForErasureAsync(scope, doomed, subjectId, transaction, ct).ConfigureAwait(false);
+            var kept = await executions.LockMetricsForErasureAsync(scope, doomed, transaction, ct).ConfigureAwait(false);
+            erased = await executions.DeleteForErasureAsync(scope, kept, transaction, ct).ConfigureAwait(false);
+        }
+
         var removed = await reasonlets.DeleteAsync(scope, doomed, transaction, ct).ConfigureAwait(false);
         await transaction.CommitAsync(ct).ConfigureAwait(false);
         return new ReasonletErasureResult { Reasonlets = removed, Executions = erased!.Value };
