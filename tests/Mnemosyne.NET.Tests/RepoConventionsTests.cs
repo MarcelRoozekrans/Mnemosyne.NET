@@ -110,7 +110,7 @@ public sealed class RepoConventionsTests
     private static string? Property(string project, string name) =>
         XDocument.Load(project).Descendants(name).FirstOrDefault()?.Value.Trim();
 
-    private static string RepoRoot()
+    internal static string RepoRoot()
     {
         var dir = new DirectoryInfo(AppContext.BaseDirectory);
         while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "Mnemosyne.NET.slnx")))
