@@ -2,6 +2,13 @@
   <PropertyGroup>
     <IsPackable>true</IsPackable>
     <IsAotCompatible>true</IsAotCompatible>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <Description>Records and interfaces for Reasonlets, procedural memory for .NET agents.</Description>
   </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="ZeroAlloc.Results" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Mnemosyne.NET.Tests" />
+  </ItemGroup>
 </Project>
