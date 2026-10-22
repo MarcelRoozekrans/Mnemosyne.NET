@@ -31,7 +31,7 @@ Design: [roadmap design](../superpowers/specs/2026-10-21-roadmap-design.md), bui
 **Goal:** A minimal, versioned node-and-edge schema that Mnemosyne owns and callers may extend.
 **Surface:** Backend
 **HelpWanted:** no
-**Plan:** _to be written_
+**Plan:** `docs/superpowers/plans/2026-10-22-phase-1.3-graph-schema.md`
 
 ### Phase 1.4: PostgreSQL + pgvector store [status: pending]
 **Goal:** `Mnemosyne.NET.PostgreSql` on Npgsql with embedded SQL migrations, implementing the store.
