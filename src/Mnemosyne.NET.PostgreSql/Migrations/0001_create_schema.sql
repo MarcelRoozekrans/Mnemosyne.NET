@@ -41,9 +41,6 @@ CREATE INDEX reasonlets_scope_status_intent ON mnemosyne.reasonlets (scope, stat
 -- The walks down the lineage and the foreign key's SET NULL both look rows up by (scope, parent_id).
 CREATE INDEX reasonlets_scope_parent_id ON mnemosyne.reasonlets (scope, parent_id);
 CREATE INDEX reasonlets_scope_subject_id ON mnemosyne.reasonlets (scope, subject_id);
--- Retention judges a Reasonlet by when it was remembered as well as when it last ran, so it finds the recently
--- remembered ones by created_at, across scopes.
-CREATE INDEX reasonlets_created_at ON mnemosyne.reasonlets (created_at);
 
 CREATE TABLE mnemosyne.reasonlet_executions (
     id              uuid             PRIMARY KEY,
@@ -101,8 +98,9 @@ CREATE TABLE mnemosyne.reasonlet_metrics (
     FOREIGN KEY (scope, reasonlet_id) REFERENCES mnemosyne.reasonlets (scope, id) ON DELETE CASCADE
 );
 
--- Retention finds the Reasonlets that have not run since a cutoff by last_executed_at, across scopes.
-CREATE INDEX reasonlet_metrics_last_executed_at ON mnemosyne.reasonlet_metrics (last_executed_at);
+-- No index on last_executed_at, on purpose. Retention reads every metrics row of the Reasonlets it judges, so an
+-- index would serve no statement, and every execution insert updates the column: indexing it would stop that update
+-- from being a heap-only tuple update, and every append would then write a new index entry.
 
 -- The dimensions, hnsw_m and hnsw_ef_construction keys record what MigrateAsync applied.
 CREATE TABLE mnemosyne.settings (
