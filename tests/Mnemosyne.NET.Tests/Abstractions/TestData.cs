@@ -23,4 +23,13 @@ internal static class TestData
         Provenance(),
         ReasonletStatus.Active,
         DateTimeOffset.UnixEpoch);
+
+    public static ReasonletCapture Capture() => new()
+    {
+        Scope = new ReasonletScope("scope"),
+        Question = "question",
+        Graph = Graph(),
+        Outcome = new ReasonletOutcome(true, TimeSpan.FromSeconds(1), 0.5),
+        Provenance = Provenance(),
+    };
 }
