@@ -20,7 +20,7 @@ Design: [roadmap design](../superpowers/specs/2026-10-21-roadmap-design.md), bui
 **Plan:** `docs/superpowers/plans/2026-10-21-phase-1.1-scaffold.md`
 **Completed:** 2026-10-21
 
-### Phase 1.2: Abstractions [status: pending]
+### Phase 1.2: Abstractions [status: active]
 **Goal:** Records, the scope and provenance model, and the store and selector interfaces in `Mnemosyne.NET.Abstractions`.
 **Surface:** Backend
 **HelpWanted:** no
