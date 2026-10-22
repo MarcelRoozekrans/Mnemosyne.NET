@@ -106,6 +106,10 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
     /// <see cref="MnemosyneErrorCode.Validation"/> failure.
     /// </remarks>
     /// <exception cref="ArgumentNullException"><paramref name="entry"/> is null.</exception>
+    /// <exception cref="InvalidOperationException">
+    /// The stored lineage is corrupt: the <c>parent_id</c> links above the parent form a cycle, which only
+    /// hand-written SQL can create.
+    /// </exception>
     public async ValueTask<Result<ReasonletReceipt, MnemosyneError>> RememberAsync(ReasonletStoreEntry entry, CancellationToken ct)
     {
         var migrated = await EnsureMigratedAsync(ct).ConfigureAwait(false);
@@ -172,30 +176,40 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
             else
             {
                 // The lineage is the top above the parent and the top's whole subtree, derived from parent_id within the
-                // scope. Locks go parent first, then top; when the parent is the top the second lock is a re-lock.
+                // scope. Every lock is taken going up the tree: the parent FOR UPDATE, then each ancestor between the
+                // parent and the top FOR KEY SHARE, bottom-up, then the top FOR UPDATE. When the parent is the top, the
+                // top lock is a re-lock. A transaction only ever waits for a row above every row it holds, so
+                // remembers cannot deadlock one another.
                 var scope = capture.Scope.Value;
-                // The walk starts at the parent this transaction holds, so it always yields a row. The ! works around
-                // https://github.com/ZeroAlloc-Net/ZeroAlloc.ORM/issues/400; see FindLineageTopAsync.
-                var walk = (await reasonlets.FindLineageTopAsync(scope, parent.Id, transaction, ct).ConfigureAwait(false))!;
-                if (walk.IsCycle)
+
+                // The walk starts at the parent this transaction holds, so the path is never empty.
+                var path = await reasonlets.FindLineagePathAsync(scope, parent.Id, transaction, ct).ConfigureAwait(false);
+                var top = path[^1];
+                if (top.IsCycle)
                 {
                     // The store never links a Reasonlet to a descendant, so a cycle is corrupt data: a bug, not a result.
                     throw new InvalidOperationException(
-                        $"The parent_id links above Reasonlet {parent.Id} form a cycle through {walk.Id}; the stored lineage is corrupt.");
+                        $"The parent_id links above Reasonlet {parent.Id} form a cycle through {top.Id}; the stored lineage is corrupt.");
                 }
 
-                var top = walk.Id;
-
-                // The top can vanish between finding and locking it only when a concurrent erase deleted it: the
-                // erase cut the parent link of the top's child, which this transaction does not hold, so counting
-                // the stale top's subtree would miss versions. That is a lost race with an erase.
-                if (await reasonlets.LockLineageTopAsync(scope, top, transaction, ct).ConfigureAwait(false) is null)
+                // The path locks hold every link from the parent to the top until commit, because an erase must delete
+                // an ancestor to cut a link. A row that vanished between the walk and its lock means a concurrent erase
+                // already cut the path, so the walk's top and subtree are stale: a lost race with an erase.
+                for (var i = 1; i < path.Count - 1; i++)
                 {
-                    return new MnemosyneError(MnemosyneErrorCode.Conflict, "The lineage changed under a concurrent erase.");
+                    if (await reasonlets.LockAncestorAsync(scope, path[i].Id, transaction, ct).ConfigureAwait(false) is null)
+                    {
+                        return LineageConflict();
+                    }
+                }
+
+                if (await reasonlets.LockLineageTopAsync(scope, top.Id, transaction, ct).ConfigureAwait(false) is null)
+                {
+                    return LineageConflict();
                 }
 
                 var version = LineageVersions.Next(
-                    await reasonlets.GetLineageVersionsAsync(scope, top, transaction, ct).ConfigureAwait(false));
+                    await reasonlets.GetLineageVersionsAsync(scope, top.Id, transaction, ct).ConfigureAwait(false));
                 receipt = await InsertReasonletAsync(
                     reasonlets, executions, entry, hash, version, parent.Id, ReasonletCaptureKind.NewVersion, transaction, ct)
                     .ConfigureAwait(false);
@@ -465,6 +479,9 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
         MemoryMarshal.TryGetArray(embedding, out var segment) && segment.Offset == 0 && segment.Count == segment.Array!.Length
             ? segment.Array
             : embedding.ToArray();
+
+    private static MnemosyneError LineageConflict() =>
+        new(MnemosyneErrorCode.Conflict, "The lineage changed under a concurrent erase.");
 
     private MnemosyneError DimensionMismatch(int recorded) => new(
         MnemosyneErrorCode.Validation,

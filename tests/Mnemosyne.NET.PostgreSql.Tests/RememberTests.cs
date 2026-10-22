@@ -303,6 +303,40 @@ public sealed class RememberTests(PgVectorFixture fixture) : IClassFixture<PgVec
     }
 
     [Fact]
+    public async Task AMiddleAncestorErasedWhileTheStoreWaitsForItsLockIsAConflict()
+    {
+        // T 1.0 <- M 1.1 <- N 1.2 <- P 1.4, and T <- X 1.3. Erasing M cuts N from T, so T's subtree would be {T, X}
+        // and a new child of P would repeat P's 1.4. The store locks the whole path P, N, M, T, so it waits for the
+        // erase of M and then finds M gone.
+        var store = await MigratedStoreAsync();
+        var scope = PgVectorFixture.NewScope();
+        var t = (await store.RememberAsync(Entries.Entry(scope, Entries.Graph("t")), Ct)).Value;
+        var m = (await store.RememberAsync(Entries.Entry(scope, Entries.Graph("m"), t.Id), Ct)).Value;
+        var n = (await store.RememberAsync(Entries.Entry(scope, Entries.Graph("n"), m.Id), Ct)).Value;
+        var x = (await store.RememberAsync(Entries.Entry(scope, Entries.Graph("x"), t.Id), Ct)).Value;
+        var p = (await store.RememberAsync(Entries.Entry(scope, Entries.Graph("p"), n.Id), Ct)).Value;
+        Assert.Equal(["1.1", "1.2", "1.3", "1.4"], new[] { m.Version, n.Version, x.Version, p.Version });
+
+        await using var erase = await fixture.DataSource.OpenConnectionAsync(Ct);
+        await using var transaction = await erase.BeginTransactionAsync(Ct);
+        await RunAsync(erase, $"DELETE FROM mnemosyne.reasonlets WHERE id = '{m.Id.Value}'");
+
+        var remember = store.RememberAsync(Entries.Entry(scope, Entries.Graph("next"), p.Id), Ct).AsTask();
+        await WaitForLockWaitAsync(erase);
+        await transaction.CommitAsync(Ct);
+        var result = await remember;
+
+        Assert.Equal(MnemosyneErrorCode.Conflict, result.Error.Code);
+        Assert.Equal(4L, await CountAsync("SELECT count(*) FROM mnemosyne.reasonlets WHERE scope = $1", scope.Value));
+        Assert.Equal(1L, await CountAsync("SELECT count(*) FROM mnemosyne.reasonlets WHERE version = '1.4' AND scope = $1", scope.Value));
+        Assert.Equal(["1.0", "1.3"], await SubtreeVersionsAsync(t.Id));
+        Assert.Equal(["1.2", "1.4"], await SubtreeVersionsAsync(n.Id));
+        Assert.Null(await ParentOfAsync(n.Id));
+        Assert.Equal(n.Id.Value, await ParentOfAsync(p.Id));
+        Assert.Equal(t.Id.Value, await ParentOfAsync(x.Id));
+    }
+
+    [Fact]
     public async Task TheTransactionIsReadCommittedWhateverTheServerDefault()
     {
         // At REPEATABLE READ a child that waited for the root's lock would read the lineage from its first snapshot,

@@ -26,16 +26,11 @@ internal sealed partial class ReasonletRepository(IAsyncDbConnection connection)
     public partial Task<ParentRow?> LockParentAsync(string scope, Guid id, IAsyncDbTransaction transaction, CancellationToken ct);
 
     /// <summary>
-    /// Finds the top of a Reasonlet's lineage by walking up <c>parent_id</c> within the scope: the farthest
-    /// ancestor, which is the one whose <c>parent_id</c> is null, or the Reasonlet itself when it has no parent.
-    /// A <c>parent_id</c> cycle, which only hand-written SQL can create, stops the walk at the first repeated row
-    /// and comes back with <see cref="LineageTopRow.IsCycle"/> set. Null only when the Reasonlet is not in the scope.
+    /// Walks up <c>parent_id</c> within the scope from a Reasonlet to the top of its lineage, and returns the path
+    /// in order: the Reasonlet first and the top, whose <c>parent_id</c> is null, last. A <c>parent_id</c> cycle,
+    /// which only hand-written SQL can create, stops the walk at the first repeated row, which comes last with
+    /// <see cref="LineagePathRow.IsCycle"/> set. Empty only when the Reasonlet is not in the scope.
     /// </summary>
-    /// <remarks>
-    /// Nullable although a locked parent always yields a row: ZeroAlloc.ORM 2.7.0 generates no body for a
-    /// non-nullable single-row <c>Task&lt;T&gt;</c>. Make it non-nullable, and drop the caller's <c>!</c>, once
-    /// https://github.com/ZeroAlloc-Net/ZeroAlloc.ORM/issues/400 ships.
-    /// </remarks>
     [Query("""
         WITH RECURSIVE up (id, parent_id, depth) AS (
             SELECT id, parent_id, 0 FROM mnemosyne.reasonlets WHERE scope = @scope AND id = @id
@@ -44,9 +39,18 @@ internal sealed partial class ReasonletRepository(IAsyncDbConnection connection)
             FROM mnemosyne.reasonlets r JOIN up ON r.id = up.parent_id
             WHERE r.scope = @scope
         ) CYCLE id SET is_cycle USING path
-        SELECT id, is_cycle FROM up ORDER BY depth DESC LIMIT 1
+        SELECT id, is_cycle FROM up ORDER BY depth
         """)]
-    public partial Task<LineageTopRow?> FindLineageTopAsync(string scope, Guid id, IAsyncDbTransaction transaction, CancellationToken ct);
+    public partial Task<List<LineagePathRow>> FindLineagePathAsync(string scope, Guid id, IAsyncDbTransaction transaction, CancellationToken ct);
+
+    /// <summary>
+    /// Takes <c>FOR KEY SHARE</c> on an ancestor in its scope until the transaction ends. That blocks a
+    /// <c>DELETE</c> of the ancestor, so an erase cannot cut the path to the top while this transaction runs,
+    /// yet it lets other remembers share the ancestor. Answers null when the ancestor is gone: a concurrent
+    /// erase deleted it after the walk read it.
+    /// </summary>
+    [Query("SELECT 1 FROM mnemosyne.reasonlets WHERE scope = @scope AND id = @id FOR KEY SHARE")]
+    public partial Task<int?> LockAncestorAsync(string scope, Guid id, IAsyncDbTransaction transaction, CancellationToken ct);
 
     /// <summary>
     /// Locks a lineage's top in its scope until the transaction ends, which serializes every new version in the
