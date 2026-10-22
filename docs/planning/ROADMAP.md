@@ -38,7 +38,7 @@ Design: [roadmap design](../superpowers/specs/2026-10-21-roadmap-design.md), bui
 **Goal:** `Mnemosyne.NET.PostgreSql` on ZeroAlloc.ORM and pgvector with embedded SQL migrations, implementing the store, including erasure.
 **Surface:** Data
 **HelpWanted:** no
-**Plan:** _to be written_
+**Plan:** `docs/superpowers/plans/2026-10-22-phase-1.4-postgres-store.md`
 
 ### Phase 1.5: Audit and retention [status: pending]
 **Goal:** Audit events for store, recall and erasure, and a retention policy. Erasure itself moved to phase 1.4.
