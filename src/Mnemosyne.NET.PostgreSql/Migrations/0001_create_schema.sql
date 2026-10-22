@@ -32,6 +32,10 @@ CREATE TABLE mnemosyne.reasonlets (
 
 CREATE INDEX reasonlets_scope_status_intent ON mnemosyne.reasonlets (scope, status, intent);
 CREATE INDEX reasonlets_scope_parent_id ON mnemosyne.reasonlets (scope, parent_id);
+-- Unscoped lineage indexes: ON DELETE SET NULL finds the rows to cut by parent_id and root_id
+-- alone, and the version lookup reads a lineage by root_id.
+CREATE INDEX reasonlets_parent_id ON mnemosyne.reasonlets (parent_id);
+CREATE INDEX reasonlets_root_id ON mnemosyne.reasonlets (root_id);
 CREATE INDEX reasonlets_scope_content_hash ON mnemosyne.reasonlets (scope, content_hash);
 CREATE INDEX reasonlets_scope_subject_id ON mnemosyne.reasonlets (scope, subject_id);
 

@@ -71,6 +71,8 @@ public sealed class MigrationTests(PgVectorFixture fixture) : IClassFixture<PgVe
             [
                 "reasonlet_executions: USING btree (reasonlet_id)",
                 "reasonlet_executions: USING btree (scope, subject_id)",
+                "reasonlets: USING btree (parent_id)",
+                "reasonlets: USING btree (root_id)",
                 "reasonlets: USING btree (scope, content_hash)",
                 "reasonlets: USING btree (scope, parent_id)",
                 "reasonlets: USING btree (scope, status, intent)",
