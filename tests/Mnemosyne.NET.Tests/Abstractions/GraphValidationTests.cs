@@ -88,6 +88,7 @@ public class GraphValidationTests
 
     [Theory]
     [InlineData("a")]
+    [InlineData("k")]
     [InlineData(".")]
     [InlineData("a.")]
     [InlineData(".a")]
@@ -96,15 +97,7 @@ public class GraphValidationTests
     public void PropertyKeyGrammar_Enforced(string key)
     {
         var props = new Dictionary<string, JsonElement> { [key] = Json("1") };
-        var r = Graph([Node("a", props)]).Validate();
-        if (key is "a")
-        {
-            Assert.True(r.IsSuccess);
-        }
-        else
-        {
-            AssertInvalid(r, $"Nodes[0].Properties[\"{key}\"]");
-        }
+        AssertInvalid(Graph([Node("a", props)]).Validate(), $"Nodes[0].Properties[\"{key}\"]");
     }
 
     [Theory]
@@ -139,19 +132,19 @@ public class GraphValidationTests
 
     [Fact]
     public void Depth32_Passes() =>
-        Assert.True(Graph([Node("a", new Dictionary<string, JsonElement> { ["k"] = Nested(32) })]).Validate().IsSuccess);
+        Assert.True(Graph([Node("a", new Dictionary<string, JsonElement> { ["a.k"] = Nested(32) })]).Validate().IsSuccess);
 
     [Fact]
     public void Depth33_Fails() =>
-        AssertInvalid(Graph([Node("a", new Dictionary<string, JsonElement> { ["k"] = Nested(33) })]).Validate(), "Nodes[0].Properties[\"k\"]");
+        AssertInvalid(Graph([Node("a", new Dictionary<string, JsonElement> { ["a.k"] = Nested(33) })]).Validate(), "Nodes[0].Properties[\"a.k\"]");
 
     [Fact]
     public void ObjectNesting_CountsLikeArrays()
     {
         var obj32 = Json(string.Concat(Enumerable.Repeat("{\"a\":", 31)) + "1" + new string('}', 31));
         var obj33 = Json(string.Concat(Enumerable.Repeat("{\"a\":", 32)) + "1" + new string('}', 32));
-        Assert.True(Graph([Node("a", new Dictionary<string, JsonElement> { ["k"] = obj32 })]).Validate().IsSuccess);
-        Assert.True(Graph([Node("a", new Dictionary<string, JsonElement> { ["k"] = obj33 })]).Validate().IsFailure);
+        Assert.True(Graph([Node("a", new Dictionary<string, JsonElement> { ["a.k"] = obj32 })]).Validate().IsSuccess);
+        Assert.True(Graph([Node("a", new Dictionary<string, JsonElement> { ["a.k"] = obj33 })]).Validate().IsFailure);
     }
 
     [Fact]
@@ -172,9 +165,9 @@ public class GraphValidationTests
         Assert.True(Graph(nodes, edges.Take(ReasonletGraphLimits.MaxEdges).ToArray()).Validate().IsSuccess);
     }
 
-    /// <summary>A dictionary {"k": "xxx"} serializes to <c>{"k":"xxx"}</c>, which is 8 bytes more than the string length.</summary>
+    /// <summary>A dictionary {"a.k": "xxx"} serializes to <c>{"a.k":"xxx"}</c>, which is 10 bytes more than the string length.</summary>
     private static Dictionary<string, JsonElement> OfSize(int bytes) =>
-        new() { ["k"] = Json("\"" + new string('x', bytes - 8) + "\"") };
+        new() { ["a.k"] = Json("\"" + new string('x', bytes - 10) + "\"") };
 
     [Fact]
     public void SerializedSize_IsCompactUtf8()
@@ -182,8 +175,8 @@ public class GraphValidationTests
         Assert.Equal(0, PropertyChecks.SerializedSize(null));
         Assert.Equal(0, PropertyChecks.SerializedSize(new Dictionary<string, JsonElement>()));
         Assert.Equal(11, PropertyChecks.SerializedSize(OfSize(11)));
-        var props = new Dictionary<string, JsonElement> { ["k"] = Json("{ \"a\" : [ 1 , 2 ] }") };
-        Assert.Equal(Encoding.UTF8.GetByteCount("{\"k\":{\"a\":[1,2]}}"), PropertyChecks.SerializedSize(props));
+        var props = new Dictionary<string, JsonElement> { ["a.k"] = Json("{ \"a\" : [ 1 , 2 ] }") };
+        Assert.Equal(Encoding.UTF8.GetByteCount("{\"a.k\":{\"a\":[1,2]}}"), PropertyChecks.SerializedSize(props));
     }
 
     [Fact]
@@ -214,6 +207,16 @@ public class GraphValidationTests
     {
         var graph = Graph([Node("a"), Node("a")], [new ReasonletEdge { From = "a", To = "zz" }]);
         AssertInvalid(graph.Validate(), "Nodes[1].Id");
+    }
+
+    [Fact]
+    public void DisposedDocumentValue_FailsWithoutThrowing()
+    {
+        var doc = JsonDocument.Parse("1");
+        var element = doc.RootElement;
+        doc.Dispose();
+        var props = new Dictionary<string, JsonElement> { ["a.k"] = element };
+        AssertInvalid(Graph([Node("a", props)]).Validate(), "Nodes[0].Properties[\"a.k\"]");
     }
 
     [Fact]

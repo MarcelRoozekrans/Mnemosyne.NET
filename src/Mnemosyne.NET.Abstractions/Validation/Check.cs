@@ -9,7 +9,7 @@ internal static class Check
 {
     private static UnitResult<MnemosyneError> Ok() => UnitResult<MnemosyneError>.Success();
 
-    internal static UnitResult<MnemosyneError> Fail(string path, string reason) =>
+    public static UnitResult<MnemosyneError> Fail(string path, string reason) =>
         UnitResult<MnemosyneError>.Failure(new MnemosyneError(MnemosyneErrorCode.Validation, $"{path}: {reason}"));
 
     public static UnitResult<MnemosyneError> NotBlank(string? value, string path) =>

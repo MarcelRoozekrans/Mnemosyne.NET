@@ -10,7 +10,7 @@ internal static class PropertyChecks
 {
     /// <summary>
     /// Checks the keys and values of a properties dictionary and returns the first failure.
-    /// A key is one or more dot-separated segments, none of them empty. A value must be defined
+    /// A key is two or more dot-separated segments, none of them empty. A value must be defined
     /// and nested at most <see cref="ReasonletGraphLimits.MaxPropertyDepth"/> levels deep.
     /// </summary>
     public static UnitResult<MnemosyneError> Validate(IReadOnlyDictionary<string, JsonElement>? props, string pathPrefix)
@@ -22,20 +22,10 @@ internal static class PropertyChecks
 
         foreach (var entry in props)
         {
-            var path = Check.KeyPath(pathPrefix, entry.Key);
-            if (!IsValidKey(entry.Key))
+            var reason = FindProblem(entry.Key, entry.Value);
+            if (reason is not null)
             {
-                return Check.Fail(path, "key must be dot-separated segments that are not empty");
-            }
-
-            if (entry.Value.ValueKind == JsonValueKind.Undefined)
-            {
-                return Check.Fail(path, "value must not be undefined");
-            }
-
-            if (!FitsDepth(entry.Value, 1))
-            {
-                return Check.Fail(path, $"value must not be nested deeper than {ReasonletGraphLimits.MaxPropertyDepth} levels");
+                return Check.Fail(Check.KeyPath(pathPrefix, entry.Key), reason);
             }
         }
 
@@ -68,6 +58,30 @@ internal static class PropertyChecks
         return buffer.WrittenCount;
     }
 
+    private static string? FindProblem(string? key, JsonElement value)
+    {
+        if (!IsValidKey(key))
+        {
+            return "key must have at least two dot-separated segments, none of them empty";
+        }
+
+        try
+        {
+            if (value.ValueKind == JsonValueKind.Undefined)
+            {
+                return "value must not be undefined";
+            }
+
+            return FitsDepth(value, 1)
+                ? null
+                : $"value must not be nested deeper than {ReasonletGraphLimits.MaxPropertyDepth} levels";
+        }
+        catch (ObjectDisposedException)
+        {
+            return "value belongs to a disposed JsonDocument";
+        }
+    }
+
     private static bool IsValidKey(string? key)
     {
         if (string.IsNullOrEmpty(key))
@@ -76,6 +90,7 @@ internal static class PropertyChecks
         }
 
         var start = 0;
+        var segments = 0;
         while (true)
         {
             var dot = key.IndexOf('.', start);
@@ -85,9 +100,10 @@ internal static class PropertyChecks
                 return false;
             }
 
+            segments++;
             if (dot < 0)
             {
-                return true;
+                return segments >= 2;
             }
 
             start = dot + 1;
