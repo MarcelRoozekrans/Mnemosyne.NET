@@ -18,9 +18,9 @@ CREATE TABLE mnemosyne.reasonlets (
     -- longer match content_hash.
     graph         text        NOT NULL,
     content_hash  char(64)    NOT NULL,
-    -- SET NULL: erasing a Reasonlet keeps its descendants and cuts their lineage link.
+    -- SET NULL: erasing a Reasonlet keeps its descendants and cuts their lineage link. The lineage is
+    -- derived from parent_id alone, so an orphan's subtree becomes its own lineage with its numbering intact.
     parent_id     uuid        NULL REFERENCES mnemosyne.reasonlets (id) ON DELETE SET NULL,
-    root_id       uuid        NULL REFERENCES mnemosyne.reasonlets (id) ON DELETE SET NULL,
     status        smallint    NOT NULL,
     source        text        NOT NULL,
     run_id        text        NULL,
@@ -32,10 +32,8 @@ CREATE TABLE mnemosyne.reasonlets (
 
 CREATE INDEX reasonlets_scope_status_intent ON mnemosyne.reasonlets (scope, status, intent);
 CREATE INDEX reasonlets_scope_parent_id ON mnemosyne.reasonlets (scope, parent_id);
--- Unscoped lineage indexes: ON DELETE SET NULL finds the rows to cut by parent_id and root_id
--- alone, and the version lookup reads a lineage by root_id.
+-- Unscoped: ON DELETE SET NULL finds the rows to cut by parent_id alone.
 CREATE INDEX reasonlets_parent_id ON mnemosyne.reasonlets (parent_id);
-CREATE INDEX reasonlets_root_id ON mnemosyne.reasonlets (root_id);
 CREATE INDEX reasonlets_scope_content_hash ON mnemosyne.reasonlets (scope, content_hash);
 CREATE INDEX reasonlets_scope_subject_id ON mnemosyne.reasonlets (scope, subject_id);
 

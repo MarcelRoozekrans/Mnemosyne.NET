@@ -59,7 +59,6 @@ public sealed class MigrationTests(PgVectorFixture fixture) : IClassFixture<PgVe
                 "mnemosyne.reasonlet_executions.reasonlet_id -> mnemosyne.reasonlets c",
                 "mnemosyne.reasonlet_feedback.execution_id -> mnemosyne.reasonlet_executions c",
                 "mnemosyne.reasonlets.parent_id -> mnemosyne.reasonlets n",
-                "mnemosyne.reasonlets.root_id -> mnemosyne.reasonlets n",
             ],
             foreignKeys);
 
@@ -72,7 +71,6 @@ public sealed class MigrationTests(PgVectorFixture fixture) : IClassFixture<PgVe
                 "reasonlet_executions: USING btree (reasonlet_id)",
                 "reasonlet_executions: USING btree (scope, subject_id)",
                 "reasonlets: USING btree (parent_id)",
-                "reasonlets: USING btree (root_id)",
                 "reasonlets: USING btree (scope, content_hash)",
                 "reasonlets: USING btree (scope, parent_id)",
                 "reasonlets: USING btree (scope, status, intent)",

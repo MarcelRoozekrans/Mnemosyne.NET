@@ -4,6 +4,5 @@ namespace Mnemosyne.NET.PostgreSql.Rows;
 /// <param name="Id">The parent's id.</param>
 /// <param name="Version">The parent's version label.</param>
 /// <param name="ContentHash">The content hash stored when the parent was inserted.</param>
-/// <param name="RootId">The root of the parent's lineage, or null when the parent is a root.</param>
 /// <param name="Status">The parent's <c>ReasonletStatus</c> number, reported by an execution-only receipt.</param>
-internal sealed record ParentRow(Guid Id, string Version, string ContentHash, Guid? RootId, short Status);
+internal sealed record ParentRow(Guid Id, string Version, string ContentHash, short Status);

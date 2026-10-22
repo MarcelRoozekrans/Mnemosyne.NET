@@ -27,7 +27,7 @@ public sealed class RememberTests(PgVectorFixture fixture) : IClassFixture<PgVec
         Assert.False(receipt.Id.IsDefault);
         Assert.False(receipt.Execution.IsDefault);
         Assert.Equal(1L, await CountAsync("SELECT count(*) FROM mnemosyne.reasonlets WHERE scope = $1", scope.Value));
-        Assert.Null(await LineageAsync(receipt.Id));
+        Assert.Null(await ParentOfAsync(receipt.Id));
         await AssertSingleExecutionAsync(receipt, entry.Capture);
     }
 
@@ -104,9 +104,9 @@ public sealed class RememberTests(PgVectorFixture fixture) : IClassFixture<PgVec
         Assert.Equal((ReasonletCaptureKind.NewVersion, "1.2"), (second.Kind, second.Version));
         Assert.Equal((ReasonletCaptureKind.NewVersion, "1.3"), (grandchild.Kind, grandchild.Version));
         Assert.Equal(4, new[] { root.Id, first.Id, second.Id, grandchild.Id }.Distinct().Count());
-        Assert.Equal($"{root.Id.Value}/{root.Id.Value}", await LineageAsync(first.Id));
-        Assert.Equal($"{root.Id.Value}/{root.Id.Value}", await LineageAsync(second.Id));
-        Assert.Equal($"{first.Id.Value}/{root.Id.Value}", await LineageAsync(grandchild.Id));
+        Assert.Equal(root.Id.Value, await ParentOfAsync(first.Id));
+        Assert.Equal(root.Id.Value, await ParentOfAsync(second.Id));
+        Assert.Equal(first.Id.Value, await ParentOfAsync(grandchild.Id));
         Assert.Equal(1L, await CountAsync("SELECT count(*) FROM mnemosyne.reasonlet_executions WHERE reasonlet_id = $1", root.Id.Value));
         await AssertSingleExecutionAsync(first, firstEntry.Capture);
     }
@@ -158,7 +158,7 @@ public sealed class RememberTests(PgVectorFixture fixture) : IClassFixture<PgVec
     public async Task TwentyParallelChildrenOfOneParentGetVersions1_1To1_20WithoutGaps()
     {
         // The fixture's data source keeps Npgsql's default pool of 100 connections, enough for 20 callers that each
-        // hold a connection while they wait for the root's row lock.
+        // hold a connection while they wait for the lineage top's row lock.
         var store = await MigratedStoreAsync();
         var scope = PgVectorFixture.NewScope();
         var root = (await store.RememberAsync(Entries.Entry(scope, Entries.Graph("root")), Ct)).Value;
@@ -176,8 +176,8 @@ public sealed class RememberTests(PgVectorFixture fixture) : IClassFixture<PgVec
     [Fact]
     public async Task ParallelChildrenOfTwoParentsInOneLineageShareOneSequenceWithoutGaps()
     {
-        // Children of the root lock only the root; children of 1.1 lock 1.1 and then the root. Only the root's lock
-        // serializes the two groups.
+        // Children of the root lock only the root; children of 1.1 lock 1.1 and then the root, the lineage top. Only
+        // the top's lock serializes the two groups.
         var store = await MigratedStoreAsync();
         var scope = PgVectorFixture.NewScope();
         var root = (await store.RememberAsync(Entries.Entry(scope, Entries.Graph("root")), Ct)).Value;
@@ -191,6 +191,96 @@ public sealed class RememberTests(PgVectorFixture fixture) : IClassFixture<PgVec
         Assert.Equal(
             Enumerable.Range(2, 20).Select(minor => $"1.{minor}").Order(StringComparer.Ordinal),
             results.Select(r => r.Value.Version).Order(StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public async Task ParallelChildrenOfParentsAtEveryDepthOfALineageGetDistinctVersions()
+    {
+        // Four parents at depths 0 to 3; each child locks its own parent and then the lineage top.
+        var store = await MigratedStoreAsync();
+        var scope = PgVectorFixture.NewScope();
+        var root = (await store.RememberAsync(Entries.Entry(scope, Entries.Graph("root")), Ct)).Value;
+        var a = (await store.RememberAsync(Entries.Entry(scope, Entries.Graph("a"), root.Id), Ct)).Value;
+        var b = (await store.RememberAsync(Entries.Entry(scope, Entries.Graph("b"), a.Id), Ct)).Value;
+        var c = (await store.RememberAsync(Entries.Entry(scope, Entries.Graph("c"), b.Id), Ct)).Value;
+        ReasonletId[] parents = [root.Id, a.Id, b.Id, c.Id];
+
+        var results = await Task.WhenAll(Enumerable.Range(1, 20).Select(
+            i => Task.Run(
+                () => store.RememberAsync(Entries.Entry(scope, Entries.Graph($"child-{i}"), parents[i % 4]), Ct).AsTask(), Ct)));
+
+        Assert.Equal(
+            Enumerable.Range(4, 20).Select(minor => $"1.{minor}").Order(StringComparer.Ordinal),
+            results.Select(r => r.Value.Version).Order(StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public async Task AfterTheRootIsErasedTheSurvivingSubtreeKeepsItsNumbering()
+    {
+        // R 1.0 <- P 1.1 <- G 1.2. Erasing R makes P a top, and P's lineage is P and everything under it, so G's 1.2
+        // still counts and P's next child is 1.3, never a second 1.2.
+        var store = await MigratedStoreAsync();
+        var scope = PgVectorFixture.NewScope();
+        var r = (await store.RememberAsync(Entries.Entry(scope, Entries.Graph("r")), Ct)).Value;
+        var p = (await store.RememberAsync(Entries.Entry(scope, Entries.Graph("p"), r.Id), Ct)).Value;
+        var g = (await store.RememberAsync(Entries.Entry(scope, Entries.Graph("g"), p.Id), Ct)).Value;
+        await Entries.ExecuteAsync(fixture.DataSource, "DELETE FROM mnemosyne.reasonlets WHERE id = $1", r.Id.Value);
+
+        var next = (await store.RememberAsync(Entries.Entry(scope, Entries.Graph("next"), p.Id), Ct)).Value;
+
+        Assert.Equal(("1.1", "1.2"), (p.Version, g.Version));
+        Assert.Equal((ReasonletCaptureKind.NewVersion, "1.3"), (next.Kind, next.Version));
+        Assert.Null(await ParentOfAsync(p.Id));
+        Assert.Equal(["1.1", "1.2", "1.3"], await SubtreeVersionsAsync(p.Id));
+    }
+
+    [Fact]
+    public async Task RowsInAnotherScopeThatPointIntoTheLineageDoNotCount()
+    {
+        var store = await MigratedStoreAsync();
+        var scope = PgVectorFixture.NewScope();
+        var root = (await store.RememberAsync(Entries.Entry(scope, Entries.Graph("root")), Ct)).Value;
+        var child = (await store.RememberAsync(Entries.Entry(scope, Entries.Graph("child"), root.Id), Ct)).Value;
+        foreach (var (parent, version) in new[] { (root.Id, "1.50"), (child.Id, "1.60") })
+        {
+            await Entries.ExecuteAsync(
+                fixture.DataSource,
+                "INSERT INTO mnemosyne.reasonlets (id, scope, name, intent, version, graph, content_hash, parent_id, status, source, created_at, embedding) "
+                + "VALUES ($1, $2, 'n', 'i', $3, '{}', repeat('0', 64), $4, 1, 's', now(), '[1,0,0]')",
+                Guid.CreateVersion7(),
+                PgVectorFixture.NewScope().Value,
+                version,
+                parent.Value);
+        }
+
+        var next = (await store.RememberAsync(Entries.Entry(scope, Entries.Graph("next"), child.Id), Ct)).Value;
+
+        Assert.Equal("1.2", next.Version);
+    }
+
+    [Fact]
+    public async Task ATopErasedWhileTheStoreWaitsForItsLockIsAConflict()
+    {
+        // T 1.0 <- C 1.1 <- P 1.2. The store locks P and finds T as the top while the erase of T is still open; the
+        // erase commits while the store waits for T's lock, so the lock finds no row. Counting T's subtree then would
+        // miss C, so the store answers Conflict rather than guess.
+        var store = await MigratedStoreAsync();
+        var scope = PgVectorFixture.NewScope();
+        var t = (await store.RememberAsync(Entries.Entry(scope, Entries.Graph("t")), Ct)).Value;
+        var c = (await store.RememberAsync(Entries.Entry(scope, Entries.Graph("c"), t.Id), Ct)).Value;
+        var p = (await store.RememberAsync(Entries.Entry(scope, Entries.Graph("p"), c.Id), Ct)).Value;
+
+        await using var erase = await fixture.DataSource.OpenConnectionAsync(Ct);
+        await using var transaction = await erase.BeginTransactionAsync(Ct);
+        await RunAsync(erase, $"DELETE FROM mnemosyne.reasonlets WHERE id = '{t.Id.Value}'");
+
+        var remember = store.RememberAsync(Entries.Entry(scope, Entries.Graph("next"), p.Id), Ct).AsTask();
+        await WaitForLockWaitAsync(erase);
+        await transaction.CommitAsync(Ct);
+        var result = await remember;
+
+        Assert.Equal(MnemosyneErrorCode.Conflict, result.Error.Code);
+        Assert.Equal(["1.1", "1.2"], await SubtreeVersionsAsync(c.Id));
     }
 
     [Fact]
@@ -323,12 +413,30 @@ public sealed class RememberTests(PgVectorFixture fixture) : IClassFixture<PgVec
 
     private Task<long> CountAsync(string sql, object parameter) => Entries.ScalarAsync<long>(fixture.DataSource, sql, parameter);
 
-    /// <summary>Reads "parent_id/root_id" of a Reasonlet, or null when it has neither.</summary>
-    private async Task<string?> LineageAsync(ReasonletId id)
+    /// <summary>Reads the parent_id of a Reasonlet, or null when it has none.</summary>
+    private async Task<Guid?> ParentOfAsync(ReasonletId id)
     {
         var value = await Entries.ScalarAsync<object>(
-            fixture.DataSource, "SELECT parent_id::text || '/' || root_id::text FROM mnemosyne.reasonlets WHERE id = $1", id.Value);
-        return value as string;
+            fixture.DataSource, "SELECT parent_id FROM mnemosyne.reasonlets WHERE id = $1", id.Value);
+        return value as Guid?;
+    }
+
+    /// <summary>Reads "version" of every Reasonlet in the subtree under <paramref name="top"/>, top included, sorted.</summary>
+    private async Task<List<string>> SubtreeVersionsAsync(ReasonletId top)
+    {
+        await using var command = fixture.DataSource.CreateCommand(
+            "WITH RECURSIVE down AS (SELECT id, version FROM mnemosyne.reasonlets WHERE id = $1 "
+            + "UNION ALL SELECT r.id, r.version FROM mnemosyne.reasonlets r JOIN down ON r.parent_id = down.id) "
+            + "SELECT version FROM down ORDER BY version COLLATE \"C\"");
+        command.Parameters.Add(new NpgsqlParameter { Value = top.Value });
+        await using var reader = await command.ExecuteReaderAsync(Ct);
+        var versions = new List<string>();
+        while (await reader.ReadAsync(Ct))
+        {
+            versions.Add(reader.GetString(0));
+        }
+
+        return versions;
     }
 
     private async Task AssertSingleExecutionAsync(ReasonletReceipt receipt, ReasonletCapture capture)
@@ -384,7 +492,7 @@ public sealed class RememberTests(PgVectorFixture fixture) : IClassFixture<PgVec
             await Task.Delay(25, Ct);
         }
 
-        Assert.Fail("The store never waited for the root's lock.");
+        Assert.Fail("The store never waited for a lock.");
     }
 
     /// <summary>Memory that is not backed by an array, so MemoryMarshal.TryGetArray fails on it.</summary>

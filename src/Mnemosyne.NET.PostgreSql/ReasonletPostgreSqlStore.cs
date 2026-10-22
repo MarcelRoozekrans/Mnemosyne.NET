@@ -99,7 +99,9 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
     /// <inheritdoc />
     /// <remarks>
     /// One transaction at READ COMMITTED decides between a new Reasonlet, an execution only and a new version. Row
-    /// locks on the parent and on its lineage's root serialize concurrent children, so their versions never collide.
+    /// locks on the parent and on the top of its lineage serialize concurrent children, so their versions never
+    /// collide. A new version that loses a race with a concurrent erase of its lineage answers
+    /// <see cref="MnemosyneErrorCode.Conflict"/>.
     /// The embedding must have <see cref="MnemosynePostgreSqlOptions.Dimensions"/> values, or the entry is a
     /// <see cref="MnemosyneErrorCode.Validation"/> failure.
     /// </remarks>
@@ -169,11 +171,24 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
             }
             else
             {
-                var rootId = parent.RootId ?? parent.Id;
-                await reasonlets.LockRootAsync(rootId, transaction, ct).ConfigureAwait(false);
-                var version = LineageVersions.Next(await reasonlets.GetLineageVersionsAsync(rootId, transaction, ct).ConfigureAwait(false));
+                // The lineage is the top above the parent and the top's whole subtree, derived from parent_id within the
+                // scope. Locks go parent first, then top; when the parent is the top the second lock is a re-lock.
+                var scope = capture.Scope.Value;
+                // The walk starts at the parent this transaction holds, so it always yields a row.
+                var top = (await reasonlets.FindLineageTopAsync(scope, parent.Id, transaction, ct).ConfigureAwait(false))!.Value;
+
+                // The top can vanish between finding and locking it only when a concurrent erase deleted it: the
+                // erase cut the parent link of the top's child, which this transaction does not hold, so counting
+                // the stale top's subtree would miss versions. That is a lost race with an erase.
+                if (await reasonlets.LockLineageTopAsync(scope, top, transaction, ct).ConfigureAwait(false) is null)
+                {
+                    return new MnemosyneError(MnemosyneErrorCode.Conflict, "The lineage changed under a concurrent erase.");
+                }
+
+                var version = LineageVersions.Next(
+                    await reasonlets.GetLineageVersionsAsync(scope, top, transaction, ct).ConfigureAwait(false));
                 receipt = await InsertReasonletAsync(
-                    reasonlets, executions, entry, hash, version, (parent.Id, rootId), ReasonletCaptureKind.NewVersion, transaction, ct)
+                    reasonlets, executions, entry, hash, version, parent.Id, ReasonletCaptureKind.NewVersion, transaction, ct)
                     .ConfigureAwait(false);
             }
         }
@@ -188,7 +203,7 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
         ReasonletStoreEntry entry,
         string hash,
         string version,
-        (Guid ParentId, Guid RootId)? lineage,
+        Guid? parentId,
         ReasonletCaptureKind kind,
         IAsyncDbTransaction transaction,
         CancellationToken ct)
@@ -204,8 +219,7 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
             version,
             ReasonletGraphJson.Serialize(capture.Graph),
             hash,
-            lineage?.ParentId,
-            lineage?.RootId,
+            parentId,
             (short)ReasonletStatus.Active,
             provenance.Source,
             provenance.RunId,
