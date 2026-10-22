@@ -437,6 +437,21 @@ public sealed class RememberTests(PgVectorFixture fixture) : IClassFixture<PgVec
         Assert.Equal(0L, await CountAsync("SELECT count(*) FROM mnemosyne.reasonlets WHERE scope = $1", scope.Value));
     }
 
+    [Theory]
+    [InlineData(0f, 0f, 0f)]
+    [InlineData(1e20f, 0f, 0f)]
+    public async Task AnEmbeddingWithoutACosineNormIsAValidationErrorAndStoresNothing(float x, float y, float z)
+    {
+        var store = await MigratedStoreAsync();
+        var scope = PgVectorFixture.NewScope();
+
+        var result = await store.RememberAsync(Entries.Entry(scope, embedding: new[] { x, y, z }), Ct);
+
+        Assert.Equal(MnemosyneErrorCode.Validation, result.Error.Code);
+        Assert.Equal("Embedding: must have a nonzero, finite norm, or cosine similarity is undefined", result.Error.Message);
+        Assert.Equal(0L, await CountAsync("SELECT count(*) FROM mnemosyne.reasonlets WHERE scope = $1", scope.Value));
+    }
+
     [Fact]
     public async Task AnInvalidEntryIsAValidationError()
     {

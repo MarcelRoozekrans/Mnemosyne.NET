@@ -132,6 +132,8 @@ public sealed class SearchTests(PgVectorFixture fixture) : IClassFixture<PgVecto
         AssertValidation("embedding: must have 3 values, the store's dimension, but has 2", (await store.SearchAsync(scope, new float[] { 1, 0 }, null, 10, Ct)).Error);
         AssertValidation("embedding: must contain only finite numbers", (await store.SearchAsync(scope, new float[] { 1, float.NaN, 0 }, null, 10, Ct)).Error);
         AssertValidation("embedding: must contain only finite numbers", (await store.SearchAsync(scope, new float[] { 1, 0, float.PositiveInfinity }, null, 10, Ct)).Error);
+        AssertValidation("embedding: must have a nonzero, finite norm, or cosine similarity is undefined", (await store.SearchAsync(scope, new float[] { 0, 0, 0 }, null, 10, Ct)).Error);
+        AssertValidation("embedding: must have a nonzero, finite norm, or cosine similarity is undefined", (await store.SearchAsync(scope, new float[] { 0, 1e20f, 0 }, null, 10, Ct)).Error);
         Assert.True((await store.SearchAsync(scope, good, null, 1, Ct)).IsSuccess);
         Assert.True((await store.SearchAsync(scope, good, null, 200, Ct)).IsSuccess);
     }

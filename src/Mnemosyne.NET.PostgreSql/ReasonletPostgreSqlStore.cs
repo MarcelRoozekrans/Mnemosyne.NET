@@ -140,8 +140,8 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
     /// with a concurrent erase of its lineage answers <see cref="MnemosyneErrorCode.Conflict"/>.
     /// </para>
     /// <para>
-    /// The embedding must have <see cref="MnemosynePostgreSqlOptions.Dimensions"/> values, or the entry is a
-    /// <see cref="MnemosyneErrorCode.Validation"/> failure.
+    /// The embedding must have <see cref="MnemosynePostgreSqlOptions.Dimensions"/> values and a nonzero, finite norm,
+    /// or the entry is a <see cref="MnemosyneErrorCode.Validation"/> failure: cosine similarity is undefined otherwise.
     /// </para>
     /// </remarks>
     /// <exception cref="ArgumentNullException"><paramref name="entry"/> is null.</exception>
@@ -171,6 +171,11 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
                 string.Create(
                     CultureInfo.InvariantCulture,
                     $"{nameof(entry.Embedding)}: must have {_options.Dimensions} values, the store's dimension, but has {entry.Embedding.Length}"));
+        }
+
+        if (!HasCosineNorm(entry.Embedding.Span))
+        {
+            return NormError(nameof(entry.Embedding));
         }
 
         return await GuardAsync(RememberCoreAsync(entry, ct)).ConfigureAwait(false);
@@ -510,7 +515,8 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
     /// table usually still gets up to <paramref name="limit"/> results, sorted exactly by distance; HNSW recall is
     /// approximate. The scan stops at <c>hnsw.max_scan_tuples</c> (20,000 by default), so a very small scope in a very
     /// large table can still come back short. Candidates at exactly equal distance come back in an unspecified
-    /// order: a second sort key could stop the index from serving the ordering.
+    /// order: a second sort key could stop the index from serving the ordering. The embedding must have a nonzero,
+    /// finite norm, or the search is a <see cref="MnemosyneErrorCode.Validation"/> failure.
     /// </remarks>
     public async ValueTask<Result<IReadOnlyList<ReasonletCandidate>, MnemosyneError>> SearchAsync(
         ReasonletScope scope, ReadOnlyMemory<float> embedding, string? intent, int limit, CancellationToken ct)
@@ -559,8 +565,26 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
             }
         }
 
-        return null;
+        return HasCosineNorm(embedding) ? null : NormError("embedding");
     }
+
+    /// <summary>
+    /// Whether an embedding has a cosine similarity at all. pgvector sums the squares in single precision, so an
+    /// embedding whose squares sum to zero, or overflow to infinity, gives a NaN distance rather than an error.
+    /// </summary>
+    private static bool HasCosineNorm(ReadOnlySpan<float> embedding)
+    {
+        var squares = 0f;
+        foreach (var value in embedding)
+        {
+            squares += value * value;
+        }
+
+        return squares > 0f && float.IsFinite(squares);
+    }
+
+    private static MnemosyneError NormError(string name) =>
+        new(MnemosyneErrorCode.Validation, $"{name}: must have a nonzero, finite norm, or cosine similarity is undefined");
 
     /// <summary>
     /// Makes the HNSW scan keep going until it has <paramref name="limit"/> rows that pass the scope, status and
