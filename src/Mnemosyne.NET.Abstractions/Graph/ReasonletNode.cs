@@ -8,6 +8,7 @@ namespace Mnemosyne.NET.Abstractions;
 /// Init-only, so later phases can add members without breaking callers.
 /// The well-known <see cref="Type"/> values are <c>tool</c>, <c>retrieve</c>, <c>decision</c>, <c>agent</c> and <c>answer</c>.
 /// Other values are allowed.
+/// Every string must be valid UTF-16, with no lone surrogate, so it survives UTF-8 storage and hashing unchanged.
 /// </remarks>
 public sealed record ReasonletNode
 {
@@ -30,5 +31,9 @@ public sealed record ReasonletNode
     /// <returns>Success, or a validation failure with a path relative to this record.</returns>
     public UnitResult<MnemosyneError> Validate() => Check.All(
         () => Check.NotBlank(Id, nameof(Id)),
-        () => Check.NotBlank(Type, nameof(Type)));
+        () => Check.ValidUtf16(Id, nameof(Id)),
+        () => Check.NotBlank(Type, nameof(Type)),
+        () => Check.ValidUtf16(Type, nameof(Type)),
+        () => Check.ValidUtf16(Name, nameof(Name)),
+        () => Check.ValidUtf16(Tool, nameof(Tool)));
 }

@@ -15,6 +15,28 @@ internal static class Check
     public static UnitResult<MnemosyneError> NotBlank(string? value, string path) =>
         string.IsNullOrWhiteSpace(value) ? Fail(path, "must not be blank") : Ok();
 
+    /// <summary>Fails when a non-null string holds a lone surrogate, which cannot be written as UTF-8 without changing it.</summary>
+    public static UnitResult<MnemosyneError> ValidUtf16(string? value, string path) =>
+        value is null || IsValidUtf16(value) ? Ok() : Fail(path, "must be valid UTF-16");
+
+    /// <summary>Returns whether a string has no lone surrogate.</summary>
+    public static bool IsValidUtf16(string value)
+    {
+        for (var i = 0; i < value.Length; i++)
+        {
+            if (char.IsHighSurrogate(value[i]) && i + 1 < value.Length && char.IsLowSurrogate(value[i + 1]))
+            {
+                i++;
+            }
+            else if (char.IsSurrogate(value[i]))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     public static UnitResult<MnemosyneError> UnitInterval(double value, string path) =>
         double.IsFinite(value) && value >= 0.0 && value <= 1.0 ? Ok() : Fail(path, "must be a finite number between 0 and 1");
 

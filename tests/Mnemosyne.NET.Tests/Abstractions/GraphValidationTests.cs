@@ -244,6 +244,84 @@ public class GraphValidationTests
         Assert.True(Graph([Node("a", props)]).Validate().IsSuccess);
     }
 
+    /// <summary>
+    /// <see cref="JsonDocument.Parse(ReadOnlyMemory{byte}, JsonDocumentOptions)"/> does not validate UTF-8 inside strings,
+    /// so a caller can build an element holding an encoded surrogate (<c>ED A0 80</c>) or a byte that never occurs in
+    /// UTF-8 (<c>FF</c>). Writing it would silently replace it with U+FFFD.
+    /// </summary>
+    [Theory]
+    [InlineData("22EDA08022")]
+    [InlineData("22FF22")]
+    public void InvalidUtf8InPropertyValue_Fails(string hex) => AssertInvalidUtf8(hex);
+
+    [Theory]
+    [InlineData("7B22EDA080223A317D")]
+    [InlineData("7B22FF223A317D")]
+    public void InvalidUtf8InPropertyMemberName_Fails(string hex) => AssertInvalidUtf8(hex);
+
+    private static void AssertInvalidUtf8(string hex)
+    {
+        using var doc = JsonDocument.Parse(Convert.FromHexString(hex));
+        var props = new Dictionary<string, JsonElement> { ["a.k"] = doc.RootElement.Clone() };
+        AssertInvalid(Graph([Node("a", props)]).Validate(), "Nodes[0].Properties[\"a.k\"]");
+    }
+
+    [Theory]
+    [InlineData("Id")]
+    [InlineData("Type")]
+    [InlineData("Name")]
+    [InlineData("Tool")]
+    public void LoneSurrogateInNodeField_Fails(string field)
+    {
+        var bad = "x\uD800";
+        var node = field switch
+        {
+            "Id" => Node(bad),
+            "Type" => Node("a") with { Type = bad },
+            "Name" => Node("a") with { Name = bad },
+            _ => Node("a") with { Tool = bad },
+        };
+        var r = Graph([node]).Validate();
+        AssertInvalid(r, $"Nodes[0].{field}");
+        Assert.Contains("valid UTF-16", r.Error.Message);
+    }
+
+    [Theory]
+    [InlineData("From")]
+    [InlineData("To")]
+    [InlineData("Condition")]
+    public void LoneSurrogateInEdgeField_Fails(string field)
+    {
+        var bad = "\uDC00x";
+        var edge = new ReasonletEdge { From = "a", To = "a" };
+        edge = field switch
+        {
+            "From" => edge with { From = bad },
+            "To" => edge with { To = bad },
+            _ => edge with { Condition = bad },
+        };
+        var r = Graph([Node("a")], [edge]).Validate();
+        AssertInvalid(r, $"Edges[0].{field}");
+        Assert.Contains("valid UTF-16", r.Error.Message);
+    }
+
+    [Fact]
+    public void SurrogatePairsInGraphStrings_Pass()
+    {
+        var emoji = "\U0001F600";
+        var graph = Graph(
+            [new ReasonletNode { Id = emoji, Type = emoji, Name = emoji, Tool = emoji }],
+            [new ReasonletEdge { From = emoji, To = emoji, Condition = emoji }]);
+        Assert.True(graph.Validate().IsSuccess);
+    }
+
+    [Fact]
+    public void InvalidUtf16InNodeId_ReportedBeforeLaterNodeChecks()
+    {
+        var graph = Graph([Node("a\uD800") with { Type = " " }, Node("b") with { Type = " " }]);
+        AssertInvalid(graph.Validate(), "Nodes[0].Id");
+    }
+
     [Fact]
     public void LoneSurrogateInPropertyKey_FailsWithoutThrowing()
     {

@@ -4,7 +4,10 @@ using ZeroAlloc.Results;
 namespace Mnemosyne.NET.Abstractions;
 
 /// <summary>A directed edge in a Reasonlet graph.</summary>
-/// <remarks>Init-only, so later phases can add members without breaking callers.</remarks>
+/// <remarks>
+/// Init-only, so later phases can add members without breaking callers.
+/// Every string must be valid UTF-16, with no lone surrogate, so it survives UTF-8 storage and hashing unchanged.
+/// </remarks>
 public sealed record ReasonletEdge
 {
     /// <summary>Gets the source node identifier. Must not be blank.</summary>
@@ -23,5 +26,8 @@ public sealed record ReasonletEdge
     /// <returns>Success, or a validation failure with a path relative to this record.</returns>
     public UnitResult<MnemosyneError> Validate() => Check.All(
         () => Check.NotBlank(From, nameof(From)),
-        () => Check.NotBlank(To, nameof(To)));
+        () => Check.ValidUtf16(From, nameof(From)),
+        () => Check.NotBlank(To, nameof(To)),
+        () => Check.ValidUtf16(To, nameof(To)),
+        () => Check.ValidUtf16(Condition, nameof(Condition)));
 }

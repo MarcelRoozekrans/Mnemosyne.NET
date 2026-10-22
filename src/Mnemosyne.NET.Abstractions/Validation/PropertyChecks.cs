@@ -4,6 +4,7 @@ using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Text.Encodings.Web;
 using System.Text.Json;
+using System.Text.Unicode;
 using ZeroAlloc.Results;
 
 namespace Mnemosyne.NET.Abstractions;
@@ -11,7 +12,7 @@ namespace Mnemosyne.NET.Abstractions;
 /// <summary>Validation and measurement of free-form <c>Properties</c> dictionaries.</summary>
 internal static class PropertyChecks
 {
-    private const string InvalidUtf16 = "value must contain only valid UTF-16 in its strings and member names";
+    private const string InvalidText = "value must contain only valid UTF-8 and UTF-16 in its strings and member names";
 
     /// <summary>
     /// Checks the keys and values of a properties dictionary and returns the first failure.
@@ -71,7 +72,7 @@ internal static class PropertyChecks
             return "key must have at least two dot-separated segments, none of them empty";
         }
 
-        if (!IsValidUtf16(key))
+        if (!Check.IsValidUtf16(key))
         {
             return "key must be valid UTF-16";
         }
@@ -130,7 +131,7 @@ internal static class PropertyChecks
         switch (element.ValueKind)
         {
             case JsonValueKind.String:
-                return HasValidEscapes(JsonMarshal.GetRawUtf8Value(element)) ? null : InvalidUtf16;
+                return IsValidText(JsonMarshal.GetRawUtf8Value(element)) ? null : InvalidText;
             case JsonValueKind.Array:
                 foreach (var item in element.EnumerateArray())
                 {
@@ -144,9 +145,9 @@ internal static class PropertyChecks
             case JsonValueKind.Object:
                 foreach (var member in element.EnumerateObject())
                 {
-                    if (!HasValidEscapes(JsonMarshal.GetRawUtf8PropertyName(member)))
+                    if (!IsValidText(JsonMarshal.GetRawUtf8PropertyName(member)))
                     {
-                        return InvalidUtf16;
+                        return InvalidText;
                     }
 
                     if (FindValueProblem(member.Value, level + 1) is { } problem)
@@ -161,33 +162,27 @@ internal static class PropertyChecks
         }
     }
 
-    /// <summary>Returns whether a string has no lone surrogate.</summary>
-    private static bool IsValidUtf16(string value)
-    {
-        for (var i = 0; i < value.Length; i++)
-        {
-            if (char.IsHighSurrogate(value[i]) && i + 1 < value.Length && char.IsLowSurrogate(value[i + 1]))
-            {
-                i++;
-            }
-            else if (char.IsSurrogate(value[i]))
-            {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
     /// <summary>
-    /// Returns whether raw, still-escaped JSON string text decodes to valid UTF-16.
+    /// Returns whether raw, still-escaped JSON string text is valid UTF-8 and decodes to valid UTF-16.
     /// </summary>
     /// <remarks>
-    /// The parser has already checked the UTF-8 bytes and the escape syntax, but it keeps <c>\uXXXX</c> escapes
-    /// undecoded, so a lone surrogate written as an escape survives until something unescapes the text.
-    /// Every high surrogate escape must be followed directly by a low surrogate escape, and every low surrogate
-    /// escape must follow a high one.
+    /// <para>
+    /// The UTF-8 is checked here because <see cref="JsonDocument.Parse(ReadOnlyMemory{byte}, JsonDocumentOptions)"/>
+    /// does not validate the bytes inside strings and member names. A caller-built element can hold an encoded
+    /// surrogate or a byte such as <c>FF</c>, which writing would silently replace with U+FFFD.
+    /// </para>
+    /// <para>
+    /// The parser does check the escape syntax, but it keeps <c>\uXXXX</c> escapes undecoded, so a lone surrogate
+    /// written as an escape survives until something unescapes the text.
+    /// </para>
     /// </remarks>
+    private static bool IsValidText(ReadOnlySpan<byte> raw) => Utf8.IsValid(raw) && HasValidEscapes(raw);
+
+    /// <summary>
+    /// Returns whether the <c>\uXXXX</c> escapes in raw JSON string text decode to valid UTF-16: every high surrogate
+    /// escape is followed directly by a low surrogate escape, and every low surrogate escape follows a high one.
+    /// </summary>
+    /// <remarks>The escape syntax itself is assumed valid, because the parser checks it.</remarks>
     private static bool HasValidEscapes(ReadOnlySpan<byte> raw)
     {
         var expectLow = false;
