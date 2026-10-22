@@ -165,7 +165,7 @@ public class GraphSchemaTests
     }
 
     /// <summary>A document whose <paramref name="member"/> holds <paramref name="value"/>, which needs no escaping.</summary>
-    private static string WithMember(string member, string value)
+    private static string WithMember(string member, string value, bool fits = true)
     {
         var quoted = "\"" + value + "\"";
         return member switch
@@ -174,6 +174,8 @@ public class GraphSchemaTests
             "type" => $$"""{"schemaVersion":1,"nodes":[{"id":"a","type":{{quoted}}}],"edges":[]}""",
             "name" => $$"""{"schemaVersion":1,"nodes":[{"id":"a","type":"t","name":{{quoted}}}],"edges":[]}""",
             "tool" => $$"""{"schemaVersion":1,"nodes":[{"id":"a","type":"t","tool":{{quoted}}}],"edges":[]}""",
+            "from" when !fits => $$"""{"schemaVersion":1,"nodes":[{"id":"a","type":"t"}],"edges":[{"from":{{quoted}},"to":"a"}]}""",
+            "to" when !fits => $$"""{"schemaVersion":1,"nodes":[{"id":"a","type":"t"}],"edges":[{"from":"a","to":{{quoted}}}]}""",
             "from" => $$"""{"schemaVersion":1,"nodes":[{"id":{{quoted}},"type":"t"}],"edges":[{"from":{{quoted}},"to":{{quoted}}}]}""",
             "to" => $$"""{"schemaVersion":1,"nodes":[{"id":"a","type":"t"},{"id":{{quoted}},"type":"t"}],"edges":[{"from":"a","to":{{quoted}}}]}""",
             _ => $$"""{"schemaVersion":1,"nodes":[{"id":"a","type":"t"}],"edges":[{"from":"a","to":"a","condition":{{quoted}}}]}""",
@@ -209,8 +211,8 @@ public class GraphSchemaTests
 
         foreach (var value in overLimit)
         {
-            Assert.False(IsValid(WithMember(member, value)));
-            Assert.True(ReasonletGraphJson.Deserialize(WithMember(member, value)).IsFailure);
+            Assert.False(IsValid(WithMember(member, value, fits: false)));
+            Assert.True(ReasonletGraphJson.Deserialize(WithMember(member, value, fits: false)).IsFailure);
         }
     }
 

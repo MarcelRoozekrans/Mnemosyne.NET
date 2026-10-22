@@ -40,7 +40,7 @@ public sealed record ReasonletEdge
         () => Check.NotBlank(To, nameof(To)),
         () => Check.ValidUtf16(To, nameof(To)),
         () => Check.MaxLength(To, ReasonletGraphLimits.MaxIdentifierLength, nameof(To)),
-        () => Check.ValidUtf16(Condition, nameof(Condition)),
         () => Condition is null ? UnitResult<MnemosyneError>.Success() : Check.NotBlank(Condition, nameof(Condition)),
+        () => Check.ValidUtf16(Condition, nameof(Condition)),
         () => Check.MaxLength(Condition, ReasonletGraphLimits.MaxTextLength, nameof(Condition)));
 }
