@@ -56,6 +56,9 @@ public class ContractShapeTests
 
     [Theory]
     [InlineData(typeof(ReasonletCapture))]
+    [InlineData(typeof(ReasonletNode))]
+    [InlineData(typeof(ReasonletEdge))]
+    [InlineData(typeof(ReasonletGraph))]
     [InlineData(typeof(ReasonletDefinition))]
     [InlineData(typeof(ReasonletProvenance))]
     [InlineData(typeof(ReasonletQuery))]

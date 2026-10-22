@@ -7,10 +7,12 @@ internal static class TestData
 {
     public static ReasonletProvenance Provenance() => new() { Source = "test" };
 
-    public static ReasonletGraph Graph() => new(
-        [new ReasonletNode("n1", "step"), new ReasonletNode("n2", "step")],
-        [new ReasonletEdge("n1", "n2")],
-        1);
+    public static ReasonletGraph Graph() => new()
+    {
+        Nodes = [new ReasonletNode { Id = "n1", Type = "step" }, new ReasonletNode { Id = "n2", Type = "step" }],
+        Edges = [new ReasonletEdge { From = "n1", To = "n2" }],
+        SchemaVersion = ReasonletGraph.CurrentSchemaVersion,
+    };
 
     public static ReasonletDefinition Definition() => new()
     {

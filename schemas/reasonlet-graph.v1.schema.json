@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/MarcelRoozekrans/Mnemosyne.NET/schemas/reasonlet-graph.v1.schema.json",
+  "title": "Reasonlet graph v1",
+  "description": "A Mnemosyne.NET Reasonlet graph, schema version 1. This schema documents the wire format for writers that are not .NET. It accepts some documents that ReasonletGraphJson.Deserialize or ReasonletGraph.Validate() in Mnemosyne.NET.Abstractions reject, so a valid document here is not necessarily a valid graph. Rejected but not checked here: schemaVersion written as anything but the integer literal 1, such as 1.0 or 1e0; duplicate node ids; edge endpoints that do not name an existing node; duplicate edges with the same from, to and condition; duplicate member names in any object, including names that only match after unescaping, such as a and \\u0061; \\u escapes that leave a lone surrogate; property values nested deeper than 32 levels; and a combined size of all properties over 65536 bytes, measured as UTF-8 canonical JSON with the RFC 8785 escape set. Length limits are expressed with maxLength and count Unicode code points, as Validate does. Deserialize runs the full check. The $id is an identifier, not a URL to fetch the schema from.",
+  "type": "object",
+  "required": ["schemaVersion", "nodes", "edges"],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {
+      "description": "The graph format version. Must be written as the integer literal 1; 1.0 and 1e0 pass this schema but Deserialize rejects them.",
+      "const": 1
+    },
+    "nodes": {
+      "description": "The graph nodes. Ids must be unique, checked by Validate only.",
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 500,
+      "items": { "$ref": "#/$defs/node" }
+    },
+    "edges": {
+      "description": "The directed edges. Each from and to must be a node id, and no two edges may share from, to and condition, checked by Validate only.",
+      "type": "array",
+      "maxItems": 2000,
+      "items": { "$ref": "#/$defs/edge" }
+    },
+    "properties": { "$ref": "#/$defs/optionalProperties" }
+  },
+  "$defs": {
+    "nonBlankString": {
+      "description": "Non-blank: at least one character outside the set that .NET char.IsWhiteSpace accepts. The class lists that set explicitly because ECMA-262 whitespace differs (U+0085, U+FEFF).",
+      "type": "string",
+      "minLength": 1,
+      "pattern": "[^\\t-\\r \\u0085\\u00A0\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000]"
+    },
+    "identifier": {
+      "description": "A non-blank identifier of at most 256 code points.",
+      "$ref": "#/$defs/nonBlankString",
+      "maxLength": 256
+    },
+    "text": {
+      "description": "A non-blank text of at most 1024 code points.",
+      "$ref": "#/$defs/nonBlankString",
+      "maxLength": 1024
+    },
+    "optionalIdentifier": {
+      "description": "An optional member: an explicit null means the same as leaving it out.",
+      "anyOf": [{ "$ref": "#/$defs/identifier" }, { "type": "null" }]
+    },
+    "optionalText": {
+      "description": "An optional member: an explicit null means the same as leaving it out.",
+      "anyOf": [{ "$ref": "#/$defs/text" }, { "type": "null" }]
+    },
+    "optionalProperties": {
+      "description": "An optional member: an explicit null means the same as leaving it out.",
+      "anyOf": [{ "$ref": "#/$defs/properties" }, { "type": "null" }]
+    },
+    "node": {
+      "type": "object",
+      "required": ["id", "type"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/identifier" },
+        "type": { "$ref": "#/$defs/identifier" },
+        "name": { "$ref": "#/$defs/optionalText" },
+        "tool": { "$ref": "#/$defs/optionalIdentifier" },
+        "properties": { "$ref": "#/$defs/optionalProperties" }
+      }
+    },
+    "edge": {
+      "type": "object",
+      "required": ["from", "to"],
+      "additionalProperties": false,
+      "properties": {
+        "from": { "$ref": "#/$defs/identifier" },
+        "to": { "$ref": "#/$defs/identifier" },
+        "condition": { "$ref": "#/$defs/optionalText" },
+        "properties": { "$ref": "#/$defs/optionalProperties" }
+      }
+    },
+    "properties": {
+      "description": "Extension data. Keys are namespaced with dots, for example acme.retries. Values are any JSON up to 32 levels deep, without duplicate member names, checked by Validate only.",
+      "type": "object",
+      "propertyNames": { "pattern": "^[^.]+(\\.[^.]+)+$" },
+      "additionalProperties": true
+    }
+  }
+}

@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Text;
 using ZeroAlloc.Results;
 
 namespace Mnemosyne.NET.Abstractions;
@@ -7,11 +9,55 @@ internal static class Check
 {
     private static UnitResult<MnemosyneError> Ok() => UnitResult<MnemosyneError>.Success();
 
-    private static UnitResult<MnemosyneError> Fail(string path, string reason) =>
+    public static UnitResult<MnemosyneError> Fail(string path, string reason) =>
         UnitResult<MnemosyneError>.Failure(new MnemosyneError(MnemosyneErrorCode.Validation, $"{path}: {reason}"));
 
     public static UnitResult<MnemosyneError> NotBlank(string? value, string path) =>
         string.IsNullOrWhiteSpace(value) ? Fail(path, "must not be blank") : Ok();
+
+    /// <summary>Fails when a non-null string holds a lone surrogate, which cannot be written as UTF-8 without changing it.</summary>
+    public static UnitResult<MnemosyneError> ValidUtf16(string? value, string path) =>
+        value is null || IsValidUtf16(value) ? Ok() : Fail(path, "must be valid UTF-16");
+
+    /// <summary>Returns whether a string has no lone surrogate.</summary>
+    public static bool IsValidUtf16(string value)
+    {
+        for (var i = 0; i < value.Length; i++)
+        {
+            if (char.IsHighSurrogate(value[i]) && i + 1 < value.Length && char.IsLowSurrogate(value[i + 1]))
+            {
+                i++;
+            }
+            else if (char.IsSurrogate(value[i]))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Fails when a non-null string has more than <paramref name="max"/> Unicode code points, the unit JSON Schema
+    /// <c>maxLength</c> counts. The string must already be valid UTF-16.
+    /// </summary>
+    public static UnitResult<MnemosyneError> MaxLength(string? value, int max, string path) =>
+        value is null || CodePointCount(value) <= max ? Ok() : Fail(path, $"must not be longer than {max} code points");
+
+    /// <summary>Returns the number of code points in valid UTF-16 text: a surrogate pair counts once.</summary>
+    public static int CodePointCount(string value)
+    {
+        var count = value.Length;
+        foreach (var c in value)
+        {
+            if (char.IsLowSurrogate(c))
+            {
+                count--;
+            }
+        }
+
+        return count;
+    }
 
     public static UnitResult<MnemosyneError> UnitInterval(double value, string path) =>
         double.IsFinite(value) && value >= 0.0 && value <= 1.0 ? Ok() : Fail(path, "must be a finite number between 0 and 1");
@@ -72,5 +118,46 @@ internal static class Check
         }
 
         return Ok();
+    }
+
+    /// <summary>
+    /// Builds an indexer path such as <c>Tags["k"]</c>, escaping backslash, quote, control characters and lone
+    /// surrogates in the key, so the path is always valid UTF-16.
+    /// </summary>
+    public static string KeyPath(string prefix, string? key)
+    {
+        if (key is null)
+        {
+            return $"{prefix}[null]";
+        }
+
+        var builder = new StringBuilder(prefix.Length + key.Length + 4);
+        builder.Append(prefix).Append("[\"");
+        for (var i = 0; i < key.Length; i++)
+        {
+            var c = key[i];
+            if (char.IsHighSurrogate(c) && i + 1 < key.Length && char.IsLowSurrogate(key[i + 1]))
+            {
+                builder.Append(c).Append(key[++i]);
+            }
+            else if (c == '\\')
+            {
+                builder.Append("\\\\");
+            }
+            else if (c == '"')
+            {
+                builder.Append("\\\"");
+            }
+            else if (char.IsControl(c) || char.IsSurrogate(c))
+            {
+                builder.Append("\\u").Append(((int)c).ToString("X4", CultureInfo.InvariantCulture));
+            }
+            else
+            {
+                builder.Append(c);
+            }
+        }
+
+        return builder.Append("\"]").ToString();
     }
 }

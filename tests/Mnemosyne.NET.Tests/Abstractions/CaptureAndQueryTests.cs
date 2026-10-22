@@ -34,7 +34,7 @@ public class CaptureAndQueryTests
     [Fact]
     public void Capture_BlankGraphNodeId_ReportsNestedPath()
     {
-        var graph = new ReasonletGraph([new ReasonletNode(" ", "step")], [], 1);
+        var graph = new ReasonletGraph { Nodes = [new ReasonletNode { Id = " ", Type = "step" }], Edges = [], SchemaVersion = 1 };
         AssertInvalid((TestData.Capture() with { Graph = graph }).Validate(), "Graph.Nodes[0].Id");
     }
 

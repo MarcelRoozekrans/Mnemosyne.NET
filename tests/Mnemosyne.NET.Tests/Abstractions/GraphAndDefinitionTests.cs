@@ -22,11 +22,11 @@ public class GraphAndDefinitionTests
 
     [Fact]
     public void Graph_BlankNodeType_ReportsIndexedPath() =>
-        AssertInvalid((TestData.Graph() with { Nodes = [new ReasonletNode("a", "t"), new ReasonletNode("b", " ")] }).Validate(), "Nodes[1].Type");
+        AssertInvalid((TestData.Graph() with { Nodes = [new ReasonletNode { Id = "a", Type = "t" }, new ReasonletNode { Id = "b", Type = " " }] }).Validate(), "Nodes[1].Type");
 
     [Fact]
     public void Graph_BlankEdgeEndpoint_ReportsIndexedPath() =>
-        AssertInvalid((TestData.Graph() with { Edges = [new ReasonletEdge("a", "")] }).Validate(), "Edges[0].To");
+        AssertInvalid((TestData.Graph() with { Edges = [new ReasonletEdge { From = "a", To = "" }] }).Validate(), "Edges[0].To");
 
     [Fact]
     public void Graph_NullNodes_FailsWithoutThrowing() =>
@@ -57,7 +57,7 @@ public class GraphAndDefinitionTests
 
     [Fact]
     public void Definition_BadGraphNode_ReportsNestedPath() =>
-        AssertInvalid((TestData.Definition() with { Graph = TestData.Graph() with { Nodes = [new ReasonletNode("", "t")] } }).Validate(), "Graph.Nodes[0].Id");
+        AssertInvalid((TestData.Definition() with { Graph = TestData.Graph() with { Nodes = [new ReasonletNode { Id = "", Type = "t" }] } }).Validate(), "Graph.Nodes[0].Id");
 
     [Fact]
     public void Definition_NullGraph_Fails() =>
