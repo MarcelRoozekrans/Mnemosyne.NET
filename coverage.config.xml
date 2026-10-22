@@ -11,11 +11,13 @@
         <ModulePath>.*AotSmoke\.dll$</ModulePath>
       </Exclude>
     </ModulePaths>
-    <!-- Generated and compiler-generated code says nothing about test quality. -->
+    <!-- Generated code says nothing about test quality. CompilerGeneratedAttribute is deliberately NOT
+         excluded: the compiler puts it on every async and iterator state machine, so excluding it hides
+         the bodies of all async methods from coverage. Source-generator output is excluded by
+         GeneratedCodeAttribute and by the obj/ and .g.cs source rules below. -->
     <Attributes>
       <Exclude>
         <Attribute>^System\.CodeDom\.Compiler\.GeneratedCodeAttribute$</Attribute>
-        <Attribute>^System\.Runtime\.CompilerServices\.CompilerGeneratedAttribute$</Attribute>
         <Attribute>^System\.Diagnostics\.CodeAnalysis\.ExcludeFromCodeCoverageAttribute$</Attribute>
       </Exclude>
     </Attributes>

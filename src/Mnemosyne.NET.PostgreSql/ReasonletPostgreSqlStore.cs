@@ -51,37 +51,46 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
     /// <returns>Success, or the error.</returns>
     public async ValueTask<UnitResult<MnemosyneError>> MigrateAsync(CancellationToken ct)
     {
+        // Assigned rather than returned inside the try, so every line of the method can execute.
+        UnitResult<MnemosyneError> result;
         try
         {
-            await using var connection = (await _dataSource.OpenConnectionAsync(ct).ConfigureAwait(false)).AsAsync();
-            var source = new EmbeddedResourceMigrationSource(typeof(ReasonletPostgreSqlStore).Assembly, MigrationResourcePrefix);
-            await new MigrationRunner(connection, source, new PostgresMigrationDialect()).RunAsync(ct).ConfigureAwait(false);
-
-            await using var transaction = await connection.BeginTransactionAsync(ct).ConfigureAwait(false);
-            var settings = new SettingsRepository(connection);
-            await settings.LockAsync(transaction, ct).ConfigureAwait(false);
-            var recorded = await settings.GetDimensionsAsync(transaction, ct).ConfigureAwait(false);
-            if (recorded is { } dimensions)
-            {
-                if (dimensions != _options.Dimensions)
-                {
-                    return DimensionMismatch(dimensions);
-                }
-            }
-            else
-            {
-                await ApplyDimensionsAsync(connection, transaction, ct).ConfigureAwait(false);
-                await settings.RecordDimensionsAsync(_options.Dimensions, transaction, ct).ConfigureAwait(false);
-                await transaction.CommitAsync(ct).ConfigureAwait(false);
-            }
-
-            _migrated = true;
-            return UnitResult<MnemosyneError>.Success();
+            result = await MigrateCoreAsync(ct).ConfigureAwait(false);
         }
         catch (Exception ex) when (PostgresErrors.Map(ex) is { } error)
         {
-            return error;
+            result = error;
         }
+
+        return result;
+    }
+
+    private async Task<UnitResult<MnemosyneError>> MigrateCoreAsync(CancellationToken ct)
+    {
+        await using var connection = (await _dataSource.OpenConnectionAsync(ct).ConfigureAwait(false)).AsAsync();
+        var source = new EmbeddedResourceMigrationSource(typeof(ReasonletPostgreSqlStore).Assembly, MigrationResourcePrefix);
+        await new MigrationRunner(connection, source, new PostgresMigrationDialect()).RunAsync(ct).ConfigureAwait(false);
+
+        await using var transaction = await connection.BeginTransactionAsync(ct).ConfigureAwait(false);
+        var settings = new SettingsRepository(connection);
+        await settings.LockAsync(transaction, ct).ConfigureAwait(false);
+        var recorded = await settings.GetDimensionsAsync(transaction, ct).ConfigureAwait(false);
+        if (recorded is { } dimensions)
+        {
+            if (dimensions != _options.Dimensions)
+            {
+                return DimensionMismatch(dimensions);
+            }
+        }
+        else
+        {
+            await ApplyDimensionsAsync(connection, transaction, ct).ConfigureAwait(false);
+            await settings.RecordDimensionsAsync(_options.Dimensions, transaction, ct).ConfigureAwait(false);
+            await transaction.CommitAsync(ct).ConfigureAwait(false);
+        }
+
+        _migrated = true;
+        return UnitResult<MnemosyneError>.Success();
     }
 
     /// <inheritdoc />
@@ -171,30 +180,38 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
             return UnitResult<MnemosyneError>.Success();
         }
 
+        UnitResult<MnemosyneError> result;
         try
         {
-            await using var connection = (await _dataSource.OpenConnectionAsync(ct).ConfigureAwait(false)).AsAsync();
-            var settings = new SettingsRepository(connection);
-            var recorded = await settings.SettingsTableExistsAsync(ct).ConfigureAwait(false)
-                ? await settings.GetDimensionsAsync(ct).ConfigureAwait(false)
-                : null;
-            if (recorded is not { } dimensions)
-            {
-                return new MnemosyneError(MnemosyneErrorCode.Unavailable, "schema not migrated: call MigrateAsync");
-            }
-
-            if (dimensions != _options.Dimensions)
-            {
-                return DimensionMismatch(dimensions);
-            }
-
-            _migrated = true;
-            return UnitResult<MnemosyneError>.Success();
+            result = await CheckMigratedAsync(ct).ConfigureAwait(false);
         }
         catch (Exception ex) when (PostgresErrors.Map(ex) is { } error)
         {
-            return error;
+            result = error;
         }
+
+        return result;
+    }
+
+    private async Task<UnitResult<MnemosyneError>> CheckMigratedAsync(CancellationToken ct)
+    {
+        await using var connection = (await _dataSource.OpenConnectionAsync(ct).ConfigureAwait(false)).AsAsync();
+        var settings = new SettingsRepository(connection);
+        var recorded = await settings.SettingsTableExistsAsync(ct).ConfigureAwait(false)
+            ? await settings.GetDimensionsAsync(ct).ConfigureAwait(false)
+            : null;
+        if (recorded is not { } dimensions)
+        {
+            return new MnemosyneError(MnemosyneErrorCode.Unavailable, "schema not migrated: call MigrateAsync");
+        }
+
+        if (dimensions != _options.Dimensions)
+        {
+            return DimensionMismatch(dimensions);
+        }
+
+        _migrated = true;
+        return UnitResult<MnemosyneError>.Success();
     }
 
     // DDL takes no parameters, so these statements are raw text. Only the dimension and the HNSW
