@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
 using Mnemosyne.NET.Abstractions;
+using Npgsql;
 using ZeroAlloc.Results;
 
 namespace Mnemosyne.NET.PostgreSql;
@@ -23,6 +24,7 @@ internal static class StoreTelemetry
     private const string ErrorTypeTag = "error.type";
     private const string ExceptionEvent = "exception";
     private const string ExceptionTypeTag = "exception.type";
+    private const string DbStatusCodeTag = "db.response.status_code";
     private const string Ok = "ok";
     private const string ExceptionOutcome = "exception";
 
@@ -65,6 +67,9 @@ internal static class StoreTelemetry
     /// that name. An exception, cancellation included, is recorded on the activity as an <c>exception</c> event that
     /// carries <c>exception.type</c> only, never the message or the stack trace, which could quote user data. It sets
     /// <c>error.type</c> to its full type name and the status to Error, is counted as <c>exception</c>, and propagates unchanged.
+    /// A database exception that carries a SQLSTATE also sets <c>db.response.status_code</c> to it, the OpenTelemetry
+    /// database convention's name: a SQLSTATE is a five-character code from a fixed list, so it carries no user data,
+    /// and it says what failed where the message no longer can.
     /// </remarks>
     /// <param name="operation">The operation's name, such as <c>remember</c>.</param>
     /// <param name="body">The operation. It receives the activity, null when no one listens, to set its own tags on.</param>
@@ -98,6 +103,11 @@ internal static class StoreTelemetry
             var type = ex.GetType().FullName;
             activity?.AddEvent(new ActivityEvent(ExceptionEvent, tags: new ActivityTagsCollection { { ExceptionTypeTag, type } }));
             activity?.SetTag(ErrorTypeTag, type);
+            if (ex is NpgsqlException { SqlState: { } sqlState })
+            {
+                activity?.SetTag(DbStatusCodeTag, sqlState);
+            }
+
             activity?.SetStatus(ActivityStatusCode.Error);
             throw;
         }

@@ -177,7 +177,7 @@ There is one activity per operation.
 | `mnemosyne.prune` | `mnemosyne.pruned.reasonlets`, `mnemosyne.pruned.executions`, always; they count the committed batches, including when the prune fails |
 
 - A failure result sets `error.type` to the `MnemosyneErrorCode` name and the status to Error.
-- When an exception propagates, cancellation included, the activity gets an `exception` event with `exception.type` only, `error.type` is set to the full exception type name, and the status is Error. The message and stack trace are never recorded, because an unmapped PostgreSQL error can quote stored values.
+- When an exception propagates, cancellation included, the activity gets an `exception` event with `exception.type` only, `error.type` is set to the full exception type name, and the status is Error. The message and stack trace are never recorded, because an unmapped PostgreSQL error can quote stored values. When the exception is an `NpgsqlException` that carries a SQLSTATE, such as `XX000`, the activity also gets `db.response.status_code` set to it, the OpenTelemetry database convention's name. A SQLSTATE is a code from a fixed list, so it carries no user data.
 
 ### Metrics
 

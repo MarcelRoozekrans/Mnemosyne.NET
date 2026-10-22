@@ -129,6 +129,52 @@ public sealed class StoreTelemetryTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task ADatabaseExceptionAlsoCarriesItsSqlState()
+    {
+        // An unmapped PostgreSQL error propagates. Its SQLSTATE is tagged, its message, which can quote stored values,
+        // is not.
+        using var capture = new TelemetryCapture();
+        var sentinel = Guid.NewGuid().ToString("N");
+
+        await Assert.ThrowsAsync<PostgresException>(
+            async () => await StoreTelemetry.RunAsync<int>("erase", _ => throw new PostgresException($"value {sentinel}", "ERROR", "ERROR", "XX000"), _ => null));
+
+        var activity = Assert.Single(capture.Activities);
+        Assert.Equal("XX000", activity.GetTagItem("db.response.status_code"));
+        Assert.Equal("Npgsql.PostgresException", activity.GetTagItem("error.type"));
+        Assert.Equal([new("exception.type", "Npgsql.PostgresException")], Assert.Single(activity.Events).Tags);
+        Assert.DoesNotContain(
+            activity.TagObjects,
+            tag => Convert.ToString(tag.Value, System.Globalization.CultureInfo.InvariantCulture)!.Contains(sentinel, StringComparison.Ordinal));
+        AssertOperation(capture, "erase", "exception");
+    }
+
+    [Fact]
+    public async Task ADatabaseExceptionWithoutASqlStateCarriesNone()
+    {
+        // A client-side Npgsql failure, such as a broken connection, has no SQLSTATE, so the tag is left out.
+        using var capture = new TelemetryCapture();
+
+        await Assert.ThrowsAsync<NpgsqlException>(
+            async () => await StoreTelemetry.RunAsync<int>("get", _ => throw new NpgsqlException("broken"), _ => null));
+
+        var activity = Assert.Single(capture.Activities);
+        Assert.Null(activity.GetTagItem("db.response.status_code"));
+        Assert.Equal("Npgsql.NpgsqlException", activity.GetTagItem("error.type"));
+    }
+
+    [Fact]
+    public async Task WithoutAListenerADatabaseExceptionStillPropagates()
+    {
+        var thrown = new PostgresException("m", "ERROR", "ERROR", "XX000");
+
+        var caught = await Assert.ThrowsAsync<PostgresException>(
+            async () => await StoreTelemetry.RunAsync<int>("get", _ => throw thrown, _ => null));
+
+        Assert.Same(thrown, caught);
+    }
+
+    [Fact]
     public async Task WithoutAListenerTheBodyStillRuns()
     {
         Activity? seen = new("placeholder");
