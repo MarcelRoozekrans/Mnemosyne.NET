@@ -457,4 +457,36 @@ public class GraphValidationTests
 
         System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
     }
+
+    [Fact]
+    public void BlankCondition_ReportedBeforeUnknownEndpoint() =>
+        AssertInvalid(Graph([Node("a")], [new ReasonletEdge { From = "a", To = "zz", Condition = " " }]).Validate(), "Edges[0].Condition");
+
+    [Fact]
+    public void BlankCondition_ReportedByEdgeValidate()
+    {
+        var r = new ReasonletEdge { From = "a", To = "a", Condition = "\t" }.Validate();
+        AssertInvalid(r, "Condition");
+    }
+
+    [Fact]
+    public void UnsupportedVersion_ReportedBeforeCounts()
+    {
+        var nodes = Enumerable.Range(0, ReasonletGraphLimits.MaxNodes + 1).Select(i => Node($"n{i}")).ToArray();
+        AssertInvalid((Graph(nodes) with { SchemaVersion = 2 }).Validate(), "SchemaVersion");
+    }
+
+    [Fact]
+    public void TooManyNodes_ReportedBeforeInvalidNode()
+    {
+        var nodes = Enumerable.Range(0, ReasonletGraphLimits.MaxNodes + 1).Select(i => Node($"n{i}") with { Type = " " }).ToArray();
+        AssertInvalid(Graph(nodes).Validate(), "Nodes");
+    }
+
+    [Fact]
+    public void TooManyEdges_ReportedBeforeInvalidEdge()
+    {
+        var edges = Enumerable.Range(0, ReasonletGraphLimits.MaxEdges + 1).Select(_ => new ReasonletEdge { From = " ", To = "a" }).ToArray();
+        AssertInvalid(Graph([Node(" ")], edges).Validate(), "Edges");
+    }
 }

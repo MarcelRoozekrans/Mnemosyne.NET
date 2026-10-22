@@ -16,7 +16,10 @@ public sealed record ReasonletEdge
     /// <summary>Gets the target node identifier. Must not be blank.</summary>
     public required string To { get; init; }
 
-    /// <summary>Gets the optional condition under which this edge is followed.</summary>
+    /// <summary>
+    /// Gets the optional condition under which this edge is followed; null means unconditional. When present, must
+    /// not be blank.
+    /// </summary>
     public string? Condition { get; init; }
 
     /// <summary>Gets the optional free-form properties of the edge.</summary>
@@ -29,5 +32,6 @@ public sealed record ReasonletEdge
         () => Check.ValidUtf16(From, nameof(From)),
         () => Check.NotBlank(To, nameof(To)),
         () => Check.ValidUtf16(To, nameof(To)),
-        () => Check.ValidUtf16(Condition, nameof(Condition)));
+        () => Check.ValidUtf16(Condition, nameof(Condition)),
+        () => Condition is null ? UnitResult<MnemosyneError>.Success() : Check.NotBlank(Condition, nameof(Condition)));
 }

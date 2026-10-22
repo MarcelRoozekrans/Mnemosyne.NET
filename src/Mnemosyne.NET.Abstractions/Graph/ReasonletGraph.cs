@@ -24,49 +24,41 @@ public sealed record ReasonletGraph
 
     /// <summary>Validates the graph.</summary>
     /// <returns>Success, or a validation failure with a path relative to this record.</returns>
-    public UnitResult<MnemosyneError> Validate()
-    {
-        var header = Check.All(
-            () => Check.NotNull(Nodes, nameof(Nodes)),
-            () => Check.NotNull(Edges, nameof(Edges)),
-            () => Check.Range(SchemaVersion, 1, int.MaxValue, nameof(SchemaVersion)));
-        if (header.IsFailure)
-        {
-            return header;
-        }
-
-        for (var i = 0; i < Nodes.Count; i++)
-        {
-            var path = $"Nodes[{i}]";
-            var node = Nodes[i];
-            var result = node is null ? Check.NotNull(node, path) : Check.Nested(node.Validate(), path);
-            if (result.IsFailure)
-            {
-                return result;
-            }
-        }
-
-        for (var i = 0; i < Edges.Count; i++)
-        {
-            var path = $"Edges[{i}]";
-            var edge = Edges[i];
-            var result = edge is null ? Check.NotNull(edge, path) : Check.Nested(edge.Validate(), path);
-            if (result.IsFailure)
-            {
-                return result;
-            }
-        }
-
-        return Check.All(
-            CheckVersion,
-            CheckHasNodes,
-            CheckUniqueNodeIds,
-            CheckEdgeEndpoints,
-            CheckConditions,
-            CheckDuplicateEdges,
-            CheckProperties,
-            CheckLimits);
-    }
+    /// <remarks>
+    /// The checks run in this order, and the first failure wins:
+    /// <list type="number">
+    /// <item><description><see cref="Nodes"/> and <see cref="Edges"/> are not null.</description></item>
+    /// <item><description><see cref="SchemaVersion"/> is a supported version.</description></item>
+    /// <item><description>There is at least one node.</description></item>
+    /// <item><description>
+    /// The node and edge counts are within <see cref="ReasonletGraphLimits.MaxNodes"/> and
+    /// <see cref="ReasonletGraphLimits.MaxEdges"/>, so an oversized graph is rejected before any per-element work.
+    /// </description></item>
+    /// <item><description>
+    /// Each node, then each edge, is not null and passes its own <c>Validate</c>: required strings not blank, optional
+    /// <c>Name</c>, <c>Tool</c> and <c>Condition</c> not blank when present, and every string valid UTF-16.
+    /// </description></item>
+    /// <item><description>Node ids are unique.</description></item>
+    /// <item><description>Every edge's <c>From</c> and <c>To</c> name an existing node.</description></item>
+    /// <item><description>No two edges share <c>From</c>, <c>To</c> and <c>Condition</c>.</description></item>
+    /// <item><description>Every <c>Properties</c> dictionary has valid, unique keys and valid values.</description></item>
+    /// <item><description>
+    /// The canonical size of all <c>Properties</c> together is within <see cref="ReasonletGraphLimits.MaxPropertiesBytes"/>.
+    /// </description></item>
+    /// </list>
+    /// </remarks>
+    public UnitResult<MnemosyneError> Validate() => Check.All(
+        () => Check.NotNull(Nodes, nameof(Nodes)),
+        () => Check.NotNull(Edges, nameof(Edges)),
+        CheckVersion,
+        CheckHasNodes,
+        CheckCounts,
+        CheckElements,
+        CheckUniqueNodeIds,
+        CheckEdgeEndpoints,
+        CheckDuplicateEdges,
+        CheckProperties,
+        CheckPropertiesSize);
 
     /// <summary>Computes the content hash: the SHA-256 of the graph's canonical JSON form. Never throws.</summary>
     /// <returns>
@@ -105,6 +97,45 @@ public sealed record ReasonletGraph
     private UnitResult<MnemosyneError> CheckHasNodes() =>
         Nodes.Count == 0 ? Check.Fail(nameof(Nodes), "must contain at least one node") : UnitResult<MnemosyneError>.Success();
 
+    private UnitResult<MnemosyneError> CheckCounts()
+    {
+        if (Nodes.Count > ReasonletGraphLimits.MaxNodes)
+        {
+            return Check.Fail(nameof(Nodes), $"must not contain more than {ReasonletGraphLimits.MaxNodes} nodes");
+        }
+
+        return Edges.Count > ReasonletGraphLimits.MaxEdges
+            ? Check.Fail(nameof(Edges), $"must not contain more than {ReasonletGraphLimits.MaxEdges} edges")
+            : UnitResult<MnemosyneError>.Success();
+    }
+
+    private UnitResult<MnemosyneError> CheckElements()
+    {
+        for (var i = 0; i < Nodes.Count; i++)
+        {
+            var path = $"Nodes[{i}]";
+            var node = Nodes[i];
+            var result = node is null ? Check.NotNull(node, path) : Check.Nested(node.Validate(), path);
+            if (result.IsFailure)
+            {
+                return result;
+            }
+        }
+
+        for (var i = 0; i < Edges.Count; i++)
+        {
+            var path = $"Edges[{i}]";
+            var edge = Edges[i];
+            var result = edge is null ? Check.NotNull(edge, path) : Check.Nested(edge.Validate(), path);
+            if (result.IsFailure)
+            {
+                return result;
+            }
+        }
+
+        return UnitResult<MnemosyneError>.Success();
+    }
+
     private UnitResult<MnemosyneError> CheckUniqueNodeIds()
     {
         var seen = new HashSet<string>(StringComparer.Ordinal);
@@ -132,19 +163,6 @@ public sealed record ReasonletGraph
             if (!ids.Contains(Edges[i].To))
             {
                 return Check.Fail($"Edges[{i}].To", $"refers to unknown node \"{Edges[i].To}\"");
-            }
-        }
-
-        return UnitResult<MnemosyneError>.Success();
-    }
-
-    private UnitResult<MnemosyneError> CheckConditions()
-    {
-        for (var i = 0; i < Edges.Count; i++)
-        {
-            if (Edges[i].Condition is { } condition && string.IsNullOrWhiteSpace(condition))
-            {
-                return Check.Fail($"Edges[{i}].Condition", "must not be blank when present");
             }
         }
 
@@ -194,18 +212,8 @@ public sealed record ReasonletGraph
         return UnitResult<MnemosyneError>.Success();
     }
 
-    private UnitResult<MnemosyneError> CheckLimits()
+    private UnitResult<MnemosyneError> CheckPropertiesSize()
     {
-        if (Nodes.Count > ReasonletGraphLimits.MaxNodes)
-        {
-            return Check.Fail(nameof(Nodes), $"must not contain more than {ReasonletGraphLimits.MaxNodes} nodes");
-        }
-
-        if (Edges.Count > ReasonletGraphLimits.MaxEdges)
-        {
-            return Check.Fail(nameof(Edges), $"must not contain more than {ReasonletGraphLimits.MaxEdges} edges");
-        }
-
         long total = CanonicalGraphWriter.PropertiesSize(Properties);
         foreach (var node in Nodes)
         {
