@@ -213,4 +213,28 @@ public class GraphSchemaTests
             Assert.True(ReasonletGraphJson.Deserialize(WithMember(member, value)).IsFailure);
         }
     }
+
+    [Theory]
+    [InlineData("""{"schemaVersion":1.0,"nodes":[{"id":"a","type":"t"}],"edges":[]}""")]
+    [InlineData("""{"schemaVersion":1e0,"nodes":[{"id":"a","type":"t"}],"edges":[]}""")]
+    [InlineData("""{"schemaVersion":1,"nodes":[{"id":"a","type":"t"}],"edges":[{"from":"a","to":"a"},{"from":"a","to":"a"}]}""")]
+    [InlineData("""{"schemaVersion":1,"nodes":[{"id":"a","type":"t","type":"u"}],"edges":[]}""")]
+    [InlineData("""{"schemaVersion":1,"nodes":[{"id":"a","type":"t","\u0074ype":"u"}],"edges":[]}""")]
+    [InlineData("""{"schemaVersion":1,"nodes":[{"id":"a","type":"t"}],"edges":[],"properties":{"a.b":{"x":1,"\u0078":2}}}""")]
+    [InlineData("""{"schemaVersion":1,"nodes":[{"id":"a","type":"t"}],"edges":[],"properties":{"a.b":"\uD800"}}""")]
+    public void DescribedValidateOnlyRule_PassesSchemaButFailsDeserialize(string json)
+    {
+        Assert.True(IsValid(json));
+        Assert.True(ReasonletGraphJson.Deserialize(json).IsFailure);
+    }
+
+    [Fact]
+    public void Description_ListsValidateOnlyRules()
+    {
+        var description = Json(SchemaText).GetProperty("description").GetString()!;
+        foreach (var rule in new[] { "integer literal 1", "1.0", "1e0", "duplicate edges", "duplicate member names", "lone surrogate", "65536", "32 levels", "maxLength" })
+        {
+            Assert.Contains(rule, description);
+        }
+    }
 }

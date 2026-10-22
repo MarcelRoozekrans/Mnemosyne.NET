@@ -2,24 +2,24 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/MarcelRoozekrans/Mnemosyne.NET/schemas/reasonlet-graph.v1.schema.json",
   "title": "Reasonlet graph v1",
-  "description": "A Mnemosyne.NET Reasonlet graph, schema version 1. This schema documents the wire format for writers that are not .NET. It cannot express every rule: unique node ids, edge endpoints that name existing nodes, the 65536-byte limit on the combined size of all properties, and the 32-level depth limit on property values are not checked here. ReasonletGraph.Validate() in Mnemosyne.NET.Abstractions is the full check, and ReasonletGraphJson.Deserialize runs it. The $id is an identifier, not a URL to fetch the schema from.",
+  "description": "A Mnemosyne.NET Reasonlet graph, schema version 1. This schema documents the wire format for writers that are not .NET. It accepts some documents that ReasonletGraphJson.Deserialize or ReasonletGraph.Validate() in Mnemosyne.NET.Abstractions reject, so a valid document here is not necessarily a valid graph. Rejected but not checked here: schemaVersion written as anything but the integer literal 1, such as 1.0 or 1e0; duplicate node ids; edge endpoints that do not name an existing node; duplicate edges with the same from, to and condition; duplicate member names in any object, including names that only match after unescaping, such as a and \\u0061; \\u escapes that leave a lone surrogate; property values nested deeper than 32 levels; and a combined size of all properties over 65536 bytes, measured as UTF-8 canonical JSON with the RFC 8785 escape set. Length limits are expressed with maxLength and count Unicode code points, as Validate does. Deserialize runs the full check. The $id is an identifier, not a URL to fetch the schema from.",
   "type": "object",
   "required": ["schemaVersion", "nodes", "edges"],
   "additionalProperties": false,
   "properties": {
     "schemaVersion": {
-      "description": "The graph format version. Must be 1.",
+      "description": "The graph format version. Must be written as the integer literal 1; 1.0 and 1e0 pass this schema but Deserialize rejects them.",
       "const": 1
     },
     "nodes": {
-      "description": "The graph nodes. Ids must be unique (checked by Validate only).",
+      "description": "The graph nodes. Ids must be unique, checked by Validate only.",
       "type": "array",
       "minItems": 1,
       "maxItems": 500,
       "items": { "$ref": "#/$defs/node" }
     },
     "edges": {
-      "description": "The directed edges. Each from and to must be a node id (checked by Validate only).",
+      "description": "The directed edges. Each from and to must be a node id, and no two edges may share from, to and condition, checked by Validate only.",
       "type": "array",
       "maxItems": 2000,
       "items": { "$ref": "#/$defs/edge" }
@@ -79,7 +79,7 @@
       }
     },
     "properties": {
-      "description": "Extension data. Keys are namespaced with dots, for example acme.retries. Values are any JSON up to 32 levels deep (checked by Validate only).",
+      "description": "Extension data. Keys are namespaced with dots, for example acme.retries. Values are any JSON up to 32 levels deep, without duplicate member names, checked by Validate only.",
       "type": "object",
       "propertyNames": { "pattern": "^[^.]+(\\.[^.]+)+$" },
       "additionalProperties": true
