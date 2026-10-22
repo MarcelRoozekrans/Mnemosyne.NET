@@ -138,6 +138,9 @@ public class CaptureAndQueryTests
         var exec = ExecutionId.New();
         var r = new ReasonletReceipt(id, "1.0.0", exec, ReasonletCaptureKind.NewVersion, ReasonletStatus.Active);
         Assert.Equal(id, r.Id);
+        Assert.Equal("1.0.0", r.Version);
+        Assert.Equal(exec, r.Execution);
         Assert.Equal(ReasonletCaptureKind.NewVersion, r.Kind);
+        Assert.Equal(ReasonletStatus.Active, r.Status);
     }
 }

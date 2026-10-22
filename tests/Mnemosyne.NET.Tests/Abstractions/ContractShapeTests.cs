@@ -84,6 +84,11 @@ public class ContractShapeTests
         var result = new ReasonletErasureResult { Reasonlets = 2, Executions = 5 };
         Assert.Equal(2, result.Reasonlets);
         Assert.Equal(5, result.Executions);
+
+        // Init-only so later phases can add members; a with-expression copies the rest.
+        var copy = result with { Executions = 6 };
+        Assert.Equal(2, copy.Reasonlets);
+        Assert.Equal(6, copy.Executions);
     }
 
     [Fact]
