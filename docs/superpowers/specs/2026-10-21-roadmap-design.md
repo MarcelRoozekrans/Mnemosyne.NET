@@ -45,8 +45,9 @@ or any other caller, decides for itself how to run a procedure (**user**).
 | Scoping | Every Reasonlet belongs to a scope (tenant, app or user, caller-defined). The scope is in the M1 data model and in the store and selector signatures, because adding it after 1.0 would break both. | user |
 | Redaction | A hook runs on captured content before it is stored (M3), so tool arguments carrying user data or secrets can be stripped. | user |
 | Graph JSON | Mnemosyne owns a minimal, versioned schema of nodes and edges, defined in M1. It is part of the 1.0 contract and gets a compatibility policy in M4. Callers may add their own properties; executing the graph stays the caller's job. | user |
-| AI.Sentinel | An optional `Mnemosyne.NET.Sentinel` package (M3) runs AI.Sentinel's detectors as the default redaction hook and forwards Mnemosyne's audit events into Sentinel's `IAuditStore`. Sentinel detects but does not mask, so a flagged capture is quarantined, not stored. The core packages take no Sentinel dependency. | user (use Sentinel); my call (package shape) |
+| AI.Sentinel | An optional `Mnemosyne.NET.Sentinel` package (M3) runs AI.Sentinel's detectors as the default redaction hook and does not need an audit bridge: Mnemosyne's telemetry goes through OpenTelemetry, which Sentinel already reads. Sentinel detects but does not mask, so a flagged capture is quarantined, not stored. The core packages take no Sentinel dependency. | user (use Sentinel); my call (package shape) |
 | EU AI Act | **Compliance-enabling**, not compliant: obligations fall on whoever deploys the AI system, and Mnemosyne gives them what they need. Record-keeping (Art. 12): audit events for capture, recall, evaluation and erasure, including which Reasonlet influenced which answer. Transparency (Art. 13): every recall carries its score breakdown and lineage. Human oversight (Art. 14): an opt-in review gate, off by default so off-the-shelf use stays one line. Data governance and GDPR: erasure by scope or subject, retention, redaction. A docs page maps each article to the feature. | user |
+| EU AI Act, amended 2026-10-22 | **Dropped as a design driver** (**user**). The Act's obligations fall on deployers of high-risk systems, and agent procedural memory is rarely one. Audit becomes OpenTelemetry activities and events (capture, recall with the chosen Reasonlet and its score, erase, retention) that land in the host's existing pipeline; there is no audit table. GDPR support (scope, provenance, redaction, erasure, retention) stays. The opt-in review gate stays as a product feature. Milestone 4's guide becomes a data protection guide with a short AI Act note. | user |
 | Compliance fields in M1 | Provenance, retention and erasure are in the M1 data model, since adding them after 1.0 would break the schema and the store signatures. | my call |
 | AOT | All packages are Native AOT and trim compatible, checked by a CI gate from M1 phase 1 rather than discovered at M4. | my call |
 | Data access | Because of the AOT gate, the store uses Npgsql directly, not EF Core, whose runtime is not AOT-safe. Migrations are embedded SQL scripts with an applier the host can call, or the host runs the scripts itself in a shared database. This replaces the Reasonlets design's "match how Daedalus migrates": Daedalus uses EF Core migrations. | my call |
@@ -66,9 +67,9 @@ or any other caller, decides for itself how to run a procedure (**user**).
   there, not only on a developer machine.
 - The docsite explains the full model, variants included, with the post-1.0
   parts marked as such.
-- A deployer can show, from Mnemosyne's audit trail and docs, how it supports
-  their EU AI Act record-keeping, transparency and human-oversight duties and
-  GDPR erasure, without Mnemosyne claiming to be compliant on its own.
+- A deployer can see, from Mnemosyne's telemetry and docs, which procedure was
+  recalled and why, and how scope, redaction, erasure and retention support
+  their GDPR duties.
 
 ## Milestones
 
@@ -86,7 +87,7 @@ The docsite exists from milestone 1 on.
 2. Abstractions: records, scope and provenance model, store/selector interfaces — `Surface: Backend`
 3. Graph JSON schema v1 — `Surface: Backend`
 4. PostgreSQL + pgvector store and migrations — `Surface: Data`
-5. Audit events, erasure by scope or subject, retention — `Surface: Data`
+5. Telemetry and retention — `Surface: Data`
 6. Selector: scope and intent filter, similarity search, ranking with score breakdown — `Surface: Backend`
 7. Docsite skeleton, getting-started docs and first sample — `Surface: Docs`
 
@@ -111,7 +112,7 @@ The docsite exists from milestone 1 on.
 1. Capture: tool-call trace to graph JSON, new Reasonlet or new version — `Surface: Backend`
 2. Redaction hook before capture — `Surface: Backend`
 3. Opt-in human review gate for captured procedures — `Surface: Backend`
-4. AI.Sentinel adapter: default redaction and audit forwarding — `Surface: Backend`
+4. AI.Sentinel adapter: default redaction — `Surface: Backend`
 5. `UseReasonlets()` `IChatClient` middleware — `Surface: Backend`
 6. `find_procedure` recall tool — `Surface: Backend`
 7. Agent Framework `AIContextProvider` — `Surface: Backend`
@@ -127,7 +128,7 @@ The docsite exists from milestone 1 on.
 2. BenchmarkDotNet suite running in CI — `Surface: Infra`
 3. Public API review and graph schema compatibility policy — `Surface: Refactor`
 4. Docs completeness: concepts, variants vision, Daedalus/Thalos guide — `Surface: Docs`
-5. EU AI Act and GDPR guide: article-to-feature mapping — `Surface: Docs`
+5. Data protection guide — `Surface: Docs`
 6. 1.0.0 release — `Surface: Infra`
 
 ### Milestone 5: Variants

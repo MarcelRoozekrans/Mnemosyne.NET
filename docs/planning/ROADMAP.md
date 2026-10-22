@@ -9,7 +9,7 @@ Design: [roadmap design](../superpowers/specs/2026-10-21-roadmap-design.md), bui
 **Definition of Done:**
 - [ ] A procedure can be stored with intent, embedding, execution and feedback, scoped and with provenance
 - [ ] For a new question, the selector returns ranked candidates with a score breakdown, filtered by scope
-- [ ] Audit events, erasure by scope or subject, and retention work against PostgreSQL + pgvector
+- [ ] Telemetry for capture, recall and erasure, erasure by scope or subject, and retention work against PostgreSQL + pgvector
 - [ ] CI is green, including the Native AOT gate and integration tests against pgvector
 - [ ] A preview is on NuGet via release-please, and the docsite is live with getting-started docs and a sample
 
@@ -41,8 +41,8 @@ Design: [roadmap design](../superpowers/specs/2026-10-21-roadmap-design.md), bui
 **Plan:** `docs/superpowers/plans/2026-10-22-phase-1.4-postgres-store.md`
 **Completed:** 2026-10-22
 
-### Phase 1.5: Audit and retention [status: pending]
-**Goal:** Audit events for store, recall and erasure, and a retention policy. Erasure itself moved to phase 1.4.
+### Phase 1.5: Telemetry and retention [status: pending]
+**Goal:** OpenTelemetry activities and events for capture, recall, erasure and retention, and a retention policy. Erasure itself moved to phase 1.4.
 **Surface:** Data
 **HelpWanted:** no
 **Plan:** _to be written_
@@ -124,7 +124,7 @@ Design: [roadmap design](../superpowers/specs/2026-10-21-roadmap-design.md), bui
 **Plan:** _to be written_
 
 ### Phase 3.4: AI.Sentinel adapter [status: pending]
-**Goal:** `Mnemosyne.NET.Sentinel`: Sentinel detectors as the default redaction hook, and audit forwarding to Sentinel's audit store.
+**Goal:** `Mnemosyne.NET.Sentinel`: Sentinel detectors as the default redaction hook.
 **Surface:** Backend
 **HelpWanted:** no
 **Plan:** _to be written_
@@ -159,7 +159,7 @@ Design: [roadmap design](../superpowers/specs/2026-10-21-roadmap-design.md), bui
 - [ ] Versioning and lineage API lets variant selection be added without a breaking change
 - [ ] BenchmarkDotNet suite runs in CI
 - [ ] Public API and graph schema compatibility policy reviewed
-- [ ] Docsite complete, including the EU AI Act and GDPR guide
+- [ ] Docsite complete, including the data protection guide
 - [ ] 1.0.0 on NuGet
 
 ### Phase 4.1: Versioning and lineage API [status: pending]
@@ -186,8 +186,8 @@ Design: [roadmap design](../superpowers/specs/2026-10-21-roadmap-design.md), bui
 **HelpWanted:** no
 **Plan:** _to be written_
 
-### Phase 4.5: EU AI Act and GDPR guide [status: pending]
-**Goal:** An article-to-feature mapping for deployers, without a compliance claim.
+### Phase 4.5: Data protection guide [status: pending]
+**Goal:** How scope, provenance, redaction, erasure, retention and telemetry support a deployer's GDPR duties, and a short note on where the EU AI Act does and does not apply.
 **Surface:** Docs
 **HelpWanted:** no
 **Plan:** _to be written_
