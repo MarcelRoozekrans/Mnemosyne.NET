@@ -168,7 +168,11 @@ internal static class CanonicalGraphWriter
         output.Write("}"u8);
     }
 
-    private static void WriteValue(ArrayBufferWriter<byte> output, JsonElement element)
+    /// <summary>
+    /// Writes a property value in canonical form. An undefined element throws <see cref="ArgumentException"/>;
+    /// <see cref="ReasonletGraph.Validate"/> rejects those before any value reaches this method.
+    /// </summary>
+    internal static void WriteValue(ArrayBufferWriter<byte> output, JsonElement element)
     {
         switch (element.ValueKind)
         {

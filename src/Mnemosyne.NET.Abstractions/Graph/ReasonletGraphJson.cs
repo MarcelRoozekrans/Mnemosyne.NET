@@ -103,7 +103,7 @@ public static class ReasonletGraphJson
         }
         catch (JsonException ex)
         {
-            return Fail(ex.Path ?? "$", Reason(ex.Message));
+            return Fail(ErrorPath(ex), Reason(ex.Message));
         }
         finally
         {
@@ -122,6 +122,9 @@ public static class ReasonletGraphJson
             ? Result<ReasonletGraph, MnemosyneError>.Success(graph)
             : Result<ReasonletGraph, MnemosyneError>.Failure(valid.Error);
     }
+
+    /// <summary>The JSON path of a reader error, or the root <c>$</c> when the exception carries none.</summary>
+    internal static string ErrorPath(JsonException ex) => ex.Path ?? "$";
 
     /// <summary>Cuts the reader's " Path: … | LineNumber: …" suffix, which repeats the error path, and shortens type names.</summary>
     private static string Reason(string message)

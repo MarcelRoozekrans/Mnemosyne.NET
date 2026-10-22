@@ -254,6 +254,7 @@ public class GraphValidationTests
     [InlineData("\"\\uDC00\"")]
     [InlineData("\"\\uD800x\"")]
     [InlineData("\"\\uD800\\u0041\"")]
+    [InlineData("\"\\uD800\\n\"")]
     [InlineData("\"\\uD800\\uD800\\uDC00\"")]
     [InlineData("{\"\\uD800\":1}")]
     [InlineData("[{\"k\":[\"ok\",\"\\uDFFF\"]}]")]

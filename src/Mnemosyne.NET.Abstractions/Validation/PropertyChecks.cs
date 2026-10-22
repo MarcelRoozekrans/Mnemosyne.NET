@@ -168,8 +168,12 @@ internal static class PropertyChecks
     /// Returns whether the <c>\uXXXX</c> escapes in raw JSON string text decode to valid UTF-16: every high surrogate
     /// escape is followed directly by a low surrogate escape, and every low surrogate escape follows a high one.
     /// </summary>
-    /// <remarks>The escape syntax itself is assumed valid, because the parser checks it.</remarks>
-    private static bool HasValidEscapes(ReadOnlySpan<byte> raw)
+    /// <remarks>
+    /// The parser checks the escape syntax, so text from a <see cref="JsonElement"/> is always well formed. Malformed
+    /// syntax, such as a trailing backslash or a short <c>\u</c> escape, still returns <see langword="false"/> rather
+    /// than reading past the end.
+    /// </remarks>
+    internal static bool HasValidEscapes(ReadOnlySpan<byte> raw)
     {
         var expectLow = false;
         for (var i = 0; i < raw.Length; i++)
