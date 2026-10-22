@@ -1,0 +1,403 @@
+using System.Buffers;
+using System.Text.Json;
+using Mnemosyne.NET.Abstractions;
+using Npgsql;
+using Xunit;
+
+namespace Mnemosyne.NET.PostgreSql.Tests;
+
+public sealed class RememberTests(PgVectorFixture fixture) : IClassFixture<PgVectorFixture>
+{
+    private static CancellationToken Ct => TestContext.Current.CancellationToken;
+
+    [Fact]
+    public async Task WithoutAParentANewReasonletIsStoredAtVersion1_0WithOneExecution()
+    {
+        var store = await MigratedStoreAsync();
+        var scope = PgVectorFixture.NewScope();
+        var entry = Entries.Entry(scope);
+
+        var result = await store.RememberAsync(entry, Ct);
+
+        Assert.True(result.IsSuccess);
+        var receipt = result.Value;
+        Assert.Equal(ReasonletCaptureKind.NewReasonlet, receipt.Kind);
+        Assert.Equal("1.0", receipt.Version);
+        Assert.Equal(ReasonletStatus.Active, receipt.Status);
+        Assert.False(receipt.Id.IsDefault);
+        Assert.False(receipt.Execution.IsDefault);
+        Assert.Equal(1L, await CountAsync("SELECT count(*) FROM mnemosyne.reasonlets WHERE scope = $1", scope.Value));
+        Assert.Null(await LineageAsync(receipt.Id));
+        await AssertSingleExecutionAsync(receipt, entry.Capture);
+    }
+
+    [Fact]
+    public async Task TheStoredGraphIsTheExactSerializedTextWithItsHash()
+    {
+        var store = await MigratedStoreAsync();
+        var entry = Entries.Entry(PgVectorFixture.NewScope());
+
+        var receipt = (await store.RememberAsync(entry, Ct)).Value;
+
+        Assert.Equal(
+            ReasonletGraphJson.Serialize(entry.Capture.Graph),
+            await Entries.ScalarAsync<string>(fixture.DataSource, "SELECT graph FROM mnemosyne.reasonlets WHERE id = $1", receipt.Id.Value));
+        Assert.Equal(
+            entry.Capture.Graph.ComputeContentHash().Value,
+            await Entries.ScalarAsync<string>(fixture.DataSource, "SELECT content_hash FROM mnemosyne.reasonlets WHERE id = $1", receipt.Id.Value));
+    }
+
+    [Fact]
+    public async Task AParentWithAnEqualGraphRecordsOnlyAnExecutionOnTheParent()
+    {
+        var store = await MigratedStoreAsync();
+        var scope = PgVectorFixture.NewScope();
+        var parent = (await store.RememberAsync(Entries.Entry(scope), Ct)).Value;
+        var entry = Entries.Entry(
+            scope,
+            parentId: parent.Id,
+            outcome: new ReasonletOutcome(false, TimeSpan.FromSeconds(3), null),
+            provenance: new ReasonletProvenance { Source = "second" });
+
+        var result = await store.RememberAsync(entry, Ct);
+
+        Assert.True(result.IsSuccess);
+        var receipt = result.Value;
+        Assert.Equal(ReasonletCaptureKind.ExecutionOnly, receipt.Kind);
+        Assert.Equal(parent.Id, receipt.Id);
+        Assert.Equal("1.0", receipt.Version);
+        Assert.Equal(ReasonletStatus.Active, receipt.Status);
+        Assert.NotEqual(parent.Execution, receipt.Execution);
+        Assert.Equal(1L, await CountAsync("SELECT count(*) FROM mnemosyne.reasonlets WHERE scope = $1", scope.Value));
+        Assert.Equal(2L, await CountAsync("SELECT count(*) FROM mnemosyne.reasonlet_executions WHERE reasonlet_id = $1", parent.Id.Value));
+        await AssertSingleExecutionAsync(receipt, entry.Capture);
+    }
+
+    [Fact]
+    public async Task ExecutionOnlyReportsTheParentsStatus()
+    {
+        var store = await MigratedStoreAsync();
+        var scope = PgVectorFixture.NewScope();
+        var parent = (await store.RememberAsync(Entries.Entry(scope), Ct)).Value;
+        await Entries.ExecuteAsync(
+            fixture.DataSource, "UPDATE mnemosyne.reasonlets SET status = $1 WHERE id = $2", (short)ReasonletStatus.PendingReview, parent.Id.Value);
+
+        var receipt = (await store.RememberAsync(Entries.Entry(scope, parentId: parent.Id), Ct)).Value;
+
+        Assert.Equal(ReasonletCaptureKind.ExecutionOnly, receipt.Kind);
+        Assert.Equal(ReasonletStatus.PendingReview, receipt.Status);
+    }
+
+    [Fact]
+    public async Task ADifferentGraphCreatesVersionsThatShareOneSequenceAcrossTheLineage()
+    {
+        var store = await MigratedStoreAsync();
+        var scope = PgVectorFixture.NewScope();
+        var root = (await store.RememberAsync(Entries.Entry(scope, Entries.Graph("root")), Ct)).Value;
+
+        var firstEntry = Entries.Entry(scope, Entries.Graph("first"), root.Id);
+        var first = (await store.RememberAsync(firstEntry, Ct)).Value;
+        var second = (await store.RememberAsync(Entries.Entry(scope, Entries.Graph("second"), root.Id), Ct)).Value;
+        var grandchild = (await store.RememberAsync(Entries.Entry(scope, Entries.Graph("grandchild"), first.Id), Ct)).Value;
+
+        Assert.Equal((ReasonletCaptureKind.NewVersion, "1.1", ReasonletStatus.Active), (first.Kind, first.Version, first.Status));
+        Assert.Equal((ReasonletCaptureKind.NewVersion, "1.2"), (second.Kind, second.Version));
+        Assert.Equal((ReasonletCaptureKind.NewVersion, "1.3"), (grandchild.Kind, grandchild.Version));
+        Assert.Equal(4, new[] { root.Id, first.Id, second.Id, grandchild.Id }.Distinct().Count());
+        Assert.Equal($"{root.Id.Value}/{root.Id.Value}", await LineageAsync(first.Id));
+        Assert.Equal($"{root.Id.Value}/{root.Id.Value}", await LineageAsync(second.Id));
+        Assert.Equal($"{first.Id.Value}/{root.Id.Value}", await LineageAsync(grandchild.Id));
+        Assert.Equal(1L, await CountAsync("SELECT count(*) FROM mnemosyne.reasonlet_executions WHERE reasonlet_id = $1", root.Id.Value));
+        await AssertSingleExecutionAsync(first, firstEntry.Capture);
+    }
+
+    [Fact]
+    public async Task AGraphReadBackAndSentAgainWithItsParentRecordsOnlyAnExecution()
+    {
+        var store = await MigratedStoreAsync();
+        var scope = PgVectorFixture.NewScope();
+        var parent = (await store.RememberAsync(Entries.Entry(scope), Ct)).Value;
+        var recalled = (await store.GetAsync(scope, parent.Id, Ct)).Value;
+
+        var receipt = (await store.RememberAsync(Entries.Entry(scope, recalled.Graph, parent.Id), Ct)).Value;
+
+        Assert.Equal(ReasonletCaptureKind.ExecutionOnly, receipt.Kind);
+        Assert.Equal(parent.Id, receipt.Id);
+    }
+
+    [Fact]
+    public async Task AMissingParentIsNotFoundAndStoresNothing()
+    {
+        var store = await MigratedStoreAsync();
+        var scope = PgVectorFixture.NewScope();
+
+        var result = await store.RememberAsync(Entries.Entry(scope, parentId: ReasonletId.New()), Ct);
+
+        Assert.Equal(MnemosyneErrorCode.NotFound, result.Error.Code);
+        Assert.Equal(0L, await CountAsync("SELECT count(*) FROM mnemosyne.reasonlets WHERE scope = $1", scope.Value));
+        Assert.Equal(0L, await CountAsync("SELECT count(*) FROM mnemosyne.reasonlet_executions WHERE scope = $1", scope.Value));
+    }
+
+    [Fact]
+    public async Task AParentInAnotherScopeIsNotFoundAndStoresNothing()
+    {
+        var store = await MigratedStoreAsync();
+        var other = (await store.RememberAsync(Entries.Entry(PgVectorFixture.NewScope()), Ct)).Value;
+        var scope = PgVectorFixture.NewScope();
+
+        var equal = await store.RememberAsync(Entries.Entry(scope, parentId: other.Id), Ct);
+        var different = await store.RememberAsync(Entries.Entry(scope, Entries.Graph("other"), other.Id), Ct);
+
+        Assert.Equal(MnemosyneErrorCode.NotFound, equal.Error.Code);
+        Assert.Equal(MnemosyneErrorCode.NotFound, different.Error.Code);
+        Assert.Equal(1L, await CountAsync("SELECT count(*) FROM mnemosyne.reasonlet_executions WHERE reasonlet_id = $1", other.Id.Value));
+        Assert.Equal(0L, await CountAsync("SELECT count(*) FROM mnemosyne.reasonlets WHERE scope = $1", scope.Value));
+    }
+
+    [Fact]
+    public async Task TwentyParallelChildrenOfOneParentGetVersions1_1To1_20WithoutGaps()
+    {
+        // The fixture's data source keeps Npgsql's default pool of 100 connections, enough for 20 callers that each
+        // hold a connection while they wait for the root's row lock.
+        var store = await MigratedStoreAsync();
+        var scope = PgVectorFixture.NewScope();
+        var root = (await store.RememberAsync(Entries.Entry(scope, Entries.Graph("root")), Ct)).Value;
+
+        var results = await Task.WhenAll(Enumerable.Range(1, 20).Select(
+            i => Task.Run(() => store.RememberAsync(Entries.Entry(scope, Entries.Graph($"child-{i}"), root.Id), Ct).AsTask(), Ct)));
+
+        Assert.All(results, r => Assert.Equal(ReasonletCaptureKind.NewVersion, r.Value.Kind));
+        Assert.Equal(
+            Enumerable.Range(1, 20).Select(minor => $"1.{minor}").Order(StringComparer.Ordinal),
+            results.Select(r => r.Value.Version).Order(StringComparer.Ordinal));
+        Assert.Equal(20, results.Select(r => r.Value.Id).Distinct().Count());
+    }
+
+    [Fact]
+    public async Task ParallelChildrenOfTwoParentsInOneLineageShareOneSequenceWithoutGaps()
+    {
+        // Children of the root lock only the root; children of 1.1 lock 1.1 and then the root. Only the root's lock
+        // serializes the two groups.
+        var store = await MigratedStoreAsync();
+        var scope = PgVectorFixture.NewScope();
+        var root = (await store.RememberAsync(Entries.Entry(scope, Entries.Graph("root")), Ct)).Value;
+        var first = (await store.RememberAsync(Entries.Entry(scope, Entries.Graph("first"), root.Id), Ct)).Value;
+
+        var results = await Task.WhenAll(Enumerable.Range(1, 20).Select(
+            i => Task.Run(
+                () => store.RememberAsync(Entries.Entry(scope, Entries.Graph($"child-{i}"), i % 2 == 0 ? root.Id : first.Id), Ct).AsTask(),
+                Ct)));
+
+        Assert.Equal(
+            Enumerable.Range(2, 20).Select(minor => $"1.{minor}").Order(StringComparer.Ordinal),
+            results.Select(r => r.Value.Version).Order(StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public async Task TheTransactionIsReadCommittedWhateverTheServerDefault()
+    {
+        // At REPEATABLE READ a child that waited for the root's lock would read the lineage from its first snapshot,
+        // miss the sibling committed meanwhile and take the same version. The server default must not leak in.
+        var dataSource = await fixture.CreateEmptyDatabaseAsync();
+        await Entries.ExecuteAsync(
+            dataSource, $"ALTER DATABASE {new NpgsqlConnectionStringBuilder(dataSource.ConnectionString).Database} SET default_transaction_isolation = 'repeatable read'");
+        dataSource.Clear();
+        Assert.Equal("repeatable read", await Entries.ScalarAsync<string>(dataSource, "SHOW default_transaction_isolation"));
+        var store = new ReasonletPostgreSqlStore(dataSource, new MnemosynePostgreSqlOptions { Dimensions = 3 });
+        Assert.True((await store.MigrateAsync(Ct)).IsSuccess);
+        var scope = PgVectorFixture.NewScope();
+        var root = (await store.RememberAsync(Entries.Entry(scope, Entries.Graph("root")), Ct)).Value;
+
+        var results = await Task.WhenAll(Enumerable.Range(1, 10).Select(
+            i => Task.Run(() => store.RememberAsync(Entries.Entry(scope, Entries.Graph($"child-{i}"), root.Id), Ct).AsTask(), Ct)));
+
+        Assert.Equal(
+            Enumerable.Range(1, 10).Select(minor => $"1.{minor}").Order(StringComparer.Ordinal),
+            results.Select(r => r.Value.Version).Order(StringComparer.Ordinal));
+    }
+
+    [Theory]
+    [MemberData(nameof(EmbeddingShapes))]
+    public async Task TheEmbeddingIsStoredWhateverMemoryBacksIt(string shape)
+    {
+        var store = await MigratedStoreAsync();
+        var embedding = Embedding(shape);
+
+        var receipt = (await store.RememberAsync(Entries.Entry(PgVectorFixture.NewScope(), embedding: embedding), Ct)).Value;
+
+        Assert.Equal(
+            "[1,0.5,-0.25]",
+            await Entries.ScalarAsync<string>(fixture.DataSource, "SELECT embedding::text FROM mnemosyne.reasonlets WHERE id = $1", receipt.Id.Value));
+    }
+
+    public static TheoryData<string> EmbeddingShapes() => ["array", "offset slice", "prefix slice", "memory manager"];
+
+    [Fact]
+    public async Task AnEmbeddingOfTheWrongLengthIsAValidationErrorAndStoresNothing()
+    {
+        var store = await MigratedStoreAsync();
+        var scope = PgVectorFixture.NewScope();
+
+        var result = await store.RememberAsync(Entries.Entry(scope, embedding: new float[] { 1f, 2f, 3f, 4f }), Ct);
+
+        Assert.Equal(MnemosyneErrorCode.Validation, result.Error.Code);
+        Assert.Equal("Embedding: must have 3 values, the store's dimension, but has 4", result.Error.Message);
+        Assert.Equal(0L, await CountAsync("SELECT count(*) FROM mnemosyne.reasonlets WHERE scope = $1", scope.Value));
+    }
+
+    [Fact]
+    public async Task AnInvalidEntryIsAValidationError()
+    {
+        var store = await MigratedStoreAsync();
+        var entry = Entries.Entry(PgVectorFixture.NewScope()) with { Intent = " " };
+
+        var result = await store.RememberAsync(entry, Ct);
+
+        Assert.Equal(MnemosyneErrorCode.Validation, result.Error.Code);
+        Assert.Equal("Intent: must not be blank", result.Error.Message);
+    }
+
+    [Fact]
+    public async Task ANullEntryThrows()
+    {
+        var store = await MigratedStoreAsync();
+
+        await Assert.ThrowsAsync<ArgumentNullException>(async () => await store.RememberAsync(null!, Ct));
+    }
+
+    [Fact]
+    public async Task AStoreThatIsNotMigratedIsUnavailable()
+    {
+        var store = new ReasonletPostgreSqlStore(await fixture.CreateEmptyDatabaseAsync(), new MnemosynePostgreSqlOptions { Dimensions = 3 });
+
+        var result = await store.RememberAsync(Entries.Entry(PgVectorFixture.NewScope()), Ct);
+
+        Assert.Equal(MnemosyneErrorCode.Unavailable, result.Error.Code);
+    }
+
+    [Fact]
+    public async Task CancellationThrows()
+    {
+        var store = await MigratedStoreAsync();
+        using var cancelled = new CancellationTokenSource();
+        await cancelled.CancelAsync();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            async () => await store.RememberAsync(Entries.Entry(PgVectorFixture.NewScope()), cancelled.Token));
+    }
+
+    [Fact]
+    public async Task ADeadlockWithAConcurrentTransactionIsAConflict()
+    {
+        var store = await MigratedStoreAsync();
+        var scope = PgVectorFixture.NewScope();
+        var root = (await store.RememberAsync(Entries.Entry(scope, Entries.Graph("root")), Ct)).Value;
+        var child = (await store.RememberAsync(Entries.Entry(scope, Entries.Graph("child"), root.Id), Ct)).Value;
+
+        // The other transaction holds the root. The store locks the child, then waits for the root; the other
+        // transaction then asks for the child, closing the cycle. Its long deadlock_timeout makes the store's
+        // backend, at the default 1s, the one that detects the deadlock and is aborted.
+        await using var other = await fixture.DataSource.OpenConnectionAsync(Ct);
+        await using var transaction = await other.BeginTransactionAsync(Ct);
+        await RunAsync(other, "SET LOCAL deadlock_timeout = '30s'");
+        await RunAsync(other, $"SELECT id FROM mnemosyne.reasonlets WHERE id = '{root.Id.Value}' FOR UPDATE");
+
+        var remember = store.RememberAsync(Entries.Entry(scope, Entries.Graph("grandchild"), child.Id), Ct).AsTask();
+        await WaitForLockWaitAsync(other);
+        var closeCycle = RunAsync(other, $"SELECT id FROM mnemosyne.reasonlets WHERE id = '{child.Id.Value}' FOR UPDATE");
+
+        var result = await remember;
+        await closeCycle;
+        await transaction.RollbackAsync(Ct);
+
+        Assert.Equal(MnemosyneErrorCode.Conflict, result.Error.Code);
+        Assert.Contains("40P01", result.Error.Detail, StringComparison.Ordinal);
+    }
+
+    private async Task<ReasonletPostgreSqlStore> MigratedStoreAsync()
+    {
+        var store = fixture.CreateStore();
+        Assert.True((await store.MigrateAsync(Ct)).IsSuccess);
+        return store;
+    }
+
+    private Task<long> CountAsync(string sql, object parameter) => Entries.ScalarAsync<long>(fixture.DataSource, sql, parameter);
+
+    /// <summary>Reads "parent_id/root_id" of a Reasonlet, or null when it has neither.</summary>
+    private async Task<string?> LineageAsync(ReasonletId id)
+    {
+        var value = await Entries.ScalarAsync<object>(
+            fixture.DataSource, "SELECT parent_id::text || '/' || root_id::text FROM mnemosyne.reasonlets WHERE id = $1", id.Value);
+        return value as string;
+    }
+
+    private async Task AssertSingleExecutionAsync(ReasonletReceipt receipt, ReasonletCapture capture)
+    {
+        await using var command = fixture.DataSource.CreateCommand(
+            "SELECT reasonlet_id, scope, success, duration_ticks, score, source, run_id, subject_id, tags::text, executed_at "
+            + "FROM mnemosyne.reasonlet_executions WHERE id = $1");
+        command.Parameters.Add(new NpgsqlParameter { Value = receipt.Execution.Value });
+        await using var reader = await command.ExecuteReaderAsync(Ct);
+        Assert.True(await reader.ReadAsync(Ct));
+        Assert.Equal(receipt.Id.Value, reader.GetGuid(0));
+        Assert.Equal(capture.Scope.Value, reader.GetString(1));
+        Assert.Equal(capture.Outcome.Success, reader.GetBoolean(2));
+        Assert.Equal(capture.Outcome.Duration.Ticks, reader.GetInt64(3));
+        Assert.Equal(capture.Outcome.Score, reader.IsDBNull(4) ? null : reader.GetDouble(4));
+        Assert.Equal(capture.Provenance.Source, reader.GetString(5));
+        Assert.Equal(capture.Provenance.RunId, reader.IsDBNull(6) ? null : reader.GetString(6));
+        Assert.Equal(capture.Provenance.SubjectId, reader.IsDBNull(7) ? null : reader.GetString(7));
+        var tags = reader.IsDBNull(8) ? null : JsonSerializer.Deserialize<Dictionary<string, string>>(reader.GetString(8));
+        Assert.Equal(capture.Provenance.Tags?.OrderBy(t => t.Key, StringComparer.Ordinal), tags?.OrderBy(t => t.Key, StringComparer.Ordinal));
+        Assert.InRange(reader.GetFieldValue<DateTimeOffset>(9), DateTimeOffset.UtcNow.AddMinutes(-1), DateTimeOffset.UtcNow.AddSeconds(1));
+        Assert.False(await reader.ReadAsync(Ct));
+    }
+
+    private static ReadOnlyMemory<float> Embedding(string shape) => shape switch
+    {
+        "array" => new float[] { 1f, 0.5f, -0.25f },
+        "offset slice" => new float[] { 9f, 1f, 0.5f, -0.25f }.AsMemory(1),
+        "prefix slice" => new float[] { 1f, 0.5f, -0.25f, 9f }.AsMemory(0, 3),
+        _ => new ArrayMemoryManager([1f, 0.5f, -0.25f]).Memory,
+    };
+
+    private static async Task RunAsync(NpgsqlConnection connection, string sql)
+    {
+        await using var command = new NpgsqlCommand(sql, connection);
+        await command.ExecuteNonQueryAsync(Ct);
+    }
+
+    /// <summary>Waits until a backend other than <paramref name="other"/>'s is blocked on a lock.</summary>
+    private async Task WaitForLockWaitAsync(NpgsqlConnection other)
+    {
+        for (var attempt = 0; attempt < 200; attempt++)
+        {
+            var waiting = await Entries.ScalarAsync<long>(
+                fixture.DataSource,
+                "SELECT count(*) FROM pg_stat_activity WHERE wait_event_type = 'Lock' AND pid <> $1",
+                other.ProcessID);
+            if (waiting > 0)
+            {
+                return;
+            }
+
+            await Task.Delay(25, Ct);
+        }
+
+        Assert.Fail("The store never waited for the root's lock.");
+    }
+
+    /// <summary>Memory that is not backed by an array, so MemoryMarshal.TryGetArray fails on it.</summary>
+    private sealed class ArrayMemoryManager(float[] values) : MemoryManager<float>
+    {
+        public override Span<float> GetSpan() => values;
+
+        public override MemoryHandle Pin(int elementIndex = 0) => throw new NotSupportedException();
+
+        public override void Unpin() => throw new NotSupportedException();
+
+        protected override void Dispose(bool disposing)
+        {
+        }
+    }
+}

@@ -1,6 +1,9 @@
+using System.Data;
 using System.Data.Async;
 using System.Data.Async.Adapters;
 using System.Globalization;
+using System.Runtime.InteropServices;
+using System.Text.Json;
 using Mnemosyne.NET.Abstractions;
 using Mnemosyne.NET.PostgreSql.Repositories;
 using Npgsql;
@@ -94,6 +97,13 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// One transaction at READ COMMITTED decides between a new Reasonlet, an execution only and a new version. Row
+    /// locks on the parent and on its lineage's root serialize concurrent children, so their versions never collide.
+    /// The embedding must have <see cref="MnemosynePostgreSqlOptions.Dimensions"/> values, or the entry is a
+    /// <see cref="MnemosyneErrorCode.Validation"/> failure.
+    /// </remarks>
+    /// <exception cref="ArgumentNullException"><paramref name="entry"/> is null.</exception>
     public async ValueTask<Result<ReasonletReceipt, MnemosyneError>> RememberAsync(ReasonletStoreEntry entry, CancellationToken ct)
     {
         var migrated = await EnsureMigratedAsync(ct).ConfigureAwait(false);
@@ -102,7 +112,132 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
             return migrated.Error;
         }
 
-        throw new NotImplementedException();
+        ArgumentNullException.ThrowIfNull(entry);
+        var valid = entry.Validate();
+        if (valid.IsFailure)
+        {
+            return valid.Error;
+        }
+
+        if (entry.Embedding.Length != _options.Dimensions)
+        {
+            return new MnemosyneError(
+                MnemosyneErrorCode.Validation,
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"{nameof(entry.Embedding)}: must have {_options.Dimensions} values, the store's dimension, but has {entry.Embedding.Length}"));
+        }
+
+        return await GuardAsync(RememberCoreAsync(entry, ct)).ConfigureAwait(false);
+    }
+
+    private async Task<Result<ReasonletReceipt, MnemosyneError>> RememberCoreAsync(ReasonletStoreEntry entry, CancellationToken ct)
+    {
+        var capture = entry.Capture;
+
+        // The hash is of the capture's graph and is never recomputed from stored text, so a graph read back unchanged matches.
+        var hash = OrThrow(capture.Graph.ComputeContentHash(), "Hashing a validated graph");
+
+        await using var connection = (await _dataSource.OpenConnectionAsync(ct).ConfigureAwait(false)).AsAsync();
+
+        // Named rather than left to a default. The row locks serialize the writes, and each statement must then see
+        // what the lock holder committed: at REPEATABLE READ a waiting child would miss its sibling's version.
+        await using var transaction = await connection.BeginTransactionAsync(IsolationLevel.ReadCommitted, ct).ConfigureAwait(false);
+        var reasonlets = new ReasonletRepository(connection);
+        var executions = new ExecutionRepository(connection);
+
+        ReasonletReceipt receipt;
+        if (capture.ParentId is not { } parentId)
+        {
+            receipt = await InsertReasonletAsync(
+                reasonlets, executions, entry, hash, LineageVersions.Initial, null, ReasonletCaptureKind.NewReasonlet, transaction, ct)
+                .ConfigureAwait(false);
+        }
+        else
+        {
+            var parent = await reasonlets.LockParentAsync(capture.Scope.Value, parentId.Value, transaction, ct).ConfigureAwait(false);
+            if (parent is null)
+            {
+                return new MnemosyneError(MnemosyneErrorCode.NotFound, "The parent Reasonlet does not exist in the scope.");
+            }
+
+            if (string.Equals(parent.ContentHash, hash, StringComparison.Ordinal))
+            {
+                var execution = await InsertExecutionAsync(executions, parent.Id, capture, transaction, ct).ConfigureAwait(false);
+                receipt = new ReasonletReceipt(
+                    new ReasonletId(parent.Id), parent.Version, execution, ReasonletCaptureKind.ExecutionOnly, (ReasonletStatus)parent.Status);
+            }
+            else
+            {
+                var rootId = parent.RootId ?? parent.Id;
+                await reasonlets.LockRootAsync(rootId, transaction, ct).ConfigureAwait(false);
+                var version = LineageVersions.Next(await reasonlets.GetLineageVersionsAsync(rootId, transaction, ct).ConfigureAwait(false));
+                receipt = await InsertReasonletAsync(
+                    reasonlets, executions, entry, hash, version, (parent.Id, rootId), ReasonletCaptureKind.NewVersion, transaction, ct)
+                    .ConfigureAwait(false);
+            }
+        }
+
+        await transaction.CommitAsync(ct).ConfigureAwait(false);
+        return receipt;
+    }
+
+    private static async Task<ReasonletReceipt> InsertReasonletAsync(
+        ReasonletRepository reasonlets,
+        ExecutionRepository executions,
+        ReasonletStoreEntry entry,
+        string hash,
+        string version,
+        (Guid ParentId, Guid RootId)? lineage,
+        ReasonletCaptureKind kind,
+        IAsyncDbTransaction transaction,
+        CancellationToken ct)
+    {
+        var capture = entry.Capture;
+        var provenance = capture.Provenance;
+        var id = ReasonletId.New();
+        await reasonlets.InsertAsync(
+            id.Value,
+            capture.Scope.Value,
+            entry.Name,
+            entry.Intent,
+            version,
+            ReasonletGraphJson.Serialize(capture.Graph),
+            hash,
+            lineage?.ParentId,
+            lineage?.RootId,
+            (short)ReasonletStatus.Active,
+            provenance.Source,
+            provenance.RunId,
+            provenance.SubjectId,
+            SerializeTags(provenance.Tags),
+            ToArray(entry.Embedding),
+            transaction,
+            ct).ConfigureAwait(false);
+        var execution = await InsertExecutionAsync(executions, id.Value, capture, transaction, ct).ConfigureAwait(false);
+        return new ReasonletReceipt(id, version, execution, kind, ReasonletStatus.Active);
+    }
+
+    private static async Task<ExecutionId> InsertExecutionAsync(
+        ExecutionRepository executions, Guid reasonletId, ReasonletCapture capture, IAsyncDbTransaction transaction, CancellationToken ct)
+    {
+        var id = ExecutionId.New();
+        var outcome = capture.Outcome;
+        var provenance = capture.Provenance;
+        await executions.InsertAsync(
+            id.Value,
+            reasonletId,
+            capture.Scope.Value,
+            outcome.Success,
+            outcome.Duration.Ticks,
+            outcome.Score,
+            provenance.Source,
+            provenance.RunId,
+            provenance.SubjectId,
+            SerializeTags(provenance.Tags),
+            transaction,
+            ct).ConfigureAwait(false);
+        return id;
     }
 
     /// <inheritdoc />
@@ -114,7 +249,50 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
             return migrated.Error;
         }
 
-        return new MnemosyneError(MnemosyneErrorCode.NotFound, "The Reasonlet does not exist in the scope.");
+        var validScope = scope.Validate();
+        if (validScope.IsFailure)
+        {
+            return validScope.Error with { Message = $"{nameof(scope)}.{validScope.Error.Message}" };
+        }
+
+        if (id.IsDefault)
+        {
+            return new MnemosyneError(MnemosyneErrorCode.Validation, $"{nameof(id)}: must not be the default id");
+        }
+
+        return await GuardAsync(GetCoreAsync(scope, id, ct)).ConfigureAwait(false);
+    }
+
+    private async Task<Result<ReasonletDefinition, MnemosyneError>> GetCoreAsync(ReasonletScope scope, ReasonletId id, CancellationToken ct)
+    {
+        await using var connection = (await _dataSource.OpenConnectionAsync(ct).ConfigureAwait(false)).AsAsync();
+        var row = await new ReasonletRepository(connection).GetAsync(scope.Value, id.Value, ct).ConfigureAwait(false);
+        if (row is null)
+        {
+            return new MnemosyneError(MnemosyneErrorCode.NotFound, "The Reasonlet does not exist in the scope.");
+        }
+
+        return new ReasonletDefinition
+        {
+            Id = new ReasonletId(row.Id),
+            Scope = new ReasonletScope(row.Scope),
+            Name = row.Name,
+            Intent = row.Intent,
+            Version = row.Version,
+
+            // The store wrote this text from a validated graph, so text that no longer reads is a bug, not a result.
+            Graph = OrThrow(ReasonletGraphJson.Deserialize(row.Graph), $"Reading the stored graph of Reasonlet {row.Id}"),
+            Provenance = new ReasonletProvenance
+            {
+                Source = row.Source,
+                RunId = row.RunId,
+                SubjectId = row.SubjectId,
+                Tags = row.Tags is null ? null : JsonSerializer.Deserialize(row.Tags, TagsJson.Default.DictionaryStringString),
+            },
+            Status = (ReasonletStatus)row.Status,
+            CreatedAt = row.CreatedAt,
+            ParentId = row.ParentId is { } parent ? new ReasonletId(parent) : null,
+        };
     }
 
     /// <inheritdoc />
@@ -234,6 +412,36 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
             await command.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
         }
     }
+
+    /// <summary>Maps the database failures that <see cref="PostgresErrors"/> knows to an error; anything else propagates.</summary>
+    private static async Task<Result<T, MnemosyneError>> GuardAsync<T>(Task<Result<T, MnemosyneError>> work)
+    {
+        // Assigned rather than returned inside the try, so every line of the method can execute.
+        Result<T, MnemosyneError> result;
+        try
+        {
+            result = await work.ConfigureAwait(false);
+        }
+        catch (Exception ex) when (PostgresErrors.Map(ex) is { } error)
+        {
+            result = error;
+        }
+
+        return result;
+    }
+
+    /// <summary>Unwraps a result that only a bug in the store can fail, and throws when it does.</summary>
+    private static T OrThrow<T>(Result<T, MnemosyneError> result, string what) =>
+        result.IsSuccess ? result.Value : throw new InvalidOperationException($"{what} failed: {result.Error.Message}");
+
+    private static string? SerializeTags(IReadOnlyDictionary<string, string>? tags) =>
+        tags is null ? null : JsonSerializer.Serialize(tags, TagsJson.Default.IReadOnlyDictionaryStringString);
+
+    /// <summary>Returns the embedding's own array when the memory spans a whole array, and a copy otherwise.</summary>
+    private static float[] ToArray(ReadOnlyMemory<float> embedding) =>
+        MemoryMarshal.TryGetArray(embedding, out var segment) && segment.Offset == 0 && segment.Count == segment.Array!.Length
+            ? segment.Array
+            : embedding.ToArray();
 
     private MnemosyneError DimensionMismatch(int recorded) => new(
         MnemosyneErrorCode.Validation,
