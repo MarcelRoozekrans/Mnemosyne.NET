@@ -76,7 +76,10 @@ internal static class Check
         return Ok();
     }
 
-    /// <summary>Builds an indexer path such as <c>Tags["k"]</c>, escaping backslash, quote and control characters in the key.</summary>
+    /// <summary>
+    /// Builds an indexer path such as <c>Tags["k"]</c>, escaping backslash, quote, control characters and lone
+    /// surrogates in the key, so the path is always valid UTF-16.
+    /// </summary>
     public static string KeyPath(string prefix, string? key)
     {
         if (key is null)
@@ -86,9 +89,14 @@ internal static class Check
 
         var builder = new StringBuilder(prefix.Length + key.Length + 4);
         builder.Append(prefix).Append("[\"");
-        foreach (var c in key)
+        for (var i = 0; i < key.Length; i++)
         {
-            if (c == '\\')
+            var c = key[i];
+            if (char.IsHighSurrogate(c) && i + 1 < key.Length && char.IsLowSurrogate(key[i + 1]))
+            {
+                builder.Append(c).Append(key[++i]);
+            }
+            else if (c == '\\')
             {
                 builder.Append("\\\\");
             }
@@ -96,7 +104,7 @@ internal static class Check
             {
                 builder.Append("\\\"");
             }
-            else if (char.IsControl(c))
+            else if (char.IsControl(c) || char.IsSurrogate(c))
             {
                 builder.Append("\\u").Append(((int)c).ToString("X4", CultureInfo.InvariantCulture));
             }

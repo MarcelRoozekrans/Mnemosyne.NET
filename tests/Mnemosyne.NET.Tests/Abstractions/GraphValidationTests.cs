@@ -219,10 +219,44 @@ public class GraphValidationTests
         AssertInvalid(Graph([Node("a", props)]).Validate(), "Nodes[0].Properties[\"a.k\"]");
     }
 
+    [Theory]
+    [InlineData("\"\\uD800\"")]
+    [InlineData("\"\\uDC00\"")]
+    [InlineData("\"\\uD800x\"")]
+    [InlineData("\"\\uD800\\u0041\"")]
+    [InlineData("\"\\uD800\\uD800\\uDC00\"")]
+    [InlineData("{\"\\uD800\":1}")]
+    [InlineData("[{\"k\":[\"ok\",\"\\uDFFF\"]}]")]
+    public void InvalidUtf16InPropertyValue_FailsWithoutThrowing(string json)
+    {
+        var props = new Dictionary<string, JsonElement> { ["a.k"] = Json(json) };
+        AssertInvalid(Graph([Node("a", props)]).Validate(), "Nodes[0].Properties[\"a.k\"]");
+    }
+
+    [Theory]
+    [InlineData("\"\\uD83D\\uDE00\"")]
+    [InlineData("\"\\\\uD800\"")]
+    [InlineData("\"\U0001F600 \\n \\u0041\"")]
+    [InlineData("{\"\\uD83D\\uDE00\":[\"\\\"\"]}")]
+    public void ValidUtf16InPropertyValue_Passes(string json)
+    {
+        var props = new Dictionary<string, JsonElement> { ["a.k"] = Json(json) };
+        Assert.True(Graph([Node("a", props)]).Validate().IsSuccess);
+    }
+
+    [Fact]
+    public void LoneSurrogateInPropertyKey_FailsWithoutThrowing()
+    {
+        var props = new Dictionary<string, JsonElement> { ["a.\uD800"] = Json("1") };
+        AssertInvalid(Graph([Node("a", props)]).Validate(), "Nodes[0].Properties[\"a.\\uD800\"]");
+    }
+
     [Fact]
     public void KeyPath_EscapesAndHandlesNull()
     {
         Assert.Equal("P[null]", Check.KeyPath("P", null));
         Assert.Equal("P[\"a\\\\b\\u000A\"]", Check.KeyPath("P", "a\\b\n"));
+        Assert.Equal("P[\"a\\uD800b\\uDC00\"]", Check.KeyPath("P", "a\uD800b\uDC00"));
+        Assert.Equal("P[\"\U0001F600\"]", Check.KeyPath("P", "\U0001F600"));
     }
 }

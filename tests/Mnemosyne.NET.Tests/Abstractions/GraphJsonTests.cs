@@ -132,7 +132,7 @@ public class GraphJsonTests
 
     [Fact]
     public void LoneSurrogateInText_Fails() =>
-        AssertInvalid("{\"nodes\":[{\"id\":\"\uD800\",\"type\":\"step\"}],\"edges\":[],\"schemaVersion\":1}");
+        Assert.Equal("$: text is not valid UTF-16", AssertInvalid("{\"nodes\":[{\"id\":\"\uD800\",\"type\":\"step\"}],\"edges\":[],\"schemaVersion\":1}").Message);
 
     [Fact]
     public void MissingNodes_Fails() => AssertInvalid("""{"edges":[],"schemaVersion":1}""");
@@ -234,13 +234,74 @@ public class GraphJsonTests
         Assert.True(r.IsSuccess, r.IsFailure ? r.Error.Message : null);
     }
 
-    [Fact]
-    public void PropertyValueOneLevelTooDeep_FailsValidationWithPropertyPath()
+    [Theory]
+    [InlineData("graph", "Properties")]
+    [InlineData("node", "Nodes[0].Properties")]
+    [InlineData("edge", "Edges[0].Properties")]
+    public void PropertyValueOneLevelTooDeep_FailsValidationWithPropertyPath(string level, string path)
     {
         var levels = ReasonletGraphLimits.MaxPropertyDepth + 1;
-        var deep = new string('[', levels - 1) + "1" + new string(']', levels - 1);
-        var error = AssertInvalid($$$"""{"nodes":[{"id":"a","type":"step"}],"edges":[{"from":"a","to":"a","properties":{"deep.value":{{{deep}}}}}],"schemaVersion":1}""");
-        Assert.StartsWith("Edges[0].Properties[\"deep.value\"]: ", error.Message);
+        var deep = """{"deep.value":""" + new string('[', levels - 1) + "1" + new string(']', levels - 1) + "}";
+        var json = level switch
+        {
+            "graph" => """{"nodes":[{"id":"a","type":"step"}],"edges":[],"schemaVersion":1,"properties":""" + deep + "}",
+            "node" => """{"nodes":[{"id":"a","type":"step","properties":""" + deep + """}],"edges":[],"schemaVersion":1}""",
+            _ => """{"nodes":[{"id":"a","type":"step"}],"edges":[{"from":"a","to":"a","properties":""" + deep + """}],"schemaVersion":1}""",
+        };
+
+        var error = AssertInvalid(json);
+
+        Assert.StartsWith(path + "[\"deep.value\"]: ", error.Message);
+    }
+
+    [Fact]
+    public void EscapedLoneSurrogateInPropertyValue_Fails()
+    {
+        var error = AssertInvalid(WithGraphProperty("\"\\uD800\""));
+        Assert.StartsWith("Properties[\"a.b\"]: ", error.Message);
+    }
+
+    /// <remarks>
+    /// The reader rejects this before a graph exists, because duplicate detection unescapes member names.
+    /// <see cref="GraphValidationTests"/> covers the same element reaching <see cref="ReasonletGraph.Validate"/> directly.
+    /// </remarks>
+    [Fact]
+    public void EscapedLoneSurrogateInNestedMemberName_Fails()
+    {
+        var error = AssertInvalid("""{"nodes":[{"id":"a","type":"step","properties":{"a.b":{"\uD800":1}}}],"edges":[],"schemaVersion":1}""");
+        Assert.StartsWith("$.nodes[0].properties['a.b']: ", error.Message);
+    }
+
+    [Fact]
+    public void EscapedSurrogatePairInPropertyValue_RoundTrips()
+    {
+        var r = ReasonletGraphJson.Deserialize(WithGraphProperty("\"\\uD83D\\uDE00\""));
+
+        Assert.True(r.IsSuccess, r.IsFailure ? r.Error.Message : null);
+        Assert.Equal("\U0001F600", r.Value.Properties!["a.b"].GetString());
+        var again = ReasonletGraphJson.Deserialize(ReasonletGraphJson.Serialize(r.Value));
+        Assert.True(again.IsSuccess);
+        Assert.Equal("\U0001F600", again.Value.Properties!["a.b"].GetString());
+    }
+
+    [Fact]
+    public void JsonError_HasPathOnceAndNoNamespace()
+    {
+        var error = AssertInvalid("""{"nodes":[{"id":"a","type":"step","colour":"red"}],"edges":[],"schemaVersion":1}""");
+
+        Assert.StartsWith("$.nodes[0].colour: ", error.Message);
+        Assert.DoesNotContain("Path:", error.Message);
+        Assert.DoesNotContain("LineNumber", error.Message);
+        Assert.DoesNotContain("Mnemosyne.NET.Abstractions.", error.Message);
+    }
+
+    [Fact]
+    public void JsonErrorWithoutPath_UsesRoot()
+    {
+        var error = AssertInvalid("{");
+
+        Assert.StartsWith("$: ", error.Message);
+        Assert.DoesNotContain("LineNumber", error.Message);
     }
 
     [Fact]

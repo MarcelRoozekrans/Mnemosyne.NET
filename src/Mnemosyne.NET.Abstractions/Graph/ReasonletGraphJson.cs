@@ -1,3 +1,5 @@
+using System.Buffers;
+using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization.Metadata;
@@ -27,6 +29,12 @@ public static class ReasonletGraphJson
 
     private static readonly JsonTypeInfo<ReasonletGraph> GraphInfo = CreateGraphInfo();
 
+    /// <summary>Transcodes the input text, throwing on a lone surrogate instead of replacing it.</summary>
+    private static readonly UTF8Encoding StrictUtf8 = new(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
+
+    /// <summary>The namespace prefix stripped from type names in JSON error messages.</summary>
+    private static readonly string NamespacePrefix = typeof(ReasonletGraph).Namespace + ".";
+
     /// <summary>Serializes a graph to compact JSON.</summary>
     /// <param name="graph">The graph to write. It is not validated.</param>
     /// <returns>The JSON text.</returns>
@@ -41,9 +49,20 @@ public static class ReasonletGraphJson
     /// <param name="json">The JSON text.</param>
     /// <returns>
     /// The graph, or a <see cref="MnemosyneErrorCode.Validation"/> failure when the text is not valid UTF-16 or JSON, does not
-    /// match the schema, has duplicate or unknown members, nests too deep, or fails
-    /// <see cref="ReasonletGraph.Validate"/>.
+    /// match the schema, has duplicate or unknown members, nests too deep, or fails <see cref="ReasonletGraph.Validate"/>.
     /// </returns>
+    /// <remarks>
+    /// Messages read "path: reason", in one of two path styles:
+    /// <list type="bullet">
+    /// <item><description>
+    /// Errors found while reading the JSON happen before a graph exists, so their path is a JSON path into the text,
+    /// such as <c>$.nodes[0].colour</c>, or <c>$</c> when the reader has no position.
+    /// </description></item>
+    /// <item><description>
+    /// Errors from <see cref="ReasonletGraph.Validate"/> use member paths on the graph, such as <c>Edges[0].To</c>.
+    /// </description></item>
+    /// </list>
+    /// </remarks>
     public static Result<ReasonletGraph, MnemosyneError> Deserialize(string json)
     {
         if (json is null)
@@ -51,19 +70,32 @@ public static class ReasonletGraphJson
             return Fail("json", "must not be null");
         }
 
+        int length;
+        try
+        {
+            length = StrictUtf8.GetByteCount(json);
+        }
+        catch (EncoderFallbackException)
+        {
+            return Fail("$", "text is not valid UTF-16");
+        }
+
+        var buffer = ArrayPool<byte>.Shared.Rent(length);
         ReasonletGraph? graph;
         try
         {
-            graph = JsonSerializer.Deserialize(json, GraphInfo);
+            var utf8 = buffer.AsSpan(0, StrictUtf8.GetBytes(json, buffer));
+            graph = JsonSerializer.Deserialize(utf8, GraphInfo);
         }
         catch (JsonException ex)
         {
-            return Fail(ex.Path ?? "$", ex.Message);
+            return Fail(ex.Path ?? "$", Reason(ex.Message));
         }
-        catch (ArgumentException)
+        finally
         {
-            // Thrown before parsing when the text holds a lone surrogate and cannot be transcoded to UTF-8.
-            return Fail("$", "text is not valid UTF-16");
+            // Property values are copied into their own documents while reading, so nothing aliases the buffer.
+            // It is cleared because graphs are user data.
+            ArrayPool<byte>.Shared.Return(buffer, clearArray: true);
         }
 
         if (graph is null)
@@ -75,6 +107,14 @@ public static class ReasonletGraphJson
         return valid.IsSuccess
             ? Result<ReasonletGraph, MnemosyneError>.Success(graph)
             : Result<ReasonletGraph, MnemosyneError>.Failure(valid.Error);
+    }
+
+    /// <summary>Cuts the reader's " Path: … | LineNumber: …" suffix, which repeats the error path, and shortens type names.</summary>
+    private static string Reason(string message)
+    {
+        var cut = message.IndexOf(" Path:", StringComparison.Ordinal);
+        var reason = cut < 0 ? message : message[..cut];
+        return reason.Replace(NamespacePrefix, string.Empty, StringComparison.Ordinal);
     }
 
     private static Result<ReasonletGraph, MnemosyneError> Fail(string path, string reason) =>
