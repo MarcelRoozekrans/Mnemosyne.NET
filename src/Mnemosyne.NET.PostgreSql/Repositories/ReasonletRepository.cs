@@ -108,13 +108,27 @@ internal sealed partial class ReasonletRepository(IAsyncDbConnection connection)
     /// to delete. A null subject selects the whole scope.
     /// </summary>
     /// <remarks>
-    /// The rows are locked deepest first, by the length of their walk up <c>parent_id</c> in the scope, and by id
+    /// <para>
+    /// The rows are locked deepest first, by their depth below the top of their lineage in the scope, and by id
     /// within a depth. A remember takes its path locks bottom-up and only ever waits for a row above every row it
     /// holds, so an erase that locks in the same direction waits behind it rather than deadlocking with it, and two
     /// erases lock overlapping rows in one order. <c>FOR UPDATE</c> above an <c>ORDER BY</c> locks the rows in
     /// sorted order. A row a concurrent erase deleted first is skipped, so it is neither returned nor counted twice.
-    /// Holding the deleted rows blocks every new child and execution of them until commit. The <c>CYCLE</c> clause
-    /// only keeps hand-written <c>parent_id</c> cycles from looping forever.
+    /// Holding the deleted rows blocks every new child and execution of them until commit.
+    /// </para>
+    /// <para>
+    /// Each depth is computed once, so the work grows linearly with the lineages, however deep: a walk up with a
+    /// <c>UNION</c> finds the tops above the targets, visiting each row once, and a walk down from those tops numbers
+    /// every row below them. A top is a row whose parent is null or outside the scope. The walk up's <c>UNION</c>
+    /// also ends at a hand-written <c>parent_id</c> cycle; no top leads into a cycle, so the walk down ends too, and
+    /// rows on a cycle, which no walk down reaches, lock at depth 0.
+    /// </para>
+    /// <para>
+    /// Two other kinds of corrupt data, which only hand-written SQL can create, fall outside these locks. A row in
+    /// another scope whose <c>parent_id</c> points at a deleted Reasonlet is cut by <c>ON DELETE SET NULL</c>
+    /// without being locked first. An execution whose scope differs from its Reasonlet's is deleted by
+    /// <c>ON DELETE CASCADE</c> but not counted, because the execution delete filters on the erased scope.
+    /// </para>
     /// </remarks>
     [Query("""
         WITH RECURSIVE doomed AS (
@@ -125,20 +139,25 @@ internal sealed partial class ReasonletRepository(IAsyncDbConnection connection)
             UNION
             SELECT c.id FROM mnemosyne.reasonlets c JOIN doomed d ON c.parent_id = d.id
             WHERE c.scope = @scope
-        ), up (target_id, id, parent_id, depth) AS (
-            SELECT r.id, r.id, r.parent_id, 0
-            FROM mnemosyne.reasonlets r JOIN target t ON r.id = t.id
-            UNION ALL
-            SELECT up.target_id, r.id, r.parent_id, up.depth + 1
+        ), up (id, parent_id) AS (
+            SELECT r.id, r.parent_id FROM mnemosyne.reasonlets r JOIN target t ON r.id = t.id
+            UNION
+            SELECT r.id, r.parent_id
             FROM mnemosyne.reasonlets r JOIN up ON r.id = up.parent_id
             WHERE r.scope = @scope
-        ) CYCLE id SET is_cycle USING path,
-        depths AS (
-            SELECT target_id, max(depth) AS depth FROM up GROUP BY target_id
+        ), tops AS (
+            SELECT u.id FROM up u
+            WHERE NOT EXISTS (SELECT 1 FROM mnemosyne.reasonlets p WHERE p.id = u.parent_id AND p.scope = @scope)
+        ), down (id, depth) AS (
+            SELECT id, 0 FROM tops
+            UNION ALL
+            SELECT r.id, down.depth + 1
+            FROM mnemosyne.reasonlets r JOIN down ON r.parent_id = down.id
+            WHERE r.scope = @scope
         ), locked AS (
             SELECT r.id
-            FROM mnemosyne.reasonlets r JOIN depths d ON r.id = d.target_id
-            ORDER BY d.depth DESC, r.id
+            FROM mnemosyne.reasonlets r JOIN target t ON r.id = t.id LEFT JOIN down d ON r.id = d.id
+            ORDER BY coalesce(d.depth, 0) DESC, r.id
             FOR UPDATE OF r
         )
         SELECT coalesce(array_agg(l.id) FILTER (WHERE l.id IN (SELECT id FROM doomed)), '{}') FROM locked l

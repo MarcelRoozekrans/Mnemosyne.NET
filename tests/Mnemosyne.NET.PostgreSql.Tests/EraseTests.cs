@@ -254,6 +254,127 @@ public sealed class EraseTests(PgVectorFixture fixture) : IClassFixture<PgVector
         Assert.Equal((2L, 2L, 0L), await CountsAsync(scope));
     }
 
+    [Fact(Timeout = 5_000)]
+    public async Task ADeepLineageIsErasedInLinearTime()
+    {
+        // A 1,000-deep chain of A's, with B's children under its middle and its leaf. A walk up from every row, each
+        // carrying its path, is cubic in depth: seconds at this depth, and out of temp space at 2,000.
+        var store = await MigratedStoreAsync();
+        var scope = PgVectorFixture.NewScope();
+        var (middle, leaf) = (Guid.CreateVersion7(), Guid.CreateVersion7());
+        await Entries.ExecuteAsync(
+            fixture.DataSource,
+            $$"""
+            DO $$
+            DECLARE previous uuid; current uuid;
+            BEGIN
+                FOR i IN 0..999 LOOP
+                    current := gen_random_uuid();
+                    {{InsertSql("current", "previous", "'1.' || i", "'subject-a'")}};
+                    IF i = 500 THEN {{InsertSql($"'{middle}'", "current", "'1.1000'", "'subject-b'")}}; END IF;
+                    previous := current;
+                END LOOP;
+                {{InsertSql($"'{leaf}'", "previous", "'1.1001'", "'subject-b'")}};
+            END $$
+            """);
+
+        var bySubject = await store.EraseAsync(new ReasonletErasure(scope, SubjectA), Ct);
+        Assert.Equal((1000, 0), (bySubject.Value.Reasonlets, bySubject.Value.Executions));
+        Assert.Null(await ParentOfAsync(new ReasonletId(middle)));
+        Assert.Null(await ParentOfAsync(new ReasonletId(leaf)));
+
+        var byScope = await store.EraseAsync(new ReasonletErasure(scope, null), Ct);
+        Assert.Equal((2, 0), (byScope.Value.Reasonlets, byScope.Value.Executions));
+
+        string InsertSql(string id, string parent, string version, string subject) =>
+            "INSERT INTO mnemosyne.reasonlets (id, scope, name, intent, version, graph, content_hash, parent_id, status, source, subject_id, created_at, embedding) "
+            + $"VALUES ({id}, '{scope.Value}', 'n', 'i', {version}, '{{}}', repeat('0', 64), {parent}, 1, 's', {subject}, now(), '[1,0,0]')";
+    }
+
+    [Fact(Timeout = 10_000)]
+    public async Task RowsOnAHandWrittenParentCycleAreStillErased()
+    {
+        // No top leads into a cycle, so no walk down gives its rows a depth; they still lock, at depth 0, and go.
+        var store = await MigratedStoreAsync();
+        var scope = PgVectorFixture.NewScope();
+        var a = await RememberAsync(store, scope, "a", SubjectA);
+        var b = await RememberAsync(store, scope, "b", SubjectA, a.Id);
+        var c = await RememberAsync(store, scope, "c", SubjectB, b.Id);
+        await Entries.ExecuteAsync(fixture.DataSource, "UPDATE mnemosyne.reasonlets SET parent_id = $1 WHERE id = $2", b.Id.Value, a.Id.Value);
+
+        var bySubject = await store.EraseAsync(new ReasonletErasure(scope, SubjectA), Ct);
+
+        Assert.Equal((2, 2), (bySubject.Value.Reasonlets, bySubject.Value.Executions));
+        Assert.Null(await ParentOfAsync(c.Id));
+        Assert.Equal((1L, 1L, 0L), await CountsAsync(scope));
+    }
+
+    [Fact]
+    public async Task OverlappingErasesOfTwoSubjectsBothCompleteAndCountEachRowOnce()
+    {
+        // R is A's with B's child C, and R2 is B's with A's child C2. Each subject also ran the other's Reasonlets.
+        // Each erase deletes its own and cuts the other's, so their lock sets overlap.
+        for (var round = 0; round < 10; round++)
+        {
+            var store = await MigratedStoreAsync();
+            var scope = PgVectorFixture.NewScope();
+            var r = await RememberAsync(store, scope, "r", SubjectA);
+            var c = await RememberAsync(store, scope, "c", SubjectB, r.Id);
+            var r2 = await RememberAsync(store, scope, "r2", SubjectB);
+            var c2 = await RememberAsync(store, scope, "c2", SubjectA, r2.Id);
+            await AppendAsync(store, scope, r2.Id, SubjectA);
+            await AppendAsync(store, scope, c.Id, SubjectA);
+            await AppendAsync(store, scope, r.Id, SubjectB);
+            await AppendAsync(store, scope, c2.Id, SubjectB);
+
+            var results = await Task.WhenAll(
+                Task.Run(() => EraseRetryingConflictsAsync(store, new ReasonletErasure(scope, SubjectA)), Ct),
+                Task.Run(() => EraseRetryingConflictsAsync(store, new ReasonletErasure(scope, SubjectB)), Ct));
+
+            Assert.Equal((4, 8), (results.Sum(x => x.Reasonlets), results.Sum(x => x.Executions)));
+            Assert.Equal((0L, 0L, 0L), await CountsAsync(scope));
+        }
+    }
+
+    [Fact]
+    public async Task ErasesThatRemoveTheSameExecutionsBothCompleteAndCountEachOnce()
+    {
+        // A's R and B's R2 are unlinked, so the erases lock disjoint Reasonlets, but B ran R and A ran R2: each erase
+        // removes the other's run with its own Reasonlet and its own run of the other's, so their execution sets overlap.
+        for (var round = 0; round < 10; round++)
+        {
+            var store = await MigratedStoreAsync();
+            var scope = PgVectorFixture.NewScope();
+            var r = await RememberAsync(store, scope, "r", SubjectA);
+            var r2 = await RememberAsync(store, scope, "r2", SubjectB);
+            for (var i = 0; i < 20; i++)
+            {
+                await AppendAsync(store, scope, r2.Id, SubjectA);
+                await AppendAsync(store, scope, r.Id, SubjectB);
+            }
+
+            var results = await Task.WhenAll(
+                Task.Run(() => EraseRetryingConflictsAsync(store, new ReasonletErasure(scope, SubjectA)), Ct),
+                Task.Run(() => EraseRetryingConflictsAsync(store, new ReasonletErasure(scope, SubjectB)), Ct));
+
+            Assert.Equal((2, 42), (results.Sum(x => x.Reasonlets), results.Sum(x => x.Executions)));
+            Assert.Equal((0L, 0L, 0L), await CountsAsync(scope));
+        }
+    }
+
+    /// <summary>Erases, retrying once on a Conflict as a caller would; a second Conflict fails the test.</summary>
+    private static async Task<ReasonletErasureResult> EraseRetryingConflictsAsync(ReasonletPostgreSqlStore store, ReasonletErasure erasure)
+    {
+        var result = await store.EraseAsync(erasure, Ct);
+        if (result.IsFailure && result.Error.Code == MnemosyneErrorCode.Conflict)
+        {
+            result = await store.EraseAsync(erasure, Ct);
+        }
+
+        Assert.True(result.IsSuccess, result.IsFailure ? result.Error.ToString() : null);
+        return result.Value;
+    }
+
     private async Task<ReasonletPostgreSqlStore> MigratedStoreAsync()
     {
         var store = fixture.CreateStore();
