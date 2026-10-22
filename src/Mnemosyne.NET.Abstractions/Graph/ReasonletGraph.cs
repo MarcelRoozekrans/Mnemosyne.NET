@@ -1,16 +1,27 @@
+using System.Text.Json;
 using ZeroAlloc.Results;
 
 namespace Mnemosyne.NET.Abstractions;
 
 /// <summary>The graph of nodes and edges that makes up a Reasonlet.</summary>
-/// <param name="Nodes">The nodes. Must not be null and no element may be null.</param>
-/// <param name="Edges">The edges. Must not be null and no element may be null.</param>
-/// <param name="SchemaVersion">The graph schema version. Must be at least 1.</param>
-public sealed record ReasonletGraph(
-    IReadOnlyList<ReasonletNode> Nodes,
-    IReadOnlyList<ReasonletEdge> Edges,
-    int SchemaVersion)
+/// <remarks>Init-only, so later phases can add members without breaking callers.</remarks>
+public sealed record ReasonletGraph
 {
+    /// <summary>The schema version written by this release.</summary>
+    public const int CurrentSchemaVersion = 1;
+
+    /// <summary>Gets the nodes. Must not be null and no element may be null.</summary>
+    public required IReadOnlyList<ReasonletNode> Nodes { get; init; }
+
+    /// <summary>Gets the edges. Must not be null and no element may be null.</summary>
+    public required IReadOnlyList<ReasonletEdge> Edges { get; init; }
+
+    /// <summary>Gets the graph schema version. Must be at least 1.</summary>
+    public required int SchemaVersion { get; init; }
+
+    /// <summary>Gets the optional free-form properties of the graph.</summary>
+    public IReadOnlyDictionary<string, JsonElement>? Properties { get; init; }
+
     /// <summary>Validates the graph.</summary>
     /// <returns>Success, or a validation failure with a path relative to this record.</returns>
     public UnitResult<MnemosyneError> Validate()
