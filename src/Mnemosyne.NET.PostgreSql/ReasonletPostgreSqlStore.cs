@@ -333,6 +333,11 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// One scoped <c>INSERT … SELECT</c> from the Reasonlet's row, so a Reasonlet that is missing or in another
+    /// scope answers <see cref="MnemosyneErrorCode.NotFound"/> without a prior read. A Reasonlet erased
+    /// concurrently answers <see cref="MnemosyneErrorCode.NotFound"/> or <see cref="MnemosyneErrorCode.Conflict"/>.
+    /// </remarks>
     public async ValueTask<Result<ExecutionId, MnemosyneError>> AppendExecutionAsync(
         ReasonletScope scope, ReasonletId id, ReasonletOutcome outcome, ReasonletProvenance provenance, CancellationToken ct)
     {
@@ -342,10 +347,45 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
             return migrated.Error;
         }
 
-        throw new NotImplementedException();
+        var invalid = ValidateScope(scope) ?? ValidateId(id) ?? ValidateNested(outcome.Validate(), nameof(outcome)) ?? ValidateNested(provenance.Validate(), nameof(provenance));
+        if (invalid is { } error)
+        {
+            return error;
+        }
+
+        return await GuardAsync(AppendExecutionCoreAsync(scope, id, outcome, provenance, ct)).ConfigureAwait(false);
+    }
+
+    private async Task<Result<ExecutionId, MnemosyneError>> AppendExecutionCoreAsync(
+        ReasonletScope scope, ReasonletId id, ReasonletOutcome outcome, ReasonletProvenance provenance, CancellationToken ct)
+    {
+        var executionId = ExecutionId.New();
+        await using var connection = (await _dataSource.OpenConnectionAsync(ct).ConfigureAwait(false)).AsAsync();
+        var inserted = await new ExecutionRepository(connection).InsertForExistingAsync(
+            executionId.Value,
+            id.Value,
+            scope.Value,
+            outcome.Success,
+            outcome.Duration.Ticks,
+            outcome.Score,
+            provenance.Source,
+            provenance.RunId,
+            provenance.SubjectId,
+            SerializeTags(provenance.Tags),
+            ct).ConfigureAwait(false);
+        if (inserted == 0)
+        {
+            return new MnemosyneError(MnemosyneErrorCode.NotFound, "The Reasonlet does not exist in the scope.");
+        }
+
+        return executionId;
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// One scoped upsert keyed on the execution, so feedback recorded again replaces the earlier feedback. An
+    /// execution that is missing or in another scope answers <see cref="MnemosyneErrorCode.NotFound"/>.
+    /// </remarks>
     public async ValueTask<UnitResult<MnemosyneError>> AppendFeedbackAsync(
         ReasonletScope scope, ExecutionId execution, ReasonletFeedback feedback, CancellationToken ct)
     {
@@ -355,8 +395,43 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
             return migrated.Error;
         }
 
-        throw new NotImplementedException();
+        var invalid = ValidateScope(scope);
+        if (invalid is null && execution.IsDefault)
+        {
+            invalid = new MnemosyneError(MnemosyneErrorCode.Validation, $"{nameof(execution)}: must not be the default id");
+        }
+
+        invalid ??= ValidateNested(feedback.Validate(), nameof(feedback));
+        if (invalid is { } error)
+        {
+            return error;
+        }
+
+        var recorded = await GuardAsync(AppendFeedbackCoreAsync(scope, execution, feedback, ct)).ConfigureAwait(false);
+        return recorded.IsFailure ? recorded.Error : UnitResult<MnemosyneError>.Success();
     }
+
+    private async Task<Result<bool, MnemosyneError>> AppendFeedbackCoreAsync(
+        ReasonletScope scope, ExecutionId execution, ReasonletFeedback feedback, CancellationToken ct)
+    {
+        await using var connection = (await _dataSource.OpenConnectionAsync(ct).ConfigureAwait(false)).AsAsync();
+        var written = await new ExecutionRepository(connection).UpsertFeedbackAsync(
+            execution.Value, scope.Value, feedback.Utility, feedback.Correctness, feedback.Reusability, ct).ConfigureAwait(false);
+        if (written == 0)
+        {
+            return new MnemosyneError(MnemosyneErrorCode.NotFound, "The execution does not exist in the scope.");
+        }
+
+        return true;
+    }
+
+    private static MnemosyneError? ValidateScope(ReasonletScope scope) => ValidateNested(scope.Validate(), nameof(scope));
+
+    private static MnemosyneError? ValidateId(ReasonletId id) =>
+        id.IsDefault ? new MnemosyneError(MnemosyneErrorCode.Validation, $"{nameof(id)}: must not be the default id") : null;
+
+    private static MnemosyneError? ValidateNested(UnitResult<MnemosyneError> result, string name) =>
+        result.IsFailure ? result.Error with { Message = $"{name}.{result.Error.Message}" } : null;
 
     /// <inheritdoc />
     public async ValueTask<Result<IReadOnlyList<ReasonletCandidate>, MnemosyneError>> SearchAsync(
