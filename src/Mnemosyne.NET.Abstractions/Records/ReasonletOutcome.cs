@@ -8,7 +8,7 @@ namespace Mnemosyne.NET.Abstractions;
 /// <param name="Score">An optional quality score in the unit interval.</param>
 public readonly record struct ReasonletOutcome(bool Success, TimeSpan Duration, double? Score)
 {
-    /// <summary>Validates the outcome.</summary>
+    /// <summary>Validates the outcome. The default value is valid.</summary>
     /// <returns>Success, or a validation failure with a path relative to this record.</returns>
     public UnitResult<MnemosyneError> Validate()
     {

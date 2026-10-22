@@ -8,7 +8,7 @@ namespace Mnemosyne.NET.Abstractions;
 /// <param name="Reusability">How reusable the Reasonlet is.</param>
 public readonly record struct ReasonletFeedback(double Utility, double Correctness, double Reusability)
 {
-    /// <summary>Validates the feedback.</summary>
+    /// <summary>Validates the feedback. The default value is valid.</summary>
     /// <returns>Success, or a validation failure with a path relative to this record.</returns>
     public UnitResult<MnemosyneError> Validate()
     {

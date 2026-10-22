@@ -9,7 +9,7 @@ namespace Mnemosyne.NET.Abstractions;
 /// <param name="Total">The combined score.</param>
 public readonly record struct ReasonletScore(double Similarity, double SuccessRate, double Freshness, double Total)
 {
-    /// <summary>Validates the score.</summary>
+    /// <summary>Validates the score. The default value is valid.</summary>
     /// <returns>Success, or a validation failure with a path relative to this record.</returns>
     public UnitResult<MnemosyneError> Validate()
     {

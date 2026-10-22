@@ -32,7 +32,60 @@ public class LeafRecordTests
     public void Provenance_BlankTagKey_ReportsIndex()
     {
         var tags = new Dictionary<string, string> { ["ok"] = "1", [" "] = "2" };
-        AssertInvalid(new ReasonletProvenance("s", null, null, tags).Validate(), "Tags[1]");
+        AssertInvalid(new ReasonletProvenance("s", null, null, tags).Validate(), "Tags[\" \"]");
+    }
+
+    [Fact]
+    public void Provenance_EmptyTagKey_ReportsKey()
+    {
+        var tags = new Dictionary<string, string> { [""] = "v" };
+        AssertInvalid(new ReasonletProvenance("s", null, null, tags).Validate(), "Tags[\"\"]");
+    }
+
+    [Fact]
+    public void Provenance_NullTagValue_ReportsKey()
+    {
+        var tags = new Dictionary<string, string> { ["k"] = null! };
+        AssertInvalid(new ReasonletProvenance("s", null, null, tags).Validate(), "Tags[\"k\"]");
+    }
+
+    [Fact]
+    public void Provenance_BlankTagValue_Passes()
+    {
+        var tags = new Dictionary<string, string> { ["k"] = " " };
+        Assert.True(new ReasonletProvenance("s", null, null, tags).Validate().IsSuccess);
+    }
+
+    [Fact]
+    public void Provenance_NullTagKey_ReportsNull()
+    {
+        var tags = new NullKeyTags();
+        AssertInvalid(new ReasonletProvenance("s", null, null, tags).Validate(), "Tags[null]");
+    }
+
+    private sealed class NullKeyTags : IReadOnlyDictionary<string, string>
+    {
+        private static readonly KeyValuePair<string, string>[] Items = [new(null!, "v")];
+        public string this[string key] => throw new KeyNotFoundException();
+        public IEnumerable<string> Keys => [null!];
+        public IEnumerable<string> Values => ["v"];
+        public int Count => 1;
+        public bool ContainsKey(string key) => false;
+        public bool TryGetValue(string key, out string value) { value = null!; return false; }
+        public IEnumerator<KeyValuePair<string, string>> GetEnumerator() => ((IEnumerable<KeyValuePair<string, string>>)Items).GetEnumerator();
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+    }
+
+    [Fact]
+    public void Intent_Default_Fails() => AssertInvalid(default(ReasonletIntent).Validate(), "Intent");
+
+    [Fact]
+    public void Defaults_AreValid()
+    {
+        Assert.True(default(ReasonletFeedback).Validate().IsSuccess);
+        Assert.True(default(ReasonletMetrics).Validate().IsSuccess);
+        Assert.True(default(ReasonletOutcome).Validate().IsSuccess);
+        Assert.True(default(ReasonletScore).Validate().IsSuccess);
     }
 
     [Fact]

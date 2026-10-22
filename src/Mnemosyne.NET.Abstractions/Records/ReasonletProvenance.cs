@@ -6,7 +6,7 @@ namespace Mnemosyne.NET.Abstractions;
 /// <param name="Source">The originating source. Must not be blank.</param>
 /// <param name="RunId">An optional identifier of the originating run.</param>
 /// <param name="SubjectId">An optional identifier of the subject the Reasonlet is about.</param>
-/// <param name="Tags">Optional free-form tags. Keys must not be blank.</param>
+/// <param name="Tags">Optional free-form tags. Keys must not be blank and values must not be null; blank values are allowed.</param>
 public sealed record ReasonletProvenance(
     string Source,
     string? RunId,
@@ -28,16 +28,16 @@ public sealed record ReasonletProvenance(
             return UnitResult<MnemosyneError>.Success();
         }
 
-        var index = 0;
-        foreach (var key in Tags.Keys)
+        foreach (var tag in Tags)
         {
-            var result = Check.NotBlank(key, $"Tags[{index}]");
+            var path = tag.Key is null ? "Tags[null]" : $"Tags[\"{tag.Key}\"]";
+            var result = Check.All(
+                () => Check.NotBlank(tag.Key, path),
+                () => Check.NotNull(tag.Value, path));
             if (result.IsFailure)
             {
                 return result;
             }
-
-            index++;
         }
 
         return UnitResult<MnemosyneError>.Success();

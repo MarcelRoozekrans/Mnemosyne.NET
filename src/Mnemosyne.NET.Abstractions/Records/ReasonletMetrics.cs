@@ -8,7 +8,7 @@ namespace Mnemosyne.NET.Abstractions;
 /// <param name="LastSuccessAt">When the last successful run happened, if any.</param>
 public readonly record struct ReasonletMetrics(int Runs, int Successes, DateTimeOffset? LastSuccessAt)
 {
-    /// <summary>Validates the metrics.</summary>
+    /// <summary>Validates the metrics. The default value is valid.</summary>
     /// <returns>Success, or a validation failure with a path relative to this record.</returns>
     public UnitResult<MnemosyneError> Validate()
     {
