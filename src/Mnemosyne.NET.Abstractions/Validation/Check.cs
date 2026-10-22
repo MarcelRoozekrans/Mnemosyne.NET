@@ -32,7 +32,7 @@ internal static class Check
         value is null ? Fail(path, "must not be null") : Ok();
 
     public static UnitResult<MnemosyneError> Nested(UnitResult<MnemosyneError> inner, string prefix) =>
-        inner.IsSuccess
+        inner.IsSuccess || inner.Error.Code != MnemosyneErrorCode.Validation
             ? inner
             : UnitResult<MnemosyneError>.Failure(inner.Error with { Message = $"{prefix}.{inner.Error.Message}" });
 

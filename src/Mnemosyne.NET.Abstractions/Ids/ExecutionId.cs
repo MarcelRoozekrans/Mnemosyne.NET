@@ -1,6 +1,6 @@
 namespace Mnemosyne.NET.Abstractions;
 
-/// <summary>Identifies a Execution. Backed by a time-ordered version 7 GUID.</summary>
+/// <summary>Identifies an Execution. Backed by a time-ordered version 7 GUID.</summary>
 /// <param name="Value">The underlying GUID.</param>
 public readonly record struct ExecutionId(Guid Value)
 {

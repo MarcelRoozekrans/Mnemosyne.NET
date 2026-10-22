@@ -75,6 +75,33 @@ public class CheckTests
     }
 
     [Fact]
+    public void Nested_KeepsIndexedInnerPath()
+    {
+        var inner = UnitResult<MnemosyneError>.Failure(
+            new MnemosyneError(MnemosyneErrorCode.Validation, "Nodes[1].Type: must not be blank"));
+        var r = Check.Nested(inner, "Graph");
+        Assert.StartsWith("Graph.Nodes[1].Type: ", r.Error.Message);
+    }
+
+    [Fact]
+    public void Nested_LeavesNonValidationErrorUnchanged()
+    {
+        var error = new MnemosyneError(MnemosyneErrorCode.NotFound, "no such thing");
+        var r = Check.Nested(UnitResult<MnemosyneError>.Failure(error), "Outcome");
+        Assert.Equal(error, r.Error);
+    }
+
+    [Fact]
+    public void Nested_PreservesDetail()
+    {
+        var inner = UnitResult<MnemosyneError>.Failure(
+            new MnemosyneError(MnemosyneErrorCode.Validation, "Score: bad", "extra"));
+        var r = Check.Nested(inner, "Outcome");
+        Assert.Equal("extra", r.Error.Detail);
+        Assert.Equal("Outcome.Score: bad", r.Error.Message);
+    }
+
+    [Fact]
     public void Nested_PassesSuccessThrough() =>
         Assert.True(Check.Nested(Check.UnitInterval(0.5, "Score"), "Outcome").IsSuccess);
 
