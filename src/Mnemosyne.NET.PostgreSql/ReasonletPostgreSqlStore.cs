@@ -136,7 +136,8 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
     /// order: the parent <c>FOR NO KEY UPDATE</c>, then every ancestor between the parent and the top of the lineage
     /// <c>FOR KEY SHARE</c>, bottom-up, then the top <c>FOR NO KEY UPDATE</c>. The top's lock serializes concurrent
     /// children of the lineage, so their versions never collide, and the ancestor locks keep an erase from cutting
-    /// the path to the top until commit. An execution only locks the parent alone. A new version that loses a race
+    /// the path to the top until commit. An execution only locks the parent and then the parent's metrics row, which it
+    /// holds until commit. A new version that loses a race
     /// with a concurrent erase of its lineage answers <see cref="MnemosyneErrorCode.Conflict"/>.
     /// </para>
     /// <para>
@@ -408,9 +409,12 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
     /// <remarks>
     /// One scoped statement inserts the execution from the Reasonlet's row and counts it in the Reasonlet's metrics,
     /// so a Reasonlet that is missing or in another scope answers <see cref="MnemosyneErrorCode.NotFound"/> without a
-    /// prior read. The statement takes the Reasonlet <c>FOR KEY SHARE</c>, which a remember's locks let through, so an
-    /// append never waits for a remember in the same lineage; it waits only for an erase that holds the Reasonlet,
-    /// and a Reasonlet that erase deletes answers <see cref="MnemosyneErrorCode.NotFound"/>.
+    /// prior read. The statement takes the Reasonlet <c>FOR KEY SHARE</c>, which a remember's Reasonlet locks let
+    /// through, so an append does not wait for a new version anywhere in the lineage. It then updates the
+    /// Reasonlet's metrics row, so it waits for any transaction that holds that row until commit: an execution-only
+    /// remember of the same Reasonlet, another append to it, or an erase that is recounting it as a kept Reasonlet.
+    /// It also waits for an erase that holds the Reasonlet itself, and a Reasonlet that erase deletes answers
+    /// <see cref="MnemosyneErrorCode.NotFound"/>.
     /// </remarks>
     /// <exception cref="ArgumentNullException"><paramref name="provenance"/> is null.</exception>
     public async ValueTask<Result<ExecutionId, MnemosyneError>> AppendExecutionAsync(

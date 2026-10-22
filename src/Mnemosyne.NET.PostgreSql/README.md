@@ -85,14 +85,22 @@ The rules that follow from this:
 
 ### What erasure leaves on disk
 
-`EraseAsync` deletes rows; it does not scrub storage. Until PostgreSQL vacuums the tables, the deleted rows' heap tuples, their TOASTed text (graphs, tags) and their HNSW index entries stay in the data files. The write-ahead log, streaming replicas, and backups keep the data for their own retention, whatever the store does. For GDPR erasure:
+`EraseAsync` deletes rows; it does not scrub storage. A deleted row's bytes stay in the data files until something overwrites them. `VACUUM`, including autovacuum, only marks the space as reusable; it does not clear it, and a checkpoint does not either. Old bytes can persist in:
 
-- keep autovacuum on (it is by default) and, after a large erase, consider a manual `VACUUM` of the `mnemosyne` tables;
+- heap pages, and the TOAST table that holds long text such as graphs and tags;
+- the HNSW index;
+- the btree indexes, such as `(scope, subject_id)`, which holds the subject id itself.
+
+The write-ahead log, streaming replicas and backups keep the data for their own retention, whatever the store does. For GDPR erasure, treat data at rest as a storage concern:
+
+- encrypt the storage or disk the database, its WAL archive and its backups live on;
 - rotate backups and archived WAL on a schedule that meets your retention promise, because a restore brings erased data back.
+
+`VACUUM FULL` or `pg_repack` rewrites a table and its indexes into new files and releases the old pages to the filesystem. That removes them from PostgreSQL's files, but it is not a guaranteed scrub: the filesystem and the device may keep the released blocks until they are reused. `VACUUM FULL` also locks the table exclusively while it runs.
 
 ## Searching
 
-`SearchAsync` returns up to `limit` candidates of one scope, sorted exactly by distance; HNSW recall is approximate, so a near neighbour can occasionally be missed. It uses iterative HNSW scans, so a scope with a small share of the table usually still gets its full limit. The scan stops after `hnsw.max_scan_tuples` index tuples (20,000 by default), though, so a very small scope in a very large table can come back with fewer candidates than the limit. Candidates at exactly the same distance come back in an unspecified order.
+`SearchAsync` returns up to `limit` candidates of one scope, sorted exactly by distance; HNSW recall is approximate, so a near neighbour can occasionally be missed. It uses iterative HNSW scans, so a scope with a small share of the table usually still gets its full limit. The scan stops after `hnsw.max_scan_tuples` index tuples (20,000 by default), though, and, like that cap, `hnsw.scan_mem_multiplier` can end it early once the scan uses its memory budget, so a very small scope in a very large table can come back with fewer candidates than the limit. Candidates at exactly the same distance come back in an unspecified order.
 
 The embedding must have a nonzero, finite norm: cosine similarity is undefined for an all-zero vector, so `SearchAsync` and `RememberAsync` answer a validation error for one.
 
