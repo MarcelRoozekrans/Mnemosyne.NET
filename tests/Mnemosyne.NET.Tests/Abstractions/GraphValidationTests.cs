@@ -408,4 +408,53 @@ public class GraphValidationTests
         Assert.Equal("P[\"a\\uD800b\\uDC00\"]", Check.KeyPath("P", "a\uD800b\uDC00"));
         Assert.Equal("P[\"\U0001F600\"]", Check.KeyPath("P", "\U0001F600"));
     }
+
+    [Fact]
+    public void RepeatedKeyInCustomDictionary_Fails()
+    {
+        var repeated = new RepeatingDictionary(new("a.b", Json("1")), new("a.b", Json("2")));
+
+        var r = (Graph([Node("a")]) with { Properties = repeated }).Validate();
+        AssertInvalid(r, "Properties[\"a.b\"]");
+        Assert.Contains("key must not repeat", r.Error.Message);
+        AssertInvalid(Graph([Node("a", repeated)]).Validate(), "Nodes[0].Properties[\"a.b\"]");
+        AssertInvalid(Graph([Node("a")], [new ReasonletEdge { From = "a", To = "a", Properties = repeated }]).Validate(), "Edges[0].Properties[\"a.b\"]");
+    }
+
+    [Fact]
+    public void DistinctKeysInCustomDictionary_Pass() =>
+        Assert.True((Graph([Node("a")]) with { Properties = new RepeatingDictionary(new("a.b", Json("1")), new("a.B", Json("2"))) }).Validate().IsSuccess);
+
+    /// <summary>A dictionary that enumerates its entries as given, so it can yield one key twice.</summary>
+    private sealed class RepeatingDictionary(params KeyValuePair<string, JsonElement>[] entries) : IReadOnlyDictionary<string, JsonElement>
+    {
+        public int Count => entries.Length;
+
+        public IEnumerable<string> Keys => entries.Select(e => e.Key);
+
+        public IEnumerable<JsonElement> Values => entries.Select(e => e.Value);
+
+        public JsonElement this[string key] => TryGetValue(key, out var value) ? value : throw new KeyNotFoundException(key);
+
+        public bool ContainsKey(string key) => TryGetValue(key, out _);
+
+        public bool TryGetValue(string key, out JsonElement value)
+        {
+            foreach (var entry in entries)
+            {
+                if (string.Equals(entry.Key, key, StringComparison.Ordinal))
+                {
+                    value = entry.Value;
+                    return true;
+                }
+            }
+
+            value = default;
+            return false;
+        }
+
+        public IEnumerator<KeyValuePair<string, JsonElement>> GetEnumerator() => ((IEnumerable<KeyValuePair<string, JsonElement>>)entries).GetEnumerator();
+
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+    }
 }

@@ -14,10 +14,11 @@ internal static class PropertyChecks
 
     /// <summary>
     /// Checks the keys and values of a properties dictionary and returns the first failure.
-    /// A key is two or more dot-separated segments, none of them empty, and valid UTF-16. A value must be defined,
-    /// nested at most <see cref="ReasonletGraphLimits.MaxPropertyDepth"/> levels deep, hold only valid UTF-8 and
-    /// UTF-16 in its strings and member names, so that measuring and writing it cannot throw, and have no duplicate
-    /// member names in any object, so that its canonical form is unambiguous.
+    /// A key is two or more dot-separated segments, none of them empty, and valid UTF-16. No key may repeat (ordinal),
+    /// which a custom <see cref="IReadOnlyDictionary{TKey, TValue}"/> could otherwise do, so the canonical form is
+    /// unambiguous. A value must be defined, nested at most <see cref="ReasonletGraphLimits.MaxPropertyDepth"/> levels
+    /// deep, hold only valid UTF-8 and UTF-16 in its strings and member names, so that measuring and writing it cannot
+    /// throw, and have no duplicate member names in any object, so that its canonical form is unambiguous.
     /// </summary>
     public static UnitResult<MnemosyneError> Validate(IReadOnlyDictionary<string, JsonElement>? props, string pathPrefix)
     {
@@ -26,9 +27,11 @@ internal static class PropertyChecks
             return UnitResult<MnemosyneError>.Success();
         }
 
+        var keys = new HashSet<string>(StringComparer.Ordinal);
         foreach (var entry in props)
         {
-            var reason = FindProblem(entry.Key, entry.Value);
+            var reason = FindProblem(entry.Key, entry.Value)
+                ?? (keys.Add(entry.Key) ? null : "key must not repeat in the same dictionary");
             if (reason is not null)
             {
                 return Check.Fail(Check.KeyPath(pathPrefix, entry.Key), reason);
