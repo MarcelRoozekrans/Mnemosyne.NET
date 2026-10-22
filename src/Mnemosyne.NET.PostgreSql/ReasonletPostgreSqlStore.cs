@@ -696,7 +696,8 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
     /// every execution and feedback on them, other subjects' runs included, then the subject's executions on the
     /// Reasonlets it keeps, subtracting them from those Reasonlets' metrics. It subtracts rather than recounts because the
     /// counters also hold runs whose records retention has pruned. A timestamp the removed runs set falls back to the
-    /// latest run left, or stays as stored when none is left. Other subjects' children of a deleted
+    /// latest run left. When none is left, the last run time falls back to the Reasonlet's creation time and the last
+    /// success time to null, so no erased run's time stays behind. Other subjects' children of a deleted
     /// Reasonlet survive with a null parent, each the top of its own lineage. The counts are of rows removed, each
     /// once; a cut lineage link is not a removal. The erase covers what exists when it takes its locks: a Reasonlet
     /// remembered while it runs is not erased by it. The Reasonlets are locked deepest first, the order a remember's

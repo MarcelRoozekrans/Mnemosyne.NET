@@ -93,7 +93,8 @@ CREATE TABLE mnemosyne.reasonlet_metrics (
     successes         integer     NOT NULL,
     last_success_at   timestamptz NULL,
     -- NOT NULL: every Reasonlet has at least the execution its remember created, and an erase that
-    -- removes every remaining run keeps the stored time. A null would read as never used to retention.
+    -- removes every remaining run falls back to the Reasonlet's created_at. A null would read as never
+    -- used to retention.
     last_executed_at  timestamptz NOT NULL,
     FOREIGN KEY (scope, reasonlet_id) REFERENCES mnemosyne.reasonlets (scope, id) ON DELETE CASCADE
 );

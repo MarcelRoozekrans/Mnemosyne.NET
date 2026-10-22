@@ -80,7 +80,7 @@ The rules that follow from this:
 - Other subjects' Reasonlets survive. When a Reasonlet is erased, the `parent_id` of its children is cut, so each child becomes the top of its own lineage.
 - Run records follow their procedure. Every execution and feedback on an erased Reasonlet is removed with it, including other subjects' runs of it.
 - The result counts the Reasonlets deleted and every execution removed. A cut parent link is not counted.
-- A kept Reasonlet that loses executions to the erase has them subtracted from its run counts. The counts are not recounted from the executions left, because they also hold runs whose records were pruned. When a removed run was the latest run or latest success, that time falls back to the latest one left; when none is left, the stored time stays, possibly older than the truth.
+- A kept Reasonlet that loses executions to the erase has them subtracted from its run counts. The counts are not recounted from the executions left, because they also hold runs whose records were pruned. When a removed run was the latest run or latest success, that time falls back to the latest one left. When none is left, `last_executed_at` falls back to the Reasonlet's `created_at`, and `last_success_at` to null, meaning unknown, even when `successes` still counts pruned successes. Keeping the stored time would keep the erased subject's own run time.
 - The whole erase is one transaction. It covers what exists when it takes its locks: a Reasonlet remembered while the erase runs is not erased by it, so run the erase again once the subject has stopped writing. A deadlock with a concurrent remember answers `Conflict`; retry it. An erase can also deadlock, rarely, with another erase or a prune: this happens when a third erase cuts a lineage between the moment one of them reads its depths and the moment it takes its locks, so the two order the rows they share by different depths. It answers `Conflict` too; retry it.
 - Counts of runs that were pruned before the erase stay in `runs` and `successes`, because nothing can identify those runs any more. They are bare integers with no link to a person, so they are anonymous totals, not personal data.
 
@@ -143,7 +143,8 @@ var pruned = await store.PruneAsync(
 ### Counters survive pruning
 
 - A pruned run still happened, so the `runs` and `successes` counters in a Reasonlet's metrics keep it.
-- `last_success_at` can be older than reality after pruning, because the run that set it may be gone and the column is never lowered. `last_executed_at` is what retention reads, and it is never null.
+- Pruning never changes `last_executed_at` or `last_success_at`: they keep the time of a run whose record is gone.
+- An erase can lower them, or set `last_success_at` to null, as described under [Erasure](#erasure). `last_executed_at` is what retention reads, and it is never null.
 
 ## Telemetry
 

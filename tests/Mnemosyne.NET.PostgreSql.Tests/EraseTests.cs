@@ -293,25 +293,67 @@ public sealed class EraseTests(PgVectorFixture fixture) : IClassFixture<PgVector
     }
 
     [Fact]
-    public async Task ErasingEveryRemainingRunKeepsTheStoredTimestamps()
+    public async Task ErasingEveryRemainingRunFallsBackToTheCreationTimeAndAnUnknownSuccess()
     {
-        // B's remember run is deleted along with its count, so A's two runs are all K has. Erasing them leaves no run
-        // to recompute from, and the stored timestamps stay: last_executed_at must not become null.
+        // B's remember run is deleted as a prune would delete it, so A's two runs are all K has, and the counters still
+        // hold B's run. Erasing A's runs leaves no run to recompute from. The stored times are A's own, so they must
+        // not stay: the last run falls back to K's creation, which keeps the column non-null, and the last success to
+        // null, although the counters still count B's pruned success.
         var store = await MigratedStoreAsync();
         var scope = PgVectorFixture.NewScope();
         var k = await RememberAsync(store, scope, "k", SubjectB);
         await AppendAsync(store, scope, k.Id, SubjectA);
         await AppendAsync(store, scope, k.Id, SubjectA);
         await Entries.ExecuteAsync(fixture.DataSource, "DELETE FROM mnemosyne.reasonlet_executions WHERE id = $1", k.Execution.Value);
-        await Entries.ExecuteAsync(
-            fixture.DataSource, "UPDATE mnemosyne.reasonlet_metrics SET runs = runs - 1, successes = successes - 1 WHERE reasonlet_id = $1", k.Id.Value);
-        var before = await TimestampsAsync(k.Id);
 
         var result = await store.EraseAsync(new ReasonletErasure(scope, SubjectA), Ct);
 
         Assert.Equal((0, 2), (result.Value.Reasonlets, result.Value.Executions));
-        Assert.Equal(before, await TimestampsAsync(k.Id));
-        Assert.Equal((0, 0), await MetricsAsync(k.Id));
+        Assert.Equal((1, 1), await MetricsAsync(k.Id));
+        Assert.Equal(
+            await Entries.ScalarAsync<DateTime>(fixture.DataSource, "SELECT created_at FROM mnemosyne.reasonlets WHERE id = $1", k.Id.Value),
+            await Entries.ScalarAsync<DateTime>(fixture.DataSource, "SELECT last_executed_at FROM mnemosyne.reasonlet_metrics WHERE reasonlet_id = $1", k.Id.Value));
+        Assert.True(await Entries.ScalarAsync<bool>(
+            fixture.DataSource, "SELECT last_success_at IS NULL FROM mnemosyne.reasonlet_metrics WHERE reasonlet_id = $1", k.Id.Value));
+    }
+
+    [Fact]
+    public async Task NoMetricsTimestampKeepsAnErasedRunsTime()
+    {
+        // K1 keeps only A's runs once B's remember run is pruned; K2 keeps B's runs, and A's are its latest run and its
+        // latest success; K3 keeps B's runs and A's failure is its latest run. After the erase no metrics row of the
+        // scope holds the time of any run the erase removed.
+        var store = await MigratedStoreAsync();
+        var scope = PgVectorFixture.NewScope();
+        var failure = new ReasonletOutcome(false, TimeSpan.FromMilliseconds(10), null);
+        var k1 = await RememberAsync(store, scope, "k1", SubjectB);
+        var k2 = await RememberAsync(store, scope, "k2", SubjectB);
+        var k3 = await RememberAsync(store, scope, "k3", SubjectB);
+        await AppendAsync(store, scope, k1.Id, SubjectA);
+        await AppendAsync(store, scope, k1.Id, SubjectA, failure);
+        await AppendAsync(store, scope, k2.Id, SubjectB);
+        await AppendAsync(store, scope, k2.Id, SubjectA);
+        await AppendAsync(store, scope, k3.Id, SubjectA);
+        await AppendAsync(store, scope, k3.Id, SubjectB, failure);
+        await AppendAsync(store, scope, k3.Id, SubjectA, failure);
+        await Entries.ExecuteAsync(fixture.DataSource, "DELETE FROM mnemosyne.reasonlet_executions WHERE id = $1", k1.Execution.Value);
+        var erasedTimes = await Entries.ScalarAsync<DateTime[]>(
+            fixture.DataSource,
+            "SELECT array_agg(executed_at) FROM mnemosyne.reasonlet_executions WHERE scope = $1 AND subject_id = $2",
+            scope.Value,
+            SubjectA);
+        Assert.Equal(5, erasedTimes.Length);
+
+        var result = await store.EraseAsync(new ReasonletErasure(scope, SubjectA), Ct);
+
+        Assert.Equal((0, 5), (result.Value.Reasonlets, result.Value.Executions));
+        Assert.Equal(0L, await Entries.ScalarAsync<long>(
+            fixture.DataSource,
+            "SELECT count(*) FROM mnemosyne.reasonlet_metrics WHERE scope = $1 AND (last_executed_at = ANY($2) OR last_success_at = ANY($2))",
+            scope.Value,
+            erasedTimes));
+        Assert.Equal(3L, await Entries.ScalarAsync<long>(
+            fixture.DataSource, "SELECT count(*) FROM mnemosyne.reasonlet_metrics WHERE scope = $1", scope.Value));
     }
 
     [Fact]
@@ -474,9 +516,10 @@ public sealed class EraseTests(PgVectorFixture fixture) : IClassFixture<PgVector
         return result.Value;
     }
 
-    private static async Task<ExecutionId> AppendAsync(ReasonletPostgreSqlStore store, ReasonletScope scope, ReasonletId id, string? subject)
+    private static async Task<ExecutionId> AppendAsync(
+        ReasonletPostgreSqlStore store, ReasonletScope scope, ReasonletId id, string? subject, ReasonletOutcome? outcome = null)
     {
-        var result = await store.AppendExecutionAsync(scope, id, Outcome, new ReasonletProvenance { Source = "test", SubjectId = subject }, Ct);
+        var result = await store.AppendExecutionAsync(scope, id, outcome ?? Outcome, new ReasonletProvenance { Source = "test", SubjectId = subject }, Ct);
         Assert.True(result.IsSuccess);
         return result.Value;
     }

@@ -188,10 +188,15 @@ internal sealed partial class ExecutionRepository(IAsyncDbConnection connection)
     /// The counters are subtracted, not recounted: retention prunes old executions and leaves their counts, so the
     /// executions left are not the whole history. A doomed Reasonlet's metrics row is not updated, because it cascades
     /// with the Reasonlet. A timestamp is recomputed only when the latest removed value is at or after the stored one,
-    /// as the latest remaining execution, or success, of the Reasonlet. When none remains the stored value stays,
-    /// possibly older than the truth, so that <c>last_executed_at</c> never becomes null. Every CTE of a statement
-    /// reads one snapshot, in which the deleted rows are still visible, so "remaining" leaves out the deleted ids
-    /// explicitly.
+    /// as the latest remaining execution, or success, of the Reasonlet. Every CTE of a statement reads one snapshot, in
+    /// which the deleted rows are still visible, so "remaining" leaves out the deleted ids explicitly.
+    /// </para>
+    /// <para>
+    /// When no qualifying execution remains, the stored value cannot stay: the latest execution is always the one that
+    /// set it, so it is the erased subject's own run time. <c>last_executed_at</c> falls back to the Reasonlet's
+    /// <c>created_at</c> instead, a true lower bound with no link to the subject, which keeps the column non-null: a
+    /// null would read as never used to retention. <c>last_success_at</c> falls back to null, meaning unknown, even
+    /// when <c>successes</c> still counts successes whose records were pruned.
     /// </para>
     /// </remarks>
     [Query("""
@@ -216,13 +221,13 @@ internal sealed partial class ExecutionRepository(IAsyncDbConnection connection)
                     THEN coalesce((SELECT max(e.executed_at) FROM mnemosyne.reasonlet_executions e
                                    WHERE e.scope = @scope AND e.reasonlet_id = m.reasonlet_id
                                      AND NOT EXISTS (SELECT 1 FROM deleted d WHERE d.id = e.id)),
-                                  m.last_executed_at)
+                                  (SELECT r.created_at FROM mnemosyne.reasonlets r
+                                   WHERE r.scope = @scope AND r.id = m.reasonlet_id))
                     ELSE m.last_executed_at END,
                 last_success_at = CASE WHEN x.last_success_at >= m.last_success_at
-                    THEN coalesce((SELECT max(e.executed_at) FROM mnemosyne.reasonlet_executions e
-                                   WHERE e.scope = @scope AND e.reasonlet_id = m.reasonlet_id AND e.success
-                                     AND NOT EXISTS (SELECT 1 FROM deleted d WHERE d.id = e.id)),
-                                  m.last_success_at)
+                    THEN (SELECT max(e.executed_at) FROM mnemosyne.reasonlet_executions e
+                          WHERE e.scope = @scope AND e.reasonlet_id = m.reasonlet_id AND e.success
+                            AND NOT EXISTS (SELECT 1 FROM deleted d WHERE d.id = e.id))
                     ELSE m.last_success_at END
             FROM removed x
             WHERE m.scope = @scope AND m.reasonlet_id = x.reasonlet_id
