@@ -117,9 +117,13 @@ internal sealed partial class ExecutionRepository(IAsyncDbConnection connection)
     /// locks hold every new execution of them off until commit, so the delete finds exactly the rows it locked.
     /// </para>
     /// <para>
-    /// The locks are taken in the CTE, which an <c>ORDER BY</c> sorts before <c>FOR UPDATE</c> locks each row, and the
-    /// delete then finds the locked rows by primary key from an array, as the prune's deletes do. An execution that
-    /// another erase deleted while this statement waited for it is skipped.
+    /// The locks are taken in the CTE, which an <c>ORDER BY</c> sorts before <c>FOR UPDATE</c> locks each row. The
+    /// delete finds the same rows through the <c>(scope, reasonlet_id)</c> index and keeps only those the CTE locked,
+    /// by a semi-join rather than an array, so no value has to hold every execution of a scope. A row the delete
+    /// reaches is one the CTE has already locked, whichever side of the join the planner runs first, so the
+    /// statement takes no execution lock out of id order. PostgreSQL 17 hashed the CTE for a large scope and probed it
+    /// in a nested loop for a small one, in testing. An execution that another erase deleted while this statement
+    /// waited for it is skipped.
     /// </para>
     /// </remarks>
     [Query("""
@@ -131,7 +135,8 @@ internal sealed partial class ExecutionRepository(IAsyncDbConnection connection)
             FOR UPDATE OF e
         ), deleted AS (
             DELETE FROM mnemosyne.reasonlet_executions e
-            WHERE e.id = ANY(ARRAY(SELECT l.id FROM locked l))
+            WHERE e.scope = @scope AND e.reasonlet_id = ANY(@doomedIds)
+              AND e.id IN (SELECT l.id FROM locked l)
             RETURNING e.id
         )
         SELECT count(*)::int FROM deleted
@@ -145,8 +150,8 @@ internal sealed partial class ExecutionRepository(IAsyncDbConnection connection)
     /// </summary>
     /// <remarks>
     /// The erase must delete exactly the executions it locked, not rows written since, and its later statements take
-    /// fresh snapshots. The table keeps that set on the server, so no id list travels to the client and back, and no
-    /// array has to hold every execution of a subject. <c>ON COMMIT DROP</c> drops it with the transaction, and a
+    /// fresh snapshots. The table keeps that set on the server, so no id list travels to the client and back, and the
+    /// later statements join to it, so no array value has to hold every execution of a subject. <c>ON COMMIT DROP</c> drops it with the transaction, and a
     /// rollback drops it too, so a pooled connection never keeps it. It is named in <c>pg_temp</c>, so no
     /// <c>search_path</c> can make a statement read another table of that name.
     /// </remarks>
@@ -205,14 +210,15 @@ internal sealed partial class ExecutionRepository(IAsyncDbConnection connection)
     /// is taken once these rows are held, so it sees every append to these Reasonlets that committed before, and an
     /// append that comes later waits for the erase. An <c>UPDATE</c> that waited for the rows itself would re-check
     /// only the row it waited for, with its first snapshot, and would recompute the timestamps from executions that
-    /// miss the append it waited for. The temporary table has no statistics, so its rows are read into an array and
-    /// the metrics rows found by primary key, rather than left to a join the planner would cost blind.
+    /// miss the append it waited for. The metrics rows are joined to the temporary table rather than read from an
+    /// array of its rows. The table has no statistics, but the planner sizes it from its pages, and in testing
+    /// PostgreSQL 17 probed the metrics primary key once per Reasonlet on a large table, and hashed a small one.
     /// </remarks>
     [Query("""
         SELECT coalesce(array_agg(l.reasonlet_id), '{}') FROM (
             SELECT m.reasonlet_id
             FROM mnemosyne.reasonlet_metrics m
-            WHERE m.reasonlet_id = ANY(ARRAY(SELECT DISTINCT t.reasonlet_id FROM pg_temp.mnemosyne_erased_executions t))
+            WHERE m.reasonlet_id IN (SELECT t.reasonlet_id FROM pg_temp.mnemosyne_erased_executions t)
               AND m.scope = @scope
               AND m.reasonlet_id <> ALL(@doomedIds)
             ORDER BY m.reasonlet_id
@@ -233,7 +239,8 @@ internal sealed partial class ExecutionRepository(IAsyncDbConnection connection)
     /// Reasonlets are deleted, so that no execution of a deleted Reasonlet is left to cascade uncounted. It deletes
     /// exactly the locked ids, so it takes no execution lock while it holds metrics rows, which keeps the erase's lock
     /// order. A subject's execution appended to a kept Reasonlet after the locks is not among them, and is neither
-    /// deleted nor subtracted.
+    /// deleted nor subtracted. It joins to the table rather than reading an array of its ids; in testing PostgreSQL 17
+    /// probed the executions primary key once per row on a large table.
     /// </para>
     /// <para>
     /// The counters are subtracted, not recounted: retention prunes old executions and leaves their counts, so the
@@ -253,7 +260,8 @@ internal sealed partial class ExecutionRepository(IAsyncDbConnection connection)
     [Query("""
         WITH deleted AS (
             DELETE FROM mnemosyne.reasonlet_executions e
-            WHERE e.scope = @scope AND e.id = ANY(ARRAY(SELECT t.id FROM pg_temp.mnemosyne_erased_executions t))
+            USING pg_temp.mnemosyne_erased_executions t
+            WHERE e.scope = @scope AND e.id = t.id
             RETURNING e.id, e.reasonlet_id, e.success, e.executed_at
         ), removed AS (
             SELECT reasonlet_id,
