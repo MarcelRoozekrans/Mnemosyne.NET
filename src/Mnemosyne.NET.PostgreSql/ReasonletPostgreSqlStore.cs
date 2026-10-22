@@ -151,13 +151,13 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
     /// </exception>
     public async ValueTask<Result<ReasonletReceipt, MnemosyneError>> RememberAsync(ReasonletStoreEntry entry, CancellationToken ct)
     {
+        ArgumentNullException.ThrowIfNull(entry);
         var migrated = await EnsureMigratedAsync(ct).ConfigureAwait(false);
         if (migrated.IsFailure)
         {
             return migrated.Error;
         }
 
-        ArgumentNullException.ThrowIfNull(entry);
         var valid = entry.Validate();
         if (valid.IsFailure)
         {
@@ -412,9 +412,11 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
     /// append never waits for a remember in the same lineage; it waits only for an erase that holds the Reasonlet,
     /// and a Reasonlet that erase deletes answers <see cref="MnemosyneErrorCode.NotFound"/>.
     /// </remarks>
+    /// <exception cref="ArgumentNullException"><paramref name="provenance"/> is null.</exception>
     public async ValueTask<Result<ExecutionId, MnemosyneError>> AppendExecutionAsync(
         ReasonletScope scope, ReasonletId id, ReasonletOutcome outcome, ReasonletProvenance provenance, CancellationToken ct)
     {
+        ArgumentNullException.ThrowIfNull(provenance);
         var migrated = await EnsureMigratedAsync(ct).ConfigureAwait(false);
         if (migrated.IsFailure)
         {
@@ -643,13 +645,13 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
     /// <exception cref="ArgumentNullException"><paramref name="erasure"/> is null.</exception>
     public async ValueTask<Result<ReasonletErasureResult, MnemosyneError>> EraseAsync(ReasonletErasure erasure, CancellationToken ct)
     {
+        ArgumentNullException.ThrowIfNull(erasure);
         var migrated = await EnsureMigratedAsync(ct).ConfigureAwait(false);
         if (migrated.IsFailure)
         {
             return migrated.Error;
         }
 
-        ArgumentNullException.ThrowIfNull(erasure);
         var valid = erasure.Validate();
         if (valid.IsFailure)
         {
