@@ -93,6 +93,10 @@ jobs:
             for project in $skipped; do
               echo "::notice::Skipping $project on Windows: it requires Docker, and the ubuntu leg runs it."
             done
+            if [ -z "$projects" ]; then
+              echo "::error::Every tests/*.Tests project requires Docker, so the windows leg would run nothing while the step exits 0."
+              exit 1
+            fi
           fi
           failed=""
           for project in $projects; do
