@@ -1,4 +1,6 @@
+using System.Globalization;
 using Mnemosyne.NET.Abstractions;
+using Npgsql;
 using Xunit;
 
 namespace Mnemosyne.NET.PostgreSql.Tests;
@@ -164,6 +166,58 @@ public sealed class SearchTests(PgVectorFixture fixture) : IClassFixture<PgVecto
         await Assert.ThrowsAnyAsync<OperationCanceledException>(
             async () => await store.SearchAsync(scope, new float[] { 1, 0, 0 }, null, 10, cancelled.Token));
     }
+
+    [Fact]
+    public async Task AScopeWithASmallShareOfTheTableStillGetsItsFullLimitThroughTheIndex()
+    {
+        // enable_seqscan is off and the btree indexes are dropped, so the planner has only the HNSW index left. A plain
+        // index scan would collect about ef_search nearest rows of the whole table and filter them by scope afterwards.
+        var dataSource = await fixture.CreateEmptyDatabaseAsync("-c enable_seqscan=off");
+        var store = new ReasonletPostgreSqlStore(dataSource, new MnemosynePostgreSqlOptions { Dimensions = 3 });
+        Assert.True((await store.MigrateAsync(Ct)).IsSuccess);
+        foreach (var index in new[] { "scope_status_intent", "scope_parent_id", "scope_content_hash", "scope_subject_id" })
+        {
+            await Entries.ExecuteAsync(dataSource, $"DROP INDEX mnemosyne.reasonlets_{index}");
+        }
+
+        var random = new Random(42);
+        var dominant = PgVectorFixture.NewScope();
+        var minority = PgVectorFixture.NewScope();
+        await SeedAsync(dataSource, dominant, 2000, random);
+        var minorityVectors = await SeedAsync(dataSource, minority, 60, random);
+        float[] query = [1f, 0.3f, -0.2f];
+
+        var result = await store.SearchAsync(minority, query, null, 50, Ct);
+
+        Assert.True(result.IsSuccess);
+        var expected = minorityVectors.OrderByDescending(v => Cosine(v.Vector, query)).Take(50).Select(v => v.Id).ToArray();
+        Assert.Equal(expected, result.Value.Select(c => c.Reasonlet.Id.Value));
+    }
+
+    private static async Task<List<(Guid Id, float[] Vector)>> SeedAsync(NpgsqlDataSource dataSource, ReasonletScope scope, int count, Random random)
+    {
+        var rows = Enumerable.Range(0, count)
+            .Select(_ => (Id: Guid.NewGuid(), Vector: new[] { Next(random), Next(random), Next(random) }))
+            .ToList();
+        await using var command = dataSource.CreateCommand(
+            "INSERT INTO mnemosyne.reasonlets (id, scope, name, intent, version, graph, content_hash, status, source, created_at, embedding) "
+            + "SELECT i, $2, 'n', 'intent', '1.0', $3, repeat('0', 64), 1, 'seed', now(), v::vector FROM unnest($1::uuid[], $4::text[]) AS t (i, v)");
+        command.Parameters.Add(new NpgsqlParameter { Value = rows.Select(r => r.Id).ToArray() });
+        command.Parameters.Add(new NpgsqlParameter { Value = scope.Value });
+        command.Parameters.Add(new NpgsqlParameter { Value = ReasonletGraphJson.Serialize(Entries.Graph()) });
+        command.Parameters.Add(new NpgsqlParameter
+        {
+            Value = rows.Select(r => string.Create(CultureInfo.InvariantCulture, $"[{r.Vector[0]:R},{r.Vector[1]:R},{r.Vector[2]:R}]")).ToArray(),
+        });
+        await command.ExecuteNonQueryAsync(Ct);
+        return rows;
+    }
+
+    private static float Next(Random random) => (float)((random.NextDouble() * 2) - 1);
+
+    private static double Cosine(float[] a, float[] b) =>
+        ((a[0] * b[0]) + (a[1] * b[1]) + (a[2] * b[2]))
+        / (Math.Sqrt((a[0] * a[0]) + (a[1] * a[1]) + (a[2] * a[2])) * Math.Sqrt((b[0] * b[0]) + (b[1] * b[1]) + (b[2] * b[2])));
 
     private async Task<(ReasonletPostgreSqlStore Store, ReasonletScope Scope)> MigratedAsync()
     {

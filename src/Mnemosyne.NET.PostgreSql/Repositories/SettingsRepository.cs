@@ -11,6 +11,10 @@ internal sealed partial class SettingsRepository(IAsyncDbConnection connection)
     [Query("SELECT to_regclass('mnemosyne.settings') IS NOT NULL")]
     public partial Task<bool> SettingsTableExistsAsync(CancellationToken ct);
 
+    /// <summary>The installed pgvector version, or null when the extension is missing.</summary>
+    [Query("SELECT extversion FROM pg_extension WHERE extname = 'vector'")]
+    public partial Task<string?> GetVectorVersionAsync(CancellationToken ct);
+
     [Query("SELECT value::int FROM mnemosyne.settings WHERE key = 'dimensions'")]
     public partial Task<int?> GetDimensionsAsync(CancellationToken ct);
 

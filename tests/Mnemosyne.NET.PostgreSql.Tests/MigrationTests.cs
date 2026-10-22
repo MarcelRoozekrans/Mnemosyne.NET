@@ -28,6 +28,34 @@ public sealed class MigrationTests(PgVectorFixture fixture) : IClassFixture<PgVe
     }
 
     [Fact]
+    public async Task AnOldPgVectorIsRejectedWithItsVersionAndTheMinimum()
+    {
+        var dataSource = await fixture.CreateEmptyDatabaseAsync();
+        var options = new MnemosynePostgreSqlOptions { Dimensions = 3 };
+        Assert.True((await new ReasonletPostgreSqlStore(dataSource, options).MigrateAsync(Ct)).IsSuccess);
+        await Entries.ExecuteAsync(dataSource, "UPDATE pg_extension SET extversion = '0.7.4' WHERE extname = 'vector'");
+
+        var result = await new ReasonletPostgreSqlStore(dataSource, options).MigrateAsync(Ct);
+
+        Assert.Equal(MnemosyneErrorCode.Validation, result.Error.Code);
+        Assert.Equal("pgvector 0.7.4 is installed, but the store needs pgvector 0.8.0 or later for iterative index scans.", result.Error.Message);
+    }
+
+    [Fact]
+    public async Task AMissingPgVectorIsRejected()
+    {
+        var dataSource = await fixture.CreateEmptyDatabaseAsync();
+        var options = new MnemosynePostgreSqlOptions { Dimensions = 3 };
+        Assert.True((await new ReasonletPostgreSqlStore(dataSource, options).MigrateAsync(Ct)).IsSuccess);
+        await Entries.ExecuteAsync(dataSource, "UPDATE pg_extension SET extname = 'vector_gone' WHERE extname = 'vector'");
+
+        var result = await new ReasonletPostgreSqlStore(dataSource, options).MigrateAsync(Ct);
+
+        Assert.Equal(MnemosyneErrorCode.Validation, result.Error.Code);
+        Assert.Contains("(not installed)", result.Error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task MigrateAppliesTheConfiguredHnswParameters()
     {
         var dataSource = await fixture.CreateEmptyDatabaseAsync();

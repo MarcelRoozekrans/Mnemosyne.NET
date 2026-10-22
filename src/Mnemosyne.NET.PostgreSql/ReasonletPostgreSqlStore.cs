@@ -22,6 +22,7 @@ namespace Mnemosyne.NET.PostgreSql;
 public sealed class ReasonletPostgreSqlStore : IReasonletStore
 {
     private const int MaxSearchLimit = 200;
+    private const int DefaultEfSearch = 40;
     private const string MigrationResourcePrefix = "Mnemosyne.NET.PostgreSql.Migrations.";
 
     private readonly NpgsqlDataSource _dataSource;
@@ -75,6 +76,14 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
         await using var connection = (await _dataSource.OpenConnectionAsync(ct).ConfigureAwait(false)).AsAsync();
         var source = new EmbeddedResourceMigrationSource(typeof(ReasonletPostgreSqlStore).Assembly, MigrationResourcePrefix);
         await new MigrationRunner(connection, source, new PostgresMigrationDialect()).RunAsync(ct).ConfigureAwait(false);
+
+        var vectorVersion = await new SettingsRepository(connection).GetVectorVersionAsync(ct).ConfigureAwait(false);
+        if (!PgVectorVersion.IsSupported(vectorVersion))
+        {
+            return new MnemosyneError(
+                MnemosyneErrorCode.Validation,
+                $"pgvector {vectorVersion ?? "(not installed)"} is installed, but the store needs pgvector {PgVectorVersion.Minimum} or later for iterative index scans.");
+        }
 
         await using var transaction = await connection.BeginTransactionAsync(ct).ConfigureAwait(false);
         var settings = new SettingsRepository(connection);
@@ -441,6 +450,11 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
         result.IsFailure ? result.Error with { Message = $"{name}.{result.Error.Message}" } : null;
 
     /// <inheritdoc />
+    /// <remarks>
+    /// Runs in one READ COMMITTED transaction with iterative HNSW scans, so a scope that holds a small share of the
+    /// table still gets up to <paramref name="limit"/> results, nearest first. Candidates at exactly equal distance
+    /// come back in an unspecified order: a second sort key could stop the index from serving the ordering.
+    /// </remarks>
     public async ValueTask<Result<IReadOnlyList<ReasonletCandidate>, MnemosyneError>> SearchAsync(
         ReasonletScope scope, ReadOnlyMemory<float> embedding, string? intent, int limit, CancellationToken ct)
     {
@@ -491,11 +505,38 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
         return null;
     }
 
+    /// <summary>
+    /// Makes the HNSW scan keep going until it has <paramref name="limit"/> rows that pass the scope, status and
+    /// intent filters. Without it the index returns about <c>hnsw.ef_search</c> nearest rows of the whole table
+    /// and the filters run afterwards, so a scope with a small share of the rows gets fewer rows than the limit.
+    /// </summary>
+    /// <remarks>
+    /// <c>strict_order</c> rather than <c>relaxed_order</c>, so results stay exactly nearest first.
+    /// <c>hnsw.max_scan_tuples</c> stays at its default (20,000), which bounds the work of a very selective scope.
+    /// <c>SET</c> takes no bind parameter, so <c>ef_search</c> is an integer that the limit check already bounded,
+    /// written with the invariant culture, as the dimension DDL is. <c>SET LOCAL</c> ends with the transaction.
+    /// </remarks>
+    private static async Task ApplyIterativeScanAsync(IAsyncDbConnection connection, IAsyncDbTransaction transaction, int limit, CancellationToken ct)
+    {
+        var command = connection.CreateCommand();
+        await using (command.ConfigureAwait(false))
+        {
+            command.Transaction = transaction;
+            command.CommandText = string.Create(
+                CultureInfo.InvariantCulture,
+                $"SET LOCAL hnsw.iterative_scan = strict_order; SET LOCAL hnsw.ef_search = {Math.Max(limit, DefaultEfSearch)};");
+            await command.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+        }
+    }
+
     private async Task<Result<IReadOnlyList<ReasonletCandidate>, MnemosyneError>> SearchCoreAsync(
         ReasonletScope scope, ReadOnlyMemory<float> embedding, string? intent, int limit, CancellationToken ct)
     {
         await using var connection = (await _dataSource.OpenConnectionAsync(ct).ConfigureAwait(false)).AsAsync();
-        var rows = await new ReasonletRepository(connection).SearchAsync(scope.Value, ToArray(embedding), intent, limit, ct).ConfigureAwait(false);
+        await using var transaction = await connection.BeginTransactionAsync(IsolationLevel.ReadCommitted, ct).ConfigureAwait(false);
+        await ApplyIterativeScanAsync(connection, transaction, limit, ct).ConfigureAwait(false);
+        var rows = await new ReasonletRepository(connection).SearchAsync(scope.Value, ToArray(embedding), intent, limit, transaction, ct).ConfigureAwait(false);
+        await transaction.CommitAsync(ct).ConfigureAwait(false);
         var candidates = new List<ReasonletCandidate>(rows.Count);
         foreach (var row in rows)
         {

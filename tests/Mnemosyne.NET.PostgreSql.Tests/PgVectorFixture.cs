@@ -29,8 +29,11 @@ public sealed class PgVectorFixture : IAsyncLifetime
 
     public static ReasonletScope NewScope() => new($"scope-{Guid.NewGuid():N}");
 
-    /// <summary>Creates a new, empty database in the container and returns a data source for it.</summary>
-    public async Task<NpgsqlDataSource> CreateEmptyDatabaseAsync()
+    /// <summary>
+    /// Creates a new, empty database in the container and returns a data source for it.
+    /// <paramref name="options"/> sets PostgreSQL session options, such as <c>-c enable_seqscan=off</c>.
+    /// </summary>
+    public async Task<NpgsqlDataSource> CreateEmptyDatabaseAsync(string? options = null)
     {
         var name = $"db_{Guid.NewGuid():N}";
         await using (var create = DataSource.CreateCommand($"CREATE DATABASE {name}"))
@@ -39,6 +42,11 @@ public sealed class PgVectorFixture : IAsyncLifetime
         }
 
         var builder = new NpgsqlConnectionStringBuilder(_container.GetConnectionString()) { Database = name };
+        if (options is not null)
+        {
+            builder.Options = options;
+        }
+
         var dataSource = new NpgsqlDataSourceBuilder(builder.ConnectionString).Build();
         _emptyDatabases.Add(dataSource);
         return dataSource;

@@ -19,7 +19,8 @@ internal sealed partial class ReasonletRepository(IAsyncDbConnection connection)
     /// <summary>
     /// The nearest Active Reasonlets of a scope to an embedding, nearest first, each with its similarity and execution
     /// metrics. The <c>ORDER BY</c> uses the bare distance operator so the HNSW index can serve it. The counts are cast
-    /// to <c>int</c> because <c>count</c> answers <c>bigint</c>. A null intent applies no intent filter.
+    /// to <c>int</c> because <c>count</c> answers <c>bigint</c>. A null intent applies no intent filter. Run it in a
+    /// transaction that has set the iterative-scan settings, or the index scan can return fewer rows than the limit.
     /// </summary>
     [Query("""
         SELECT r.id, r.scope, r.name, r.intent, r.version, r.graph, r.parent_id, r.status,
@@ -34,7 +35,8 @@ internal sealed partial class ReasonletRepository(IAsyncDbConnection connection)
         ORDER BY r.embedding <=> @embedding::vector
         LIMIT @limit
         """)]
-    public partial Task<List<CandidateRow>> SearchAsync(string scope, float[] embedding, string? intent, int limit, CancellationToken ct);
+    public partial Task<List<CandidateRow>> SearchAsync(
+        string scope, float[] embedding, string? intent, int limit, IAsyncDbTransaction transaction, CancellationToken ct);
 
     /// <summary>Locks a parent in its scope until the transaction ends. A parent in another scope reads as missing.</summary>
     [Query("""
