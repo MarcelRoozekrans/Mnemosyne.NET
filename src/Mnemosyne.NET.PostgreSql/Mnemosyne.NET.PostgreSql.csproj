@@ -2,8 +2,23 @@
   <PropertyGroup>
     <IsPackable>true</IsPackable>
     <IsAotCompatible>true</IsAotCompatible>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <Description>PostgreSQL + pgvector store for Reasonlets.</Description>
   </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="AdoNet.Async" />
+    <PackageReference Include="AdoNet.Async.Adapters" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+    <PackageReference Include="Npgsql" />
+    <PackageReference Include="ZeroAlloc.ORM" />
+    <PackageReference Include="ZeroAlloc.ORM.Generator" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Mnemosyne.NET.Tests" />
+    <InternalsVisibleTo Include="Mnemosyne.NET.PostgreSql.Tests" />
+  </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\Mnemosyne.NET.Abstractions\Mnemosyne.NET.Abstractions.csproj" />

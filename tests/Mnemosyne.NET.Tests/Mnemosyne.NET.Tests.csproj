@@ -19,5 +19,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Mnemosyne.NET.Abstractions\Mnemosyne.NET.Abstractions.csproj" />
+    <ProjectReference Include="..\..\src\Mnemosyne.NET.PostgreSql\Mnemosyne.NET.PostgreSql.csproj" />
   </ItemGroup>
 </Project>
