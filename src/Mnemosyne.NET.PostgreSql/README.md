@@ -4,8 +4,14 @@ PostgreSQL + pgvector store for Reasonlets: an `IReasonletStore` that keeps proc
 
 ## Requirements
 
-- PostgreSQL with **pgvector 0.8.0 or later**. Search uses iterative HNSW scans, which arrived in 0.8.0; `MigrateAsync` fails with a clear error on an older pgvector.
-- The database user must be able to run `CREATE EXTENSION IF NOT EXISTS vector` and create the `mnemosyne` schema, at least for the first migration.
+- **PostgreSQL 15 or later.** Every foreign key carries the scope, and the parent link uses `ON DELETE SET NULL (parent_id)`, a form PostgreSQL 15 introduced. `MigrateAsync` fails with a clear error on an older server.
+- **pgvector 0.8.0 or later.** Search uses iterative HNSW scans, which arrived in 0.8.0; `MigrateAsync` fails with a clear error on an older pgvector.
+
+### Connections and privileges
+
+- **`search_path`.** The store's tables are always named in full, but the `vector` type and its operators are not: they resolve through the connection's `search_path`. The schema the `vector` extension lives in (normally `public`) must be on the `search_path` of every connection the data source opens.
+- **`current_schema()`.** ZeroAlloc.ORM records the applied migrations in a `__zaorm_migrations` table in the connection's `current_schema()`, the first existing schema on the `search_path`. Keep it the same across runs. If it changes, `MigrateAsync` finds no history there and runs the migrations again, which fails because the tables exist.
+- **Privileges.** The role that runs `MigrateAsync` needs `CREATE` on the database, to create the `mnemosyne` schema, and `CREATE` on `current_schema()`, for the history table. The first migration runs `CREATE EXTENSION IF NOT EXISTS vector`, and `vector` is not a trusted extension, so that needs a superuser. A DBA can instead create the extension once, ahead of time; the migration then finds it and needs no superuser.
 
 ## Setup
 
@@ -47,7 +53,9 @@ var dataSource = new NpgsqlSlimDataSourceBuilder(connectionString)
 
 Call `MigrateAsync` once at startup. It is safe to run again: applied migrations are skipped. The first run records `Dimensions`, and a later run with a different value fails with a validation error, because mixing embedding models would corrupt similarity. A store method called before `MigrateAsync` fails with `Unavailable` ("schema not migrated").
 
-All tables live in the fixed `mnemosyne` schema. It is not configurable, and every statement names it in full, so the host's `search_path` does not matter.
+All tables live in the fixed `mnemosyne` schema. It is not configurable, and every statement names it in full. The `search_path` still matters for the `vector` type and the migration history; see [Connections and privileges](#connections-and-privileges).
+
+The first run also builds the HNSW index with `HnswM` and `HnswEfConstruction` and records them. A later run with different values fails with a validation error naming both, because the options apply only when the index is built; to change them, rebuild the index yourself.
 
 ## Options
 
@@ -72,8 +80,20 @@ The rules that follow from this:
 - Other subjects' Reasonlets survive. When a Reasonlet is erased, the `parent_id` of its children is cut, so each child becomes the top of its own lineage.
 - Run records follow their procedure. Every execution and feedback on an erased Reasonlet is removed with it, including other subjects' runs of it.
 - The result counts the Reasonlets deleted and every execution removed. A cut parent link is not counted.
-- The whole erase is one transaction. A deadlock with a concurrent remember answers `Conflict`; retry it.
+- A kept Reasonlet that loses executions to the erase gets its run counts recounted from the executions left.
+- The whole erase is one transaction. It covers what exists when it takes its locks: a Reasonlet remembered while the erase runs is not erased by it, so run the erase again once the subject has stopped writing. A deadlock with a concurrent remember answers `Conflict`; retry it.
+
+### What erasure leaves on disk
+
+`EraseAsync` deletes rows; it does not scrub storage. Until PostgreSQL vacuums the tables, the deleted rows' heap tuples, their TOASTed text (graphs, tags) and their HNSW index entries stay in the data files. The write-ahead log, streaming replicas, and backups keep the data for their own retention, whatever the store does. For GDPR erasure:
+
+- keep autovacuum on (it is by default) and, after a large erase, consider a manual `VACUUM` of the `mnemosyne` tables;
+- rotate backups and archived WAL on a schedule that meets your retention promise, because a restore brings erased data back.
 
 ## Searching
 
-`SearchAsync` returns up to `limit` candidates of one scope, nearest first. It uses iterative HNSW scans, so a scope with a small share of the table still gets its full limit. Candidates at exactly the same distance come back in an unspecified order.
+`SearchAsync` returns up to `limit` candidates of one scope, sorted exactly by distance; HNSW recall is approximate, so a near neighbour can occasionally be missed. It uses iterative HNSW scans, so a scope with a small share of the table usually still gets its full limit. The scan stops after `hnsw.max_scan_tuples` index tuples (20,000 by default), though, so a very small scope in a very large table can come back with fewer candidates than the limit. Candidates at exactly the same distance come back in an unspecified order.
+
+The embedding must have a nonzero, finite norm: cosine similarity is undefined for an all-zero vector, so `SearchAsync` and `RememberAsync` answer a validation error for one.
+
+Each candidate's metrics (runs, successes, last success) come from a counter row the store keeps in step with every execution it records, so search does not aggregate executions.
