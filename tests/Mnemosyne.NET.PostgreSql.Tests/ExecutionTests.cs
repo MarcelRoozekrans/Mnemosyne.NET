@@ -189,11 +189,26 @@ public sealed class ExecutionTests(PgVectorFixture fixture) : IClassFixture<PgVe
     }
 
     [Fact]
+    public async Task LastExecutedAtFollowsEveryExecution()
+    {
+        // The remember's execution sets it, and a later append, a failure here, moves it forward: it tracks any run,
+        // not only successes.
+        var (store, scope, receipt) = await RememberedAsync();
+        Assert.Equal(await ExecutedAtAsync(receipt.Execution), await LastExecutedAtAsync(receipt.Id));
+
+        var later = (await store.AppendExecutionAsync(scope, receipt.Id, Outcome, Entries.Provenance(), Ct)).Value;
+
+        var executedAt = await ExecutedAtAsync(later);
+        Assert.True(executedAt > await ExecutedAtAsync(receipt.Execution));
+        Assert.Equal(executedAt, await LastExecutedAtAsync(receipt.Id));
+    }
+
+    [Fact]
     public async Task TheMetricsCountEveryExecutionExactlyThroughRememberAppendAndASubjectErase()
     {
         // R is C's. C remembered it (a success), A re-ran it as an execution only (a failure), B appended a success
-        // and A appended the last success. R's child N has its own row. Erasing A keeps R and recounts it from the
-        // runs left: C's and B's.
+        // and A appended the last success. R's child N has its own row. Erasing A keeps R and subtracts A's two runs,
+        // which leaves the counts of C's and B's.
         var store = fixture.CreateStore();
         Assert.True((await store.MigrateAsync(Ct)).IsSuccess);
         var scope = PgVectorFixture.NewScope();
@@ -277,6 +292,12 @@ public sealed class ExecutionTests(PgVectorFixture fixture) : IClassFixture<PgVe
     private async Task<(int Runs, int Successes)> MetricsAsync(ReasonletId id) => (
         await Entries.ScalarAsync<int>(fixture.DataSource, "SELECT runs FROM mnemosyne.reasonlet_metrics WHERE reasonlet_id = $1", id.Value),
         await Entries.ScalarAsync<int>(fixture.DataSource, "SELECT successes FROM mnemosyne.reasonlet_metrics WHERE reasonlet_id = $1", id.Value));
+
+    private Task<DateTime> ExecutedAtAsync(ExecutionId id) => Entries.ScalarAsync<DateTime>(
+        fixture.DataSource, "SELECT executed_at::timestamp FROM mnemosyne.reasonlet_executions WHERE id = $1", id.Value);
+
+    private Task<DateTime> LastExecutedAtAsync(ReasonletId id) => Entries.ScalarAsync<DateTime>(
+        fixture.DataSource, "SELECT last_executed_at::timestamp FROM mnemosyne.reasonlet_metrics WHERE reasonlet_id = $1", id.Value);
 
     /// <summary>Asserts that every Reasonlet of the scope has a metrics row equal to an aggregate of its executions.</summary>
     private async Task AssertMetricsMatchTheExecutionsAsync(ReasonletScope scope) => Assert.Equal(

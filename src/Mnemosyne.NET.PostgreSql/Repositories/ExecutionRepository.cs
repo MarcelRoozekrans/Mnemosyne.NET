@@ -1,5 +1,4 @@
 using System.Data.Async;
-using Mnemosyne.NET.PostgreSql.Rows;
 using ZeroAlloc.ORM;
 
 namespace Mnemosyne.NET.PostgreSql.Repositories;
@@ -20,7 +19,8 @@ internal sealed partial class ExecutionRepository(IAsyncDbConnection connection)
     /// order an erase does: Reasonlet, then metrics. Left to the foreign-key check, the Reasonlet's lock would come at
     /// the end of the statement, after the metrics row, and an append could deadlock with an erase of its Reasonlet.
     /// The increment is one atomic <c>UPDATE</c> of the row, so concurrent executions never lose a count, and
-    /// <c>greatest</c>, which ignores nulls, keeps the latest success whatever order they commit in.
+    /// <c>greatest</c>, which ignores nulls, keeps the latest execution and the latest success whatever order they
+    /// commit in.
     /// </remarks>
     private const string InsertSql = """
         WITH r AS (
@@ -34,13 +34,14 @@ internal sealed partial class ExecutionRepository(IAsyncDbConnection connection)
             FROM r
             RETURNING reasonlet_id, scope, success, executed_at
         )
-        INSERT INTO mnemosyne.reasonlet_metrics AS m (reasonlet_id, scope, runs, successes, last_success_at)
-        SELECT reasonlet_id, scope, 1, CASE WHEN success THEN 1 ELSE 0 END, CASE WHEN success THEN executed_at END
+        INSERT INTO mnemosyne.reasonlet_metrics AS m (reasonlet_id, scope, runs, successes, last_success_at, last_executed_at)
+        SELECT reasonlet_id, scope, 1, CASE WHEN success THEN 1 ELSE 0 END, CASE WHEN success THEN executed_at END, executed_at
         FROM e
         ON CONFLICT (reasonlet_id) DO UPDATE
             SET runs = m.runs + 1,
                 successes = m.successes + EXCLUDED.successes,
-                last_success_at = greatest(m.last_success_at, EXCLUDED.last_success_at)
+                last_success_at = greatest(m.last_success_at, EXCLUDED.last_success_at),
+                last_executed_at = greatest(m.last_executed_at, EXCLUDED.last_executed_at)
         """;
 
     /// <summary>
@@ -103,75 +104,130 @@ internal sealed partial class ExecutionRepository(IAsyncDbConnection connection)
         CancellationToken ct);
 
     /// <summary>
-    /// Deletes a scope's executions that an erasure removes: every execution of the Reasonlets it deletes, whoever ran
-    /// them, and the subject's own executions of Reasonlets it keeps. Their feedback cascades. Answers how many it
-    /// deleted, each once even when it is both, and the kept Reasonlets that lost executions, whose metrics need a
-    /// recount.
+    /// Locks <c>FOR UPDATE</c>, in id order and until the transaction ends, a scope's executions that an erasure
+    /// removes, and answers their ids: every execution of <paramref name="doomedIds"/>, whoever ran it, and the
+    /// subject's own executions of the Reasonlets the erasure keeps. A scope erase passes a null
+    /// <paramref name="subjectId"/>, so only the doomed Reasonlets' executions are locked.
     /// </summary>
     /// <remarks>
-    /// The rows are locked in id order before any is deleted, so two erases that remove overlapping executions take
-    /// them in one order and cannot deadlock. A Reasonlet of the subject that is kept can only have been remembered
-    /// after the erasure took its locks, so its executions stay with it. Run it after
-    /// <see cref="ReasonletRepository.LockForErasureAsync"/> and before the Reasonlets are deleted, so that no
-    /// execution of a deleted Reasonlet is left to cascade uncounted.
+    /// <para>
+    /// The second of the erase's three lock steps: <see cref="ReasonletRepository.LockForErasureAsync"/>, which answers
+    /// <paramref name="doomedIds"/>, then this, then <see cref="LockMetricsForErasureAsync"/>. Reasonlets, then
+    /// executions, then metrics rows is the order in which the final delete of the Reasonlets cascades, since the
+    /// executions' foreign key fires before the metrics' one, and it is the order every erase takes. So two erases that
+    /// overlap meet first on executions, where one waits for the other before it holds any metrics row the other's
+    /// cascade needs, and they cannot deadlock. Locking a kept Reasonlet's metrics row before its executions would let
+    /// each erase hold a metrics row that the other's cascade waits for while it waits for the other's executions.
+    /// </para>
+    /// <para>
+    /// A Reasonlet of the subject that is not in <paramref name="doomedIds"/> was remembered after the erasure took its
+    /// Reasonlet locks. Its executions are left out, so it survives with them, as the erasure covers only what existed
+    /// when it took its locks. An execution that another erase deleted while this statement waited for it is skipped.
+    /// </para>
     /// </remarks>
     [Query("""
-        WITH doomed AS (
+        SELECT coalesce(array_agg(l.id), '{}') FROM (
             SELECT e.id
             FROM mnemosyne.reasonlet_executions e
             WHERE e.scope = @scope
-              AND (e.reasonlet_id = ANY(@reasonletIds)
+              AND (e.reasonlet_id = ANY(@doomedIds)
                    OR (e.subject_id = @subjectId
                        AND NOT EXISTS (SELECT 1 FROM mnemosyne.reasonlets r
                                        WHERE r.id = e.reasonlet_id AND r.scope = @scope AND r.subject_id = @subjectId)))
             ORDER BY e.id
             FOR UPDATE OF e
-        ), deleted AS (
-            DELETE FROM mnemosyne.reasonlet_executions e USING doomed d
-            WHERE e.id = d.id AND e.scope = @scope
-            RETURNING e.reasonlet_id
-        )
-        SELECT count(*)::int,
-               coalesce(array_agg(DISTINCT reasonlet_id) FILTER (WHERE reasonlet_id <> ALL(@reasonletIds)), '{}')
-        FROM deleted
+        ) l
         """)]
-    public partial Task<ErasedExecutionsRow?> DeleteForErasureAsync(
-        string scope, Guid[] reasonletIds, string? subjectId, IAsyncDbTransaction transaction, CancellationToken ct);
+    public partial Task<Guid[]> LockExecutionsForErasureAsync(
+        string scope, Guid[] doomedIds, string? subjectId, IAsyncDbTransaction transaction, CancellationToken ct);
 
     /// <summary>
-    /// Locks the metrics rows of kept Reasonlets <c>FOR UPDATE</c>, in id order, until the transaction ends, so that
-    /// no execution can be counted in them between the recount's snapshot and its write.
+    /// Locks <c>FOR UPDATE</c>, in <c>reasonlet_id</c> order and until the transaction ends, the metrics rows of the
+    /// Reasonlets outside <paramref name="doomedIds"/> that <paramref name="executionIds"/> belong to, and answers
+    /// their ids. Those are the kept Reasonlets whose counters <see cref="DeleteForErasureAsync"/> subtracts from; a
+    /// scope erase keeps none.
     /// </summary>
     /// <remarks>
-    /// A separate statement from <see cref="RecountMetricsAsync"/> on purpose. An <c>UPDATE</c> that waits for a row
-    /// lock re-checks only the row it waited for, with its first snapshot, so a recount that waited for a concurrent
-    /// append would overwrite the append's count with a total that misses it. Once this statement holds the rows,
-    /// an append waits for the erase instead, and the recount's fresh snapshot sees every execution committed before.
+    /// The third of the erase's lock steps, after <see cref="LockExecutionsForErasureAsync"/>, which answers
+    /// <paramref name="executionIds"/>; that method gives the lock order and why it is the cascade's. A separate
+    /// statement from the delete on purpose: the delete's snapshot is taken once these rows are held, so it sees every
+    /// append to these Reasonlets that committed before, and an append that comes later waits for the erase. An
+    /// <c>UPDATE</c> that waited for the rows itself would re-check only the row it waited for, with its first
+    /// snapshot, and would recompute the timestamps from executions that miss the append it waited for.
     /// </remarks>
     [Query("""
-        SELECT count(*)::int FROM (
-            SELECT 1 FROM mnemosyne.reasonlet_metrics
-            WHERE scope = @scope AND reasonlet_id = ANY(@reasonletIds)
-            ORDER BY reasonlet_id
-            FOR UPDATE
-        ) locked
+        SELECT coalesce(array_agg(l.reasonlet_id), '{}') FROM (
+            SELECT m.reasonlet_id
+            FROM mnemosyne.reasonlet_metrics m
+            WHERE m.scope = @scope
+              AND m.reasonlet_id <> ALL(@doomedIds)
+              AND m.reasonlet_id IN (SELECT e.reasonlet_id FROM mnemosyne.reasonlet_executions e
+                                     WHERE e.scope = @scope AND e.id = ANY(@executionIds))
+            ORDER BY m.reasonlet_id
+            FOR UPDATE OF m
+        ) l
         """)]
-    public partial Task<int?> LockMetricsAsync(string scope, Guid[] reasonletIds, IAsyncDbTransaction transaction, CancellationToken ct);
+    public partial Task<Guid[]> LockMetricsForErasureAsync(
+        string scope, Guid[] executionIds, Guid[] doomedIds, IAsyncDbTransaction transaction, CancellationToken ct);
 
-    /// <summary>Recounts the metrics rows of Reasonlets from their remaining executions. Run it after <see cref="LockMetricsAsync"/>.</summary>
-    [Command("""
-        UPDATE mnemosyne.reasonlet_metrics m
-        SET runs = c.runs, successes = c.successes, last_success_at = c.last_success_at
-        FROM (
-            SELECT k.id,
-                   count(e.id)::int AS runs,
-                   (count(e.id) FILTER (WHERE e.success))::int AS successes,
-                   max(e.executed_at) FILTER (WHERE e.success) AS last_success_at
-            FROM unnest(@reasonletIds::uuid[]) k (id)
-            LEFT JOIN mnemosyne.reasonlet_executions e ON e.scope = @scope AND e.reasonlet_id = k.id
-            GROUP BY k.id
-        ) c
-        WHERE m.scope = @scope AND m.reasonlet_id = c.id
+    /// <summary>
+    /// Deletes the executions that <see cref="LockExecutionsForErasureAsync"/> locked, and subtracts them from the
+    /// metrics rows of <paramref name="keptIds"/>, in one statement. Their feedback cascades. Answers how many it
+    /// deleted.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Run it after <see cref="LockMetricsForErasureAsync"/>, which answers <paramref name="keptIds"/>, and before the
+    /// Reasonlets are deleted, so that no execution of a deleted Reasonlet is left to cascade uncounted. It deletes
+    /// exactly the locked ids, so it takes no execution lock while it holds metrics rows, which keeps the erase's lock
+    /// order. A subject's execution appended to a kept Reasonlet after the locks is not among them, and is neither
+    /// deleted nor subtracted.
+    /// </para>
+    /// <para>
+    /// The counters are subtracted, not recounted: retention prunes old executions and leaves their counts, so the
+    /// executions left are not the whole history. A doomed Reasonlet's metrics row is not updated, because it cascades
+    /// with the Reasonlet. A timestamp is recomputed only when the latest removed value is at or after the stored one,
+    /// as the latest remaining execution, or success, of the Reasonlet. When none remains the stored value stays,
+    /// possibly older than the truth, so that <c>last_executed_at</c> never becomes null. Every CTE of a statement
+    /// reads one snapshot, in which the deleted rows are still visible, so "remaining" leaves out the deleted ids
+    /// explicitly.
+    /// </para>
+    /// </remarks>
+    [Query("""
+        WITH deleted AS (
+            DELETE FROM mnemosyne.reasonlet_executions e
+            WHERE e.scope = @scope AND e.id = ANY(@executionIds)
+            RETURNING e.id, e.reasonlet_id, e.success, e.executed_at
+        ), removed AS (
+            SELECT reasonlet_id,
+                   count(*)::int AS runs,
+                   (count(*) FILTER (WHERE success))::int AS successes,
+                   max(executed_at) AS last_executed_at,
+                   max(executed_at) FILTER (WHERE success) AS last_success_at
+            FROM deleted
+            WHERE reasonlet_id = ANY(@keptIds)
+            GROUP BY reasonlet_id
+        ), subtracted AS (
+            UPDATE mnemosyne.reasonlet_metrics m
+            SET runs = m.runs - x.runs,
+                successes = m.successes - x.successes,
+                last_executed_at = CASE WHEN x.last_executed_at >= m.last_executed_at
+                    THEN coalesce((SELECT max(e.executed_at) FROM mnemosyne.reasonlet_executions e
+                                   WHERE e.scope = @scope AND e.reasonlet_id = m.reasonlet_id
+                                     AND NOT EXISTS (SELECT 1 FROM deleted d WHERE d.id = e.id)),
+                                  m.last_executed_at)
+                    ELSE m.last_executed_at END,
+                last_success_at = CASE WHEN x.last_success_at >= m.last_success_at
+                    THEN coalesce((SELECT max(e.executed_at) FROM mnemosyne.reasonlet_executions e
+                                   WHERE e.scope = @scope AND e.reasonlet_id = m.reasonlet_id AND e.success
+                                     AND NOT EXISTS (SELECT 1 FROM deleted d WHERE d.id = e.id)),
+                                  m.last_success_at)
+                    ELSE m.last_success_at END
+            FROM removed x
+            WHERE m.scope = @scope AND m.reasonlet_id = x.reasonlet_id
+        )
+        SELECT count(*)::int FROM deleted
         """)]
-    public partial Task<int> RecountMetricsAsync(string scope, Guid[] reasonletIds, IAsyncDbTransaction transaction, CancellationToken ct);
+    public partial Task<int?> DeleteForErasureAsync(
+        string scope, Guid[] executionIds, Guid[] keptIds, IAsyncDbTransaction transaction, CancellationToken ct);
 }

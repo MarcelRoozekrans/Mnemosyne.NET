@@ -80,7 +80,7 @@ The rules that follow from this:
 - Other subjects' Reasonlets survive. When a Reasonlet is erased, the `parent_id` of its children is cut, so each child becomes the top of its own lineage.
 - Run records follow their procedure. Every execution and feedback on an erased Reasonlet is removed with it, including other subjects' runs of it.
 - The result counts the Reasonlets deleted and every execution removed. A cut parent link is not counted.
-- A kept Reasonlet that loses executions to the erase gets its run counts recounted from the executions left.
+- A kept Reasonlet that loses executions to the erase has them subtracted from its run counts. The counts are not recounted from the executions left, because they also hold runs whose records were pruned. When a removed run was the latest run or latest success, that time falls back to the latest one left; when none is left, the stored time stays, possibly older than the truth.
 - The whole erase is one transaction. It covers what exists when it takes its locks: a Reasonlet remembered while the erase runs is not erased by it, so run the erase again once the subject has stopped writing. A deadlock with a concurrent remember answers `Conflict`; retry it.
 
 ### What erasure leaves on disk

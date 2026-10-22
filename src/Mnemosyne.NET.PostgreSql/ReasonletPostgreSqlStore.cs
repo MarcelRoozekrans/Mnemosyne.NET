@@ -650,11 +650,15 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
     /// <remarks>
     /// One transaction at READ COMMITTED. An erasure by subject deletes the subject's Reasonlets in the scope with
     /// every execution and feedback on them, other subjects' runs included, then the subject's executions on the
-    /// Reasonlets it keeps, whose metrics it recounts from the executions left. Other subjects' children of a deleted
+    /// Reasonlets it keeps, whose metrics it subtracts them from. It subtracts rather than recounts because the
+    /// counters also hold runs whose records retention has pruned. A timestamp the removed runs set falls back to the
+    /// latest run left, or stays as stored when none is left. Other subjects' children of a deleted
     /// Reasonlet survive with a null parent, each the top of its own lineage. The counts are of rows removed, each
     /// once; a cut lineage link is not a removal. The erase covers what exists when it takes its locks: a Reasonlet
-    /// remembered while it runs is not erased by it. The rows are locked deepest first, the order a remember's path
-    /// locks take, so an erase waits behind a remember rather than deadlocking with it; a deadlock that still
+    /// remembered while it runs is not erased by it. The Reasonlets are locked deepest first, the order a remember's
+    /// path locks take, so an erase waits behind a remember rather than deadlocking with it. Then come the executions
+    /// it removes, then the metrics rows it subtracts from: the order the Reasonlets' delete cascades in, so two
+    /// overlapping erases take their rows in one order and complete. A deadlock that still
     /// happens, with a remember that raced the lock walk or with a hand-written transaction, answers
     /// <see cref="MnemosyneErrorCode.Conflict"/>.
     /// </remarks>
@@ -687,20 +691,19 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
         var executions = new ExecutionRepository(connection);
 
         // Lock first, deepest first, and keep the ids: the later statements take fresh snapshots, and must delete the
-        // set that was locked, not Reasonlets remembered since. The executions go before the Reasonlets, so that none
-        // is left to cascade uncounted. The locks go Reasonlets, then executions, then metrics rows, each in a fixed
-        // order, and so do the cascades of the final delete.
+        // set that was locked, not rows written since. The locks go Reasonlets, then executions, then the metrics rows
+        // of the kept Reasonlets that lose runs, each in a fixed order. That is the order the final delete's cascades
+        // take, so overlapping erases meet on the same rows in the same order and cannot deadlock. The delete then
+        // takes its snapshot after the metrics locks, so it sees every append that committed before, and it goes
+        // before the Reasonlets, so that no execution is left to cascade uncounted. A scope erase keeps no Reasonlet,
+        // so it locks no metrics row.
         var doomed = await reasonlets.LockForErasureAsync(scope, erasure.SubjectId, transaction, ct).ConfigureAwait(false);
-        var erased = (await executions.DeleteForErasureAsync(scope, doomed, erasure.SubjectId, transaction, ct).ConfigureAwait(false))!;
-        if (erased.Recount.Length > 0)
-        {
-            await executions.LockMetricsAsync(scope, erased.Recount, transaction, ct).ConfigureAwait(false);
-            await executions.RecountMetricsAsync(scope, erased.Recount, transaction, ct).ConfigureAwait(false);
-        }
-
+        var executionIds = await executions.LockExecutionsForErasureAsync(scope, doomed, erasure.SubjectId, transaction, ct).ConfigureAwait(false);
+        var kept = await executions.LockMetricsForErasureAsync(scope, executionIds, doomed, transaction, ct).ConfigureAwait(false);
+        var erased = await executions.DeleteForErasureAsync(scope, executionIds, kept, transaction, ct).ConfigureAwait(false);
         var removed = await reasonlets.DeleteAsync(scope, doomed, transaction, ct).ConfigureAwait(false);
         await transaction.CommitAsync(ct).ConfigureAwait(false);
-        return new ReasonletErasureResult { Reasonlets = removed, Executions = erased.Count };
+        return new ReasonletErasureResult { Reasonlets = removed, Executions = erased.GetValueOrDefault() };
     }
 
     /// <summary>
