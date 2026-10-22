@@ -64,13 +64,13 @@ public interface IReasonletMemory
     /// <returns>Success, or the error.</returns>
     ValueTask<UnitResult<MnemosyneError>> RecordFeedbackAsync(ReasonletScope scope, ExecutionId execution, ReasonletFeedback feedback, CancellationToken ct);
 
-    /// <summary>Erases Reasonlets from a scope.</summary>
+    /// <summary>Erases a scope's Reasonlets and executions, or only those of one subject.</summary>
     /// <remarks>
     /// Error codes: <see cref="MnemosyneErrorCode.Validation"/> when the erasure breaks an invariant,
     /// <see cref="MnemosyneErrorCode.Unavailable"/> when the backing store fails.
     /// </remarks>
     /// <param name="erasure">What to erase.</param>
     /// <param name="ct">The cancellation token.</param>
-    /// <returns>The number of Reasonlets removed.</returns>
-    ValueTask<Result<int, MnemosyneError>> EraseAsync(ReasonletErasure erasure, CancellationToken ct);
+    /// <returns>The numbers of Reasonlets and executions removed.</returns>
+    ValueTask<Result<ReasonletErasureResult, MnemosyneError>> EraseAsync(ReasonletErasure erasure, CancellationToken ct);
 }

@@ -59,11 +59,28 @@ public class ContractShapeTests
     [InlineData(typeof(ReasonletDefinition))]
     [InlineData(typeof(ReasonletProvenance))]
     [InlineData(typeof(ReasonletQuery))]
+    [InlineData(typeof(ReasonletErasureResult))]
     public void GrowableRecordsAreInitOnly(Type record)
     {
         var constructors = record.GetConstructors();
         Assert.Single(constructors);
         Assert.Empty(constructors[0].GetParameters());
+    }
+
+    [Theory]
+    [InlineData(typeof(IReasonletMemory))]
+    [InlineData(typeof(IReasonletStore))]
+    public void EraseAsyncReturnsAnErasureResult(Type contract) =>
+        Assert.Equal(
+            typeof(ValueTask<Result<ReasonletErasureResult, MnemosyneError>>),
+            contract.GetMethod("EraseAsync")!.ReturnType);
+
+    [Fact]
+    public void ErasureResult_CarriesCounts()
+    {
+        var result = new ReasonletErasureResult { Reasonlets = 2, Executions = 5 };
+        Assert.Equal(2, result.Reasonlets);
+        Assert.Equal(5, result.Executions);
     }
 
     [Fact]
