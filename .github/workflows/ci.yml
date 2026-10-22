@@ -69,6 +69,11 @@ jobs:
       # VSTest filter under Microsoft.Testing.Platform (MNEMO0001) because it is silently ignored.
       # Every tests/*.Tests project runs on its own so a failure names the project, and all of
       # them run before the step fails so one break does not hide the next.
+      #
+      # Docker tier: a project whose csproj declares the RequiresDocker property starts Linux
+      # containers, which Windows runners cannot host, so the windows leg skips it and the ubuntu
+      # leg runs it. Codecov merges both legs' coverage. RepoConventionsTests asserts that every
+      # project using Testcontainers declares the property and that this step selects on it.
       - name: Test
         # MSBuild reads the variable as the TestingPlatformCommandLineArguments property, which
         # dotnet test hands to every test app: one Cobertura file per project lands next to its
@@ -81,6 +86,13 @@ jobs:
           if [ -z "$projects" ]; then
             echo "::error::No tests/*.Tests project found, so nothing would run while the step exits 0."
             exit 1
+          fi
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            skipped=$(echo "$projects" | xargs -r grep -l '<RequiresDocker>true</RequiresDocker>' || true)
+            projects=$(echo "$projects" | xargs -r grep -L '<RequiresDocker>true</RequiresDocker>' || true)
+            for project in $skipped; do
+              echo "::notice::Skipping $project on Windows: it requires Docker, and the ubuntu leg runs it."
+            done
           fi
           failed=""
           for project in $projects; do
