@@ -40,4 +40,6 @@ internal static class TestData
         Outcome = new ReasonletOutcome(true, TimeSpan.FromSeconds(1), 0.5),
         Provenance = Provenance(),
     };
+
+    public static ReasonletStoreEntry StoreEntry() => new(Capture(), "intent", "name", new[] { 0.1f, 0.2f, 0.3f });
 }

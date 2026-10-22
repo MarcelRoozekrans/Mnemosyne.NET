@@ -8,7 +8,7 @@ public interface IReasonletStore
     /// <summary>Stores an entry, making the three-way ParentId decision atomically.</summary>
     /// <remarks>
     /// The store decides between a new Reasonlet, an execution only and a new version in one atomic step.
-    /// Error codes: <see cref="MnemosyneErrorCode.Validation"/> when an argument breaks an invariant, such as a <c>default</c> scope or ID,
+    /// Error codes: <see cref="MnemosyneErrorCode.Validation"/> when the entry fails <see cref="ReasonletStoreEntry.Validate"/>,
     /// <see cref="MnemosyneErrorCode.NotFound"/> when the parent does not exist in the scope (including one that exists only in another scope),
     /// <see cref="MnemosyneErrorCode.Conflict"/> when the write loses a race the store detects,
     /// <see cref="MnemosyneErrorCode.Unavailable"/> when the backing store fails.

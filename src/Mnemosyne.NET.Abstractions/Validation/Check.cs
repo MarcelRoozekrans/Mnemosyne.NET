@@ -32,6 +32,26 @@ internal static class Check
         where TEnum : struct, Enum =>
         Enum.IsDefined(value) ? Ok() : Fail(path, "must be a defined enum value");
 
+    public static UnitResult<MnemosyneError> NotEmpty(ReadOnlyMemory<float> value, string path) =>
+        value.IsEmpty ? Fail(path, "must not be empty") : Ok();
+
+    public static UnitResult<MnemosyneError> AllFinite(ReadOnlyMemory<float> value, string path)
+    {
+        var span = value.Span;
+        for (var i = 0; i < span.Length; i++)
+        {
+            if (!float.IsFinite(span[i]))
+            {
+                return Fail($"{path}[{i}]", "must be a finite number");
+            }
+        }
+
+        return Ok();
+    }
+
+    public static UnitResult<MnemosyneError> MatchesWhenPresent(string value, string? other, string path, string otherPath) =>
+        other is null || string.Equals(value, other, StringComparison.Ordinal) ? Ok() : Fail(path, $"must equal {otherPath} when that is set");
+
     public static UnitResult<MnemosyneError> NotNull(object? value, string path) =>
         value is null ? Fail(path, "must not be null") : Ok();
 
