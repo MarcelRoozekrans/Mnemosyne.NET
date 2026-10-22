@@ -24,7 +24,7 @@ Design: [roadmap design](../superpowers/specs/2026-10-21-roadmap-design.md), bui
 **Goal:** Records, the scope and provenance model, and the store and selector interfaces in `Mnemosyne.NET.Abstractions`.
 **Surface:** Backend
 **HelpWanted:** no
-**Plan:** _to be written_
+**Plan:** `docs/superpowers/plans/2026-10-22-phase-1.2-abstractions.md`
 
 ### Phase 1.3: Graph JSON schema v1 [status: pending]
 **Goal:** A minimal, versioned node-and-edge schema that Mnemosyne owns and callers may extend.
