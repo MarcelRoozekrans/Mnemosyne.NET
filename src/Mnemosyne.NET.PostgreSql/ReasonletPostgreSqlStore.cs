@@ -784,7 +784,9 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
             do
             {
                 deleted = await RunPruneBatchAsync(
-                    (connection, transaction) => new RetentionRepository(connection).DeleteOldExecutionsAsync(scope, cutoff, batchSize, transaction, ct),
+                    (connection, transaction) => scope is null
+                        ? new RetentionRepository(connection).DeleteOldExecutionsAsync(cutoff, batchSize, transaction, ct)
+                        : new RetentionRepository(connection).DeleteOldExecutionsInScopeAsync(scope, cutoff, batchSize, transaction, ct),
                     ct).ConfigureAwait(false);
                 progress.Executions += deleted;
             }

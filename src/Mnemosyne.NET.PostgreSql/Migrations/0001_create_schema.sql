@@ -65,8 +65,13 @@ CREATE INDEX reasonlet_executions_scope_subject_id ON mnemosyne.reasonlet_execut
 -- The foreign key's cascade and the erase, which recomputes a kept Reasonlet's timestamps from the executions it
 -- leaves, look executions up by Reasonlet.
 CREATE INDEX reasonlet_executions_scope_reasonlet_id ON mnemosyne.reasonlet_executions (scope, reasonlet_id);
--- Retention deletes the executions older than a cutoff, across scopes, so it finds them by executed_at.
+-- Retention deletes the executions older than a cutoff, oldest first. A prune of every scope finds them by
+-- executed_at alone; a prune of one scope, the usual multi-tenant case, finds them by scope and executed_at, so it
+-- never reads another scope's runs. Both are needed: PostgreSQL 17 has no skip scan to serve the first from the second.
+-- The scoped index carries the id so the prune reads its candidates from the index alone. Without it the planner
+-- preferred walking executed_at, whose order matches the heap's, and filtering out the other scopes' rows.
 CREATE INDEX reasonlet_executions_executed_at ON mnemosyne.reasonlet_executions (executed_at);
+CREATE INDEX reasonlet_executions_scope_executed_at ON mnemosyne.reasonlet_executions (scope, executed_at) INCLUDE (id);
 
 -- One row per execution: recording feedback again replaces it.
 CREATE TABLE mnemosyne.reasonlet_feedback (

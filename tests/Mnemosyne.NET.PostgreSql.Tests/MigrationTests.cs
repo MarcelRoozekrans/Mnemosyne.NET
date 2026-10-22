@@ -144,6 +144,7 @@ public sealed class MigrationTests(PgVectorFixture fixture) : IClassFixture<PgVe
         Assert.Equal(
             [
                 "reasonlet_executions: USING btree (executed_at)",
+                "reasonlet_executions: USING btree (scope, executed_at) INCLUDE (id)",
                 "reasonlet_executions: USING btree (scope, id)",
                 "reasonlet_executions: USING btree (scope, reasonlet_id)",
                 "reasonlet_executions: USING btree (scope, subject_id)",
