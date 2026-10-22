@@ -313,8 +313,13 @@ public sealed class TelemetryTests(PgVectorFixture fixture) : IClassFixture<PgVe
         Assert.True((await store.EraseAsync(new ReasonletErasure(scope, subject), Ct)).IsSuccess);
         Assert.True((await store.PruneAsync(new ReasonletRetention { Scope = scope, ExecutionsOlderThan = FiveDays }, Ct)).IsSuccess);
 
+        // A failure result too: the same user data, with an embedding of the wrong dimension.
+        var invalid = await store.RememberAsync(entry with { Embedding = new float[] { 1f, 0.5f } }, Ct);
+        Assert.Equal(MnemosyneErrorCode.Validation, invalid.Error.Code);
+
         var activities = capture.Activities;
-        Assert.Equal(7, activities.Count);
+        Assert.Equal(8, activities.Count);
+        Assert.Equal("Validation", activities[^1].GetTagItem("error.type"));
         var measurements = capture.Measurements;
         Assert.NotEmpty(measurements);
         var emitted = new List<string?>();
@@ -322,6 +327,14 @@ public sealed class TelemetryTests(PgVectorFixture fixture) : IClassFixture<PgVe
         {
             emitted.Add(activity.DisplayName);
             emitted.Add(activity.OperationName);
+            emitted.Add(activity.StatusDescription);
+            emitted.Add(activity.TraceStateString);
+            foreach (var link in activity.Links)
+            {
+                emitted.Add(link.Context.TraceState);
+                emitted.AddRange(Flatten(link.Tags ?? []));
+            }
+
             emitted.AddRange(Flatten(activity.TagObjects));
             emitted.AddRange(activity.Baggage.SelectMany(b => new[] { b.Key, b.Value }));
             foreach (var recorded in activity.Events)

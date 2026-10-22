@@ -11,7 +11,7 @@ namespace Mnemosyne.NET.PostgreSql.Tests;
 /// </summary>
 /// <remarks>
 /// Listeners are global, so a test in another class that runs at the same time is heard too. The capture starts a
-/// parent activity, which becomes <see cref="Activity.Current"/> for the rest of the test and flows into every call it
+/// parent activity in a new random trace, never one inherited from an ambient activity, which becomes <see cref="Activity.Current"/> for the rest of the test and flows into every call it
 /// awaits, and it keeps only what belongs to that trace: an activity by its <see cref="Activity.TraceId"/>, and a
 /// measurement by the trace of <see cref="Activity.Current"/> when it is recorded. A measurement callback runs
 /// synchronously on the recording call, inside that call's execution context, so it sees the trace of the test that
@@ -19,6 +19,7 @@ namespace Mnemosyne.NET.PostgreSql.Tests;
 /// </remarks>
 internal sealed class TelemetryCapture : IDisposable
 {
+    private readonly Activity? _ambient;
     private readonly Activity _parent;
     private readonly ActivityListener _activityListener;
     private readonly MeterListener _meterListener;
@@ -54,8 +55,10 @@ internal sealed class TelemetryCapture : IDisposable
         _meterListener.SetMeasurementEventCallback<int>((instrument, value, tags, _) => Record(instrument, value, tags));
         _meterListener.SetMeasurementEventCallback<double>((instrument, value, tags, _) => Record(instrument, value, tags));
 
-        // The parent first, so that nothing is heard before there is a trace to match.
-        _parent = new Activity("telemetry-test").Start();
+        // The parent first, so that nothing is heard before there is a trace to match. Its trace is new and random rather
+        // than inherited from an ambient activity the test host may have set, which every test would share.
+        _ambient = Activity.Current;
+        _parent = new Activity("telemetry-test").SetParentId(ActivityTraceId.CreateRandom(), ActivitySpanId.CreateRandom()).Start();
         ActivitySource.AddActivityListener(_activityListener);
         _meterListener.Start();
     }
@@ -74,6 +77,7 @@ internal sealed class TelemetryCapture : IDisposable
         _meterListener.Dispose();
         _activityListener.Dispose();
         _parent.Stop();
+        Activity.Current = _ambient;
     }
 
     private void Record(Instrument instrument, double value, ReadOnlySpan<KeyValuePair<string, object?>> tags)

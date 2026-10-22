@@ -52,6 +52,23 @@ public sealed class StoreTelemetryTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task ACaptureIgnoresAnAmbientActivity()
+    {
+        // Two captures under one ambient activity, as a test host might set, must still hear only their own calls.
+        using var ambient = new Activity("host").Start();
+        using (var first = new TelemetryCapture())
+        {
+            using var second = new TelemetryCapture();
+            await StoreTelemetry.RunAsync("get", _ => ValueTask.FromResult(1), _ => null);
+
+            Assert.Empty(first.Activities);
+            Assert.NotEqual(ambient.TraceId, Assert.Single(second.Activities).TraceId);
+        }
+
+        Assert.Same(ambient, Activity.Current);
+    }
+
+    [Fact]
     public async Task AFailureResultSetsTheErrorType()
     {
         using var capture = new TelemetryCapture();
