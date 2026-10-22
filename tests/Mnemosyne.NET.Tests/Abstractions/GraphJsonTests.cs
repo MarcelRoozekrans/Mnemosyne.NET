@@ -254,6 +254,52 @@ public class GraphJsonTests
         Assert.StartsWith(path + "[\"deep.value\"]: ", error.Message);
     }
 
+    /// <summary>
+    /// The innermost empty array adds a level the reader counts, unlike the scalar in the test above, so the reader
+    /// rejects the value before a graph exists and the path is a JSON path.
+    /// </summary>
+    [Fact]
+    public void PropertyValueOneLevelTooDeepEndingInEmptyArray_FailsWhileReadingWithJsonPath()
+    {
+        var levels = ReasonletGraphLimits.MaxPropertyDepth + 1;
+        var deep = """{"deep.value":""" + new string('[', levels) + new string(']', levels) + "}";
+        var json = """{"nodes":[{"id":"a","type":"step"}],"edges":[{"from":"a","to":"a","properties":""" + deep + """}],"schemaVersion":1}""";
+
+        var error = AssertInvalid(json);
+
+        Assert.StartsWith("$.edges[0].properties", error.Message);
+    }
+
+    [Fact]
+    public void Serialize_UndefinedPropertyValue_ThrowsInvalidOperation()
+    {
+        var graph = new ReasonletGraph
+        {
+            Nodes = [new ReasonletNode { Id = "a", Type = "step" }],
+            Edges = [],
+            SchemaVersion = 1,
+            Properties = new Dictionary<string, JsonElement> { ["a.b"] = default },
+        };
+
+        Assert.Throws<InvalidOperationException>(() => ReasonletGraphJson.Serialize(graph));
+    }
+
+    [Fact]
+    public void Serialize_PastDepthLimit_ThrowsJsonException()
+    {
+        var levels = ReasonletGraphJson.MaxDepth;
+        var graph = new ReasonletGraph
+        {
+            Nodes = [new ReasonletNode { Id = "a", Type = "step" }],
+            Edges = [],
+            SchemaVersion = 1,
+            Properties = new Dictionary<string, JsonElement> { ["a.b"] = Json(new string('[', levels) + new string(']', levels)) },
+        };
+
+        Assert.True(graph.Validate().IsFailure);
+        Assert.Throws<JsonException>(() => ReasonletGraphJson.Serialize(graph));
+    }
+
     [Fact]
     public void EscapedLoneSurrogateInPropertyValue_Fails()
     {
