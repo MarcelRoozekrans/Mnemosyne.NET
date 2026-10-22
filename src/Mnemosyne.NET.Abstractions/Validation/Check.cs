@@ -28,6 +28,10 @@ internal static class Check
     public static UnitResult<MnemosyneError> NotDefault(ExecutionId id, string path) =>
         id.IsDefault ? Fail(path, "must not be the default id") : Ok();
 
+    public static UnitResult<MnemosyneError> Defined<TEnum>(TEnum value, string path)
+        where TEnum : struct, Enum =>
+        Enum.IsDefined(value) ? Ok() : Fail(path, "must be a defined enum value");
+
     public static UnitResult<MnemosyneError> NotNull(object? value, string path) =>
         value is null ? Fail(path, "must not be null") : Ok();
 

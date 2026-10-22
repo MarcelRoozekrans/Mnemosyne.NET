@@ -11,7 +11,7 @@ namespace Mnemosyne.NET.Abstractions;
 /// <param name="Graph">The graph. Must not be null.</param>
 /// <param name="ParentId">The optional parent Reasonlet. When present it must not be the default id.</param>
 /// <param name="Provenance">Where the Reasonlet came from. Must not be null.</param>
-/// <param name="Status">The lifecycle status.</param>
+/// <param name="Status">The lifecycle status. Must be a defined value.</param>
 /// <param name="CreatedAt">When the Reasonlet was created.</param>
 public sealed record ReasonletDefinition(
     ReasonletId Id,
@@ -37,5 +37,6 @@ public sealed record ReasonletDefinition(
         () => Check.Nested(Graph.Validate(), nameof(Graph)),
         () => ParentId is { } parent ? Check.NotDefault(parent, nameof(ParentId)) : UnitResult<MnemosyneError>.Success(),
         () => Check.NotNull(Provenance, nameof(Provenance)),
-        () => Check.Nested(Provenance.Validate(), nameof(Provenance)));
+        () => Check.Nested(Provenance.Validate(), nameof(Provenance)),
+        () => Check.Defined(Status, nameof(Status)));
 }

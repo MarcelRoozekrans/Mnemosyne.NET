@@ -118,4 +118,14 @@ public class CheckTests
 
     [Fact]
     public void All_AllPass() => Assert.True(Check.All(() => Check.NotBlank("ok", "a")).IsSuccess);
+
+    [Fact]
+    public void Defined_KnownValue_Passes() =>
+        Assert.True(Check.Defined(ReasonletStatus.Active, "x").IsSuccess);
+
+    [Fact]
+    public void Defined_UnknownValue_Fails()
+    {
+        AssertInvalid(Check.Defined((ReasonletStatus)99, "x"));
+    }
 }

@@ -102,4 +102,40 @@ public class GraphAndDefinitionTests
     [Fact]
     public void Match_BadScore_ReportsNestedPath() =>
         AssertInvalid(new ReasonletMatch(TestData.Definition(), new ReasonletScore(2, 0, 0, 0)).Validate(), "Score.Similarity");
+
+    [Fact]
+    public void Graph_NullEdgeElement_Fails() =>
+        AssertInvalid((TestData.Graph() with { Edges = [null!] }).Validate(), "Edges[0]");
+
+    [Fact]
+    public void Graph_NegativeSchemaVersion_Fails() =>
+        AssertInvalid((TestData.Graph() with { SchemaVersion = -3 }).Validate(), "SchemaVersion");
+
+    [Fact]
+    public void Definition_BlankName_Fails() =>
+        AssertInvalid((TestData.Definition() with { Name = "" }).Validate(), "Name");
+
+    [Fact]
+    public void Definition_BlankIntent_Fails() =>
+        AssertInvalid((TestData.Definition() with { Intent = " " }).Validate(), "Intent");
+
+    [Fact]
+    public void Definition_ValidParentId_Passes() =>
+        Assert.True((TestData.Definition() with { ParentId = ReasonletId.New() }).Validate().IsSuccess);
+
+    [Fact]
+    public void Definition_UndefinedStatus_Fails() =>
+        AssertInvalid((TestData.Definition() with { Status = (ReasonletStatus)99 }).Validate(), "Status");
+
+    [Fact]
+    public void Candidate_InvalidDefinition_ReportsNestedPath() =>
+        AssertInvalid(
+            new ReasonletCandidate(TestData.Definition() with { Version = "" }, 0.5, default).Validate(),
+            "Reasonlet.Version");
+
+    [Fact]
+    public void Match_InvalidDefinition_ReportsNestedPath() =>
+        AssertInvalid(
+            new ReasonletMatch(TestData.Definition() with { Version = "" }, default).Validate(),
+            "Reasonlet.Version");
 }
