@@ -81,7 +81,8 @@ The rules that follow from this:
 - Run records follow their procedure. Every execution and feedback on an erased Reasonlet is removed with it, including other subjects' runs of it.
 - The result counts the Reasonlets deleted and every execution removed. A cut parent link is not counted.
 - A kept Reasonlet that loses executions to the erase has them subtracted from its run counts. The counts are not recounted from the executions left, because they also hold runs whose records were pruned. When a removed run was the latest run or latest success, that time falls back to the latest one left; when none is left, the stored time stays, possibly older than the truth.
-- The whole erase is one transaction. It covers what exists when it takes its locks: a Reasonlet remembered while the erase runs is not erased by it, so run the erase again once the subject has stopped writing. A deadlock with a concurrent remember answers `Conflict`; retry it.
+- The whole erase is one transaction. It covers what exists when it takes its locks: a Reasonlet remembered while the erase runs is not erased by it, so run the erase again once the subject has stopped writing. A deadlock with a concurrent remember answers `Conflict`; retry it. In rare cases a concurrent erase or prune deadlocks with another erase, which also answers `Conflict`; retry that too.
+- Counts of runs that were pruned before the erase stay in `runs` and `successes`, because nothing can identify those runs any more. They are bare integers with no link to a person, so they are anonymous totals, not personal data.
 
 ### What erasure leaves on disk
 
@@ -97,6 +98,95 @@ The write-ahead log, streaming replicas and backups keep the data for their own 
 - rotate backups and archived WAL on a schedule that meets your retention promise, because a restore brings erased data back.
 
 `VACUUM FULL` or `pg_repack` rewrites a table and its indexes into new files and releases the old pages to the filesystem. That removes them from PostgreSQL's files, but it is not a guaranteed scrub: the filesystem and the device may keep the released blocks until they are reused. `VACUUM FULL` also locks the table exclusively while it runs.
+
+## Retention
+
+`PruneAsync` keeps the store bounded. The host runs it, for example from a scheduled job; the store never prunes on its own. `IReasonletMemory` does not expose it, because pruning is administration. It takes a `ReasonletRetention` policy:
+
+| Property | Meaning |
+|---|---|
+| `Scope` | The scope to prune. Null prunes every scope. |
+| `ExecutionsOlderThan` | Delete run records older than this. Null keeps all runs. |
+| `ReasonletsUnusedFor` | Delete Reasonlets that have not been used for this long. Null keeps all Reasonlets. |
+
+A policy with both windows null, a window that is not positive, or an invalid scope answers a validation error. The result counts the Reasonlets and executions deleted.
+
+```csharp
+var pruned = await store.PruneAsync(
+    new ReasonletRetention
+    {
+        ExecutionsOlderThan = TimeSpan.FromDays(90),
+        ReasonletsUnusedFor = TimeSpan.FromDays(180),
+    },
+    CancellationToken.None);
+```
+
+### What counts as used
+
+- "Used" means executed or remembered, not recalled. Recall is the hot path, and recording it would add a write to every search.
+- Use is judged per lineage. A Reasonlet is used when it, or any version below it, was remembered or last ran inside the window. A superseded version stays while a later version is in use, and a lineage goes only once its whole subtree is idle.
+- An ancestor stays when another branch below it is in use. Pruning never cuts a parent link: no kept version loses its parent.
+- `PendingReview` Reasonlets are judged like `Active` ones.
+- A deleted Reasonlet takes its runs, feedback and metrics with it. Its runs are counted in the result.
+
+### How a prune runs
+
+- It reads the database clock once and measures both windows back from it, so a long prune has a fixed target and ends. Rows that become idle while it runs wait for the next prune.
+- Run records go first, then idle Reasonlets.
+- Work is done in batches of at most 1,000 rows, each its own transaction at READ COMMITTED.
+- A batch that hits a deadlock or serialization failure is retried up to three times, then the prune answers `Conflict`. Any other failure ends the prune at once.
+- Before a batch deletes Reasonlets it locks them, then their runs, then their metrics, and checks again that they are still idle. A Reasonlet that ran or gained a version in the meantime survives and is not counted. An append or remember that arrives after the locks waits, then answers `NotFound`, as after an erase.
+- A failed prune leaves the batches it already committed deleted, and its result carries no counts. It is safe to run again: a rerun deletes only what is still older than its new cutoff. The telemetry counts every committed batch, including on the failure path.
+
+### Counters survive pruning
+
+- A pruned run still happened, so the `runs` and `successes` counters in a Reasonlet's metrics keep it.
+- `last_success_at` can be older than reality after pruning, because the run that set it may be gone and the column is never lowered. `last_executed_at` is what retention reads, and it is never null.
+
+## Telemetry
+
+Every store operation emits OpenTelemetry signals through one `ActivitySource` and one `Meter`. Both are named `Mnemosyne.NET`; the names are constants on `MnemosyneTelemetry` in Abstractions. A host enables them in its own SDK setup:
+
+```csharp
+builder.Services.AddOpenTelemetry()
+    .WithTracing(t => t.AddSource(MnemosyneTelemetry.ActivitySourceName))
+    .WithMetrics(m => m.AddMeter(MnemosyneTelemetry.MeterName));
+```
+
+Nothing is created without a listener, so an unwired store pays almost nothing. The instrumentation uses only the in-box `System.Diagnostics` types and is native AOT clean.
+
+### Activities
+
+There is one activity per operation.
+
+| Activity | Tags |
+|---|---|
+| `mnemosyne.migrate` | |
+| `mnemosyne.remember` | on success: `mnemosyne.capture_kind` (`NewReasonlet`, `ExecutionOnly` or `NewVersion`), `mnemosyne.reasonlet.id`, `mnemosyne.reasonlet.version` |
+| `mnemosyne.get` | |
+| `mnemosyne.execution.append` | |
+| `mnemosyne.feedback.append` | |
+| `mnemosyne.search` | `mnemosyne.search.limit`, `mnemosyne.search.returned`, `mnemosyne.search.top_similarity` |
+| `mnemosyne.erase` | `mnemosyne.erase.by` (`scope` or `subject`), `mnemosyne.erased.reasonlets`, `mnemosyne.erased.executions` |
+| `mnemosyne.prune` | `mnemosyne.pruned.reasonlets`, `mnemosyne.pruned.executions` |
+
+- A failure result sets `error.type` to the `MnemosyneErrorCode` name and the status to Error.
+- When an exception propagates, cancellation included, the activity gets an `exception` event with `exception.type` only, and the status is Error. The message and stack trace are never recorded, because an unmapped PostgreSQL error can quote stored values.
+
+### Metrics
+
+| Instrument | Type | Tags |
+|---|---|---|
+| `mnemosyne.operations` | counter | `mnemosyne.operation`, `mnemosyne.outcome` (`ok` or the error code) |
+| `mnemosyne.operation.duration` | histogram, seconds | `mnemosyne.operation` |
+| `mnemosyne.reasonlets.remembered` | counter | `mnemosyne.capture_kind` |
+| `mnemosyne.search.returned` | histogram | none |
+| `mnemosyne.erased.reasonlets`, `mnemosyne.erased.executions` | counters | none |
+| `mnemosyne.pruned.reasonlets`, `mnemosyne.pruned.executions` | counters | none |
+
+### Privacy
+
+No signal carries user data: no question, intent, name, graph, tags, scope, subject or run id. Reasonlet ids and versions are opaque, so they are allowed. Scope often names a tenant and subject names a person, and telemetry is exported, sampled and kept elsewhere. A host that needs tenant breakdowns can add them in its own wrapper.
 
 ## Searching
 
