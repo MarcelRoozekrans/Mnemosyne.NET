@@ -79,7 +79,8 @@ public sealed record ReasonletGraph
     /// </para>
     /// <para>
     /// Members, nodes and edges are sorted in .NET ordinal order, which compares UTF-16 code units, not UTF-8 bytes or
-    /// code points. Hashes are only ever computed in .NET, by this method; nothing else reproduces them.
+    /// code points. That is RFC 8785's own UTF-16 code-unit order, so a JCS implementation reproduces the canonical
+    /// form, apart from raw number text, which JCS would normalize. Hashes are computed in .NET, by this method.
     /// </para>
     /// </remarks>
     public Result<string, MnemosyneError> ComputeContentHash()

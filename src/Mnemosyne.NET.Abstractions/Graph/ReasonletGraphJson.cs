@@ -22,9 +22,14 @@ public static class ReasonletGraphJson
     /// four levels a property value can sit under (root object, <c>edges</c> array, edge object, <c>properties</c> object).
     /// </summary>
     /// <remarks>
-    /// Any graph that passes <see cref="ReasonletGraph.Validate"/> fits, and a value one level too deep still parses,
-    /// so <see cref="ReasonletGraph.Validate"/> reports it with its property path. Anything deeper is rejected while
-    /// reading, without recursing further.
+    /// <para>
+    /// Any graph that passes <see cref="ReasonletGraph.Validate"/> fits. A property value one level too deep is
+    /// rejected either by the reader, with a JSON path, or by <see cref="ReasonletGraph.Validate"/>, with a property
+    /// path, depending on its innermost value. The reader counts only arrays and objects, so an innermost scalar keeps
+    /// the document within this depth and <see cref="ReasonletGraph.Validate"/> reports it, while an innermost empty
+    /// array or object adds a reader level and the reader reports it.
+    /// </para>
+    /// <para>Anything deeper is rejected while reading, without recursing further.</para>
     /// </remarks>
     internal const int MaxDepth = ReasonletGraphLimits.MaxPropertyDepth + 4;
 
@@ -37,9 +42,17 @@ public static class ReasonletGraphJson
     private static readonly string NamespacePrefix = typeof(ReasonletGraph).Namespace + ".";
 
     /// <summary>Serializes a graph to compact JSON.</summary>
-    /// <param name="graph">The graph to write. It is not validated.</param>
+    /// <param name="graph">The graph to write. It is not validated, so call <see cref="ReasonletGraph.Validate"/> first.</param>
     /// <returns>The JSON text.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="graph"/> is null.</exception>
+    /// <exception cref="InvalidOperationException">A property value is <c>default(JsonElement)</c>.</exception>
+    /// <exception cref="JsonException">
+    /// The graph nests deeper than the serializer's depth limit, which a property value past
+    /// <see cref="ReasonletGraphLimits.MaxPropertyDepth"/> can do.
+    /// </exception>
+    /// <remarks>
+    /// A graph that passes <see cref="ReasonletGraph.Validate"/> never throws here.
+    /// </remarks>
     public static string Serialize(ReasonletGraph graph)
     {
         ArgumentNullException.ThrowIfNull(graph);
