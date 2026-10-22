@@ -83,6 +83,34 @@ public sealed class RepoConventionsTests
         Assert.DoesNotContain("continue-on-error:", job, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void EveryTestProjectUsingTestcontainersRequiresDocker()
+    {
+        var root = RepoRoot();
+        var testProjects = Directory.GetFiles(Path.Combine(root, "tests"), "*.csproj", SearchOption.AllDirectories)
+            .Where(p => Path.GetDirectoryName(Path.GetDirectoryName(p)) == Path.Combine(root, "tests"))
+            .ToArray();
+        var usingTestcontainers = testProjects
+            .Where(p => XDocument.Load(p).Descendants("PackageReference")
+                .Any(e => (e.Attribute("Include")?.Value ?? string.Empty).StartsWith("Testcontainers", StringComparison.Ordinal)))
+            .ToArray();
+
+        // Scanning nothing would pass for the wrong reason; the PostgreSQL suite uses Testcontainers.
+        Assert.NotEmpty(usingTestcontainers);
+        foreach (var project in usingTestcontainers)
+        {
+            Assert.True(
+                Property(project, "RequiresDocker") == "true",
+                $"{project} starts containers but does not declare <RequiresDocker>true</RequiresDocker>, so the windows leg of build-test, which cannot host Linux containers, would run it.");
+        }
+
+        // The property is worth nothing unless build-test selects on it: comment lines are stripped,
+        // so only the command itself satisfies this.
+        var job = JobBody(StripComments(File.ReadAllText(Path.Combine(root, ".github", "workflows", "ci.yml"))), "build-test");
+        Assert.Contains("if [ \"$RUNNER_OS\" = \"Windows\" ]; then", job, StringComparison.Ordinal);
+        Assert.Contains("xargs -r grep -L '<RequiresDocker>true</RequiresDocker>'", job, StringComparison.Ordinal);
+    }
+
     private static string StripComments(string yaml) =>
         string.Join('\n', yaml.Split('\n').Where(l => !l.TrimStart().StartsWith('#')));
 

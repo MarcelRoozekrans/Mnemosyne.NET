@@ -7,5 +7,6 @@
   <Folder Name="/tests/">
     <Project Path="tests/Mnemosyne.NET.Tests/Mnemosyne.NET.Tests.csproj" />
     <Project Path="tests/Mnemosyne.NET.AotSmoke/Mnemosyne.NET.AotSmoke.csproj" />
+    <Project Path="tests/Mnemosyne.NET.PostgreSql.Tests/Mnemosyne.NET.PostgreSql.Tests.csproj" />
   </Folder>
 </Solution>

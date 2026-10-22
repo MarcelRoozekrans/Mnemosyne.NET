@@ -69,6 +69,11 @@ jobs:
       # VSTest filter under Microsoft.Testing.Platform (MNEMO0001) because it is silently ignored.
       # Every tests/*.Tests project runs on its own so a failure names the project, and all of
       # them run before the step fails so one break does not hide the next.
+      #
+      # Docker tier: a project whose csproj declares the RequiresDocker property starts Linux
+      # containers, which Windows runners cannot host, so the windows leg skips it and the ubuntu
+      # leg runs it. Codecov merges both legs' coverage. RepoConventionsTests asserts that every
+      # project using Testcontainers declares the property and that this step selects on it.
       - name: Test
         # MSBuild reads the variable as the TestingPlatformCommandLineArguments property, which
         # dotnet test hands to every test app: one Cobertura file per project lands next to its
@@ -81,6 +86,17 @@ jobs:
           if [ -z "$projects" ]; then
             echo "::error::No tests/*.Tests project found, so nothing would run while the step exits 0."
             exit 1
+          fi
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            skipped=$(echo "$projects" | xargs -r grep -l '<RequiresDocker>true</RequiresDocker>' || true)
+            projects=$(echo "$projects" | xargs -r grep -L '<RequiresDocker>true</RequiresDocker>' || true)
+            for project in $skipped; do
+              echo "::notice::Skipping $project on Windows: it requires Docker, and the ubuntu leg runs it."
+            done
+            if [ -z "$projects" ]; then
+              echo "::error::Every tests/*.Tests project requires Docker, so the windows leg would run nothing while the step exits 0."
+              exit 1
+            fi
           fi
           failed=""
           for project in $projects; do
@@ -208,6 +224,19 @@ jobs:
   aot-publish:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    # The native binary round-trips a Reasonlet through a real pgvector server (0.8.0 or later).
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -221,6 +250,8 @@ jobs:
         run: dotnet publish tests/Mnemosyne.NET.AotSmoke -c Release -r linux-x64 -p:PublishAot=true -warnaserror
 
       - name: Run the native binary
+        env:
+          MNEMOSYNE_AOT_PG: Host=localhost;Port=5432;Username=postgres;Password=postgres;Database=postgres
         run: tests/Mnemosyne.NET.AotSmoke/bin/Release/net10.0/linux-x64/publish/Mnemosyne.NET.AotSmoke
 
   # The real push to nuget.org. Two ways in: a published release (the automatic path), or a
