@@ -21,6 +21,8 @@ internal static class StoreTelemetry
     private const string OperationTag = "mnemosyne.operation";
     private const string OutcomeTag = "mnemosyne.outcome";
     private const string ErrorTypeTag = "error.type";
+    private const string ExceptionEvent = "exception";
+    private const string ExceptionTypeTag = "exception.type";
     private const string Ok = "ok";
     private const string ExceptionOutcome = "exception";
 
@@ -60,8 +62,9 @@ internal static class StoreTelemetry
     /// </summary>
     /// <remarks>
     /// A failure result sets <c>error.type</c> to the error code's name and the status to Error, and is counted under
-    /// that name. An exception, cancellation included, is recorded on the activity, sets <c>error.type</c> to its full
-    /// type name and the status to Error, is counted as <c>exception</c>, and propagates unchanged.
+    /// that name. An exception, cancellation included, is recorded on the activity as an <c>exception</c> event that
+    /// carries <c>exception.type</c> only, never the message or the stack trace, which could quote user data. It sets
+    /// <c>error.type</c> to its full type name and the status to Error, is counted as <c>exception</c>, and propagates unchanged.
     /// </remarks>
     /// <param name="operation">The operation's name, such as <c>remember</c>.</param>
     /// <param name="body">The operation. It receives the activity, null when no one listens, to set its own tags on.</param>
@@ -91,8 +94,10 @@ internal static class StoreTelemetry
         }
         catch (Exception ex)
         {
-            activity?.AddException(ex);
-            activity?.SetTag(ErrorTypeTag, ex.GetType().FullName);
+            // The type only: the message and the stack trace could quote user data, which no signal may carry.
+            var type = ex.GetType().FullName;
+            activity?.AddEvent(new ActivityEvent(ExceptionEvent, tags: new ActivityTagsCollection { { ExceptionTypeTag, type } }));
+            activity?.SetTag(ErrorTypeTag, type);
             activity?.SetStatus(ActivityStatusCode.Error);
             throw;
         }

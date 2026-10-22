@@ -70,7 +70,8 @@ public sealed class StoreTelemetryTests : IAsyncDisposable
     public async Task AnExceptionIsRecordedAndRethrown()
     {
         using var capture = new TelemetryCapture();
-        var thrown = new InvalidOperationException("boom");
+        var sentinel = Guid.NewGuid().ToString("N");
+        var thrown = new InvalidOperationException($"subject-{sentinel} asked about scope-{sentinel}");
 
         var caught = await Assert.ThrowsAsync<InvalidOperationException>(
             async () => await StoreTelemetry.RunAsync<int>("prune", _ => throw thrown, _ => null));
@@ -81,8 +82,15 @@ public sealed class StoreTelemetryTests : IAsyncDisposable
         Assert.Equal("System.InvalidOperationException", activity.GetTagItem("error.type"));
         var recorded = Assert.Single(activity.Events);
         Assert.Equal("exception", recorded.Name);
-        Assert.Contains(recorded.Tags, tag => tag.Key == "exception.type" && Equals(tag.Value, "System.InvalidOperationException"));
+        Assert.Equal([new("exception.type", "System.InvalidOperationException")], recorded.Tags);
         AssertOperation(capture, "prune", "exception");
+
+        // Neither the message nor the stack trace reaches any signal.
+        var emitted = activity.TagObjects.Concat(recorded.Tags).Concat(capture.Measurements.SelectMany(m => m.Tags))
+            .SelectMany(tag => new[] { tag.Key, Convert.ToString(tag.Value, System.Globalization.CultureInfo.InvariantCulture) })
+            .Append(activity.DisplayName)
+            .Append(recorded.Name);
+        Assert.DoesNotContain(emitted, text => text is not null && text.Contains(sentinel, StringComparison.Ordinal));
     }
 
     [Fact]
@@ -97,7 +105,9 @@ public sealed class StoreTelemetryTests : IAsyncDisposable
                 throw new TimeoutException();
             }, _ => null));
 
-        Assert.Equal("System.TimeoutException", Assert.Single(capture.Activities).GetTagItem("error.type"));
+        var activity = Assert.Single(capture.Activities);
+        Assert.Equal("System.TimeoutException", activity.GetTagItem("error.type"));
+        Assert.Equal([new("exception.type", "System.TimeoutException")], Assert.Single(activity.Events).Tags);
         AssertOperation(capture, "search", "exception");
     }
 
@@ -193,7 +203,13 @@ public sealed class StoreTelemetryTests : IAsyncDisposable
         var activity = Assert.Single(capture.Activities);
         Assert.Equal("mnemosyne.migrate", activity.OperationName);
         Assert.Equal(ActivityStatusCode.Error, activity.Status);
-        Assert.Single(activity.Events, e => e.Name == "exception");
+        var recorded = Assert.Single(activity.Events);
+        Assert.Equal("exception", recorded.Name);
+        var type = Assert.Single(recorded.Tags);
+        Assert.Equal("exception.type", type.Key);
+        Assert.IsType<string>(type.Value);
+        Assert.EndsWith("CanceledException", (string)type.Value!, StringComparison.Ordinal);
+        Assert.Equal(type.Value, activity.GetTagItem("error.type"));
         AssertOperation(capture, "migrate", "exception");
     }
 
