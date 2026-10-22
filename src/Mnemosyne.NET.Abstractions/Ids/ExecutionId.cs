@@ -4,7 +4,7 @@ namespace Mnemosyne.NET.Abstractions;
 /// <param name="Value">The underlying GUID.</param>
 public readonly record struct ExecutionId(Guid Value)
 {
-    /// <summary>Creates a new identifier from a version 7 GUID, which sorts by creation time.</summary>
+    /// <summary>Creates a new identifier from a version 7 GUID, which sorts by creation millisecond in big-endian byte order, as PostgreSQL compares uuid.</summary>
     /// <returns>A new identifier.</returns>
     public static ExecutionId New() => new(Guid.CreateVersion7());
 

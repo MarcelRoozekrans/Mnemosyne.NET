@@ -2,7 +2,7 @@ using ZeroAlloc.Results;
 
 namespace Mnemosyne.NET.Abstractions;
 
-/// <summary>The caller-facing facade of Reasonlet procedural memory.</summary>
+/// <summary>The caller-facing facade of Reasonlet procedural memory. Cancellation throws <see cref="OperationCanceledException"/>; it is never returned as a result.</summary>
 public interface IReasonletMemory
 {
     /// <summary>Stores a captured Reasonlet, or records an execution against an existing one.</summary>

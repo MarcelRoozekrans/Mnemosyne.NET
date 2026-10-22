@@ -2,7 +2,7 @@ using ZeroAlloc.Results;
 
 namespace Mnemosyne.NET.Abstractions;
 
-/// <summary>The intent port. Implementations turn a free-form question into a <see cref="ReasonletIntent"/>.</summary>
+/// <summary>The intent port. Implementations turn a free-form question into a <see cref="ReasonletIntent"/>. Cancellation throws <see cref="OperationCanceledException"/>; it is never returned as a result.</summary>
 public interface IIntentExtractor
 {
     /// <summary>Extracts the intent of a question.</summary>

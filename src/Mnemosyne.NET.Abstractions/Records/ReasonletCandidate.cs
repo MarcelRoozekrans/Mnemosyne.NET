@@ -4,7 +4,7 @@ namespace Mnemosyne.NET.Abstractions;
 
 /// <summary>A Reasonlet returned by a similarity search, before ranking.</summary>
 /// <param name="Reasonlet">The matched definition. Must not be null.</param>
-/// <param name="Similarity">The similarity in the unit interval.</param>
+/// <param name="Similarity">The similarity in [0, 1], computed as <c>max(0, 1 - cosine distance)</c>, which matches pgvector's <c>&lt;=&gt;</c> cosine distance operator.</param>
 /// <param name="Metrics">The execution metrics of the Reasonlet.</param>
 public sealed record ReasonletCandidate(ReasonletDefinition Reasonlet, double Similarity, ReasonletMetrics Metrics)
 {

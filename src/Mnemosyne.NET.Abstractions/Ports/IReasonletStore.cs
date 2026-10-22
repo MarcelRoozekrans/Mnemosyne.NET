@@ -2,7 +2,7 @@ using ZeroAlloc.Results;
 
 namespace Mnemosyne.NET.Abstractions;
 
-/// <summary>The storage port. Implementations persist Reasonlets, executions and feedback.</summary>
+/// <summary>The storage port. Implementations persist Reasonlets, executions and feedback. Cancellation throws <see cref="OperationCanceledException"/>; it is never returned as a result.</summary>
 public interface IReasonletStore
 {
     /// <summary>Stores an entry, making the three-way ParentId decision atomically.</summary>
@@ -59,6 +59,9 @@ public interface IReasonletStore
 
     /// <summary>Searches a scope by embedding similarity.</summary>
     /// <remarks>
+    /// Returns only <see cref="ReasonletStatus.Active"/> Reasonlets, never <see cref="ReasonletStatus.PendingReview"/> ones.
+    /// Each candidate's <see cref="ReasonletCandidate.Similarity"/> must be <c>max(0, 1 - cosine distance)</c>,
+    /// which is in [0, 1] and matches pgvector's <c>&lt;=&gt;</c> cosine distance operator.
     /// Error codes: <see cref="MnemosyneErrorCode.Validation"/> when the limit is not positive or an argument breaks another invariant, such as a <c>default</c> scope,
     /// <see cref="MnemosyneErrorCode.Unavailable"/> when the backing store fails.
     /// </remarks>
