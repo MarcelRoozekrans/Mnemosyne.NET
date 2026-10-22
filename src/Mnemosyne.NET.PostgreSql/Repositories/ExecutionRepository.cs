@@ -112,12 +112,13 @@ internal sealed partial class ExecutionRepository(IAsyncDbConnection connection)
     /// <remarks>
     /// <para>
     /// The second of the erase's three lock steps: <see cref="ReasonletRepository.LockForErasureAsync"/>, which answers
-    /// <paramref name="doomedIds"/>, then this, then <see cref="LockMetricsForErasureAsync"/>. Reasonlets, then
-    /// executions, then metrics rows is the order in which the final delete of the Reasonlets cascades, since the
-    /// executions' foreign key fires before the metrics' one, and it is the order every erase takes. So two erases that
-    /// overlap meet first on executions, where one waits for the other before it holds any metrics row the other's
-    /// cascade needs, and they cannot deadlock. Locking a kept Reasonlet's metrics row before its executions would let
-    /// each erase hold a metrics row that the other's cascade waits for while it waits for the other's executions.
+    /// <paramref name="doomedIds"/>, then this, then <see cref="LockMetricsForErasureAsync"/>. Every erase takes its
+    /// locks in that order: Reasonlets, then executions, then metrics rows. The final delete of the Reasonlets runs
+    /// after <see cref="DeleteForErasureAsync"/> has removed their executions, so its cascade touches only the doomed
+    /// Reasonlets' metrics rows. So two erases that overlap meet first on executions, where one waits for the other
+    /// before it holds any metrics row, and they cannot deadlock. Locking a kept Reasonlet's metrics row before its
+    /// executions would let each erase hold a metrics row that the other's cascade needs, while it waits for the
+    /// other's executions.
     /// </para>
     /// <para>
     /// A Reasonlet of the subject that is not in <paramref name="doomedIds"/> was remembered after the erasure took its

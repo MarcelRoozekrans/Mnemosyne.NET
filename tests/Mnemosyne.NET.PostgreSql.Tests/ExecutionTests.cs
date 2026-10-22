@@ -308,11 +308,13 @@ public sealed class ExecutionTests(PgVectorFixture fixture) : IClassFixture<PgVe
             SELECT count(*) FROM mnemosyne.reasonlets r
             LEFT JOIN mnemosyne.reasonlet_metrics m ON m.reasonlet_id = r.id
             LEFT JOIN LATERAL (SELECT count(*)::int AS runs, (count(*) FILTER (WHERE success))::int AS successes,
-                                      max(executed_at) FILTER (WHERE success) AS last_success_at
+                                      max(executed_at) FILTER (WHERE success) AS last_success_at,
+                                      max(executed_at) AS last_executed_at
                                FROM mnemosyne.reasonlet_executions e WHERE e.reasonlet_id = r.id) a ON true
             WHERE r.scope = $1
               AND (m.reasonlet_id IS NULL OR m.scope <> r.scope OR (m.runs, m.successes) <> (a.runs, a.successes)
-                   OR m.last_success_at IS DISTINCT FROM a.last_success_at)
+                   OR m.last_success_at IS DISTINCT FROM a.last_success_at
+                   OR m.last_executed_at IS DISTINCT FROM a.last_executed_at)
             """,
             scope.Value));
 
