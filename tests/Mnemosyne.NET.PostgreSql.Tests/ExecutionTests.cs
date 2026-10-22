@@ -164,6 +164,29 @@ public sealed class ExecutionTests(PgVectorFixture fixture) : IClassFixture<PgVe
             async () => await store.AppendExecutionAsync(scope, receipt.Id, Outcome, Entries.Provenance(), cancelled.Token));
     }
 
+    [Fact]
+    public async Task FeedbackFromAnotherScopeCannotOverwriteExistingFeedback()
+    {
+        var (store, scope, receipt) = await RememberedAsync();
+        Assert.True((await store.AppendFeedbackAsync(scope, receipt.Execution, new ReasonletFeedback(0.1, 0.2, 0.3), Ct)).IsSuccess);
+
+        var result = await store.AppendFeedbackAsync(PgVectorFixture.NewScope(), receipt.Execution, new ReasonletFeedback(0.9, 0.8, 0.7), Ct);
+
+        Assert.Equal(MnemosyneErrorCode.NotFound, result.Error.Code);
+        Assert.Equal("0.1|0.2|0.3", await FeedbackAsync(receipt.Execution));
+    }
+
+    [Fact]
+    public async Task FeedbackCancellationThrows()
+    {
+        var (store, scope, receipt) = await RememberedAsync();
+        using var cancelled = new CancellationTokenSource();
+        await cancelled.CancelAsync();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            async () => await store.AppendFeedbackAsync(scope, receipt.Execution, new ReasonletFeedback(0.5, 0.5, 0.5), cancelled.Token));
+    }
+
     private async Task<(ReasonletPostgreSqlStore Store, ReasonletScope Scope, ReasonletReceipt Receipt)> RememberedAsync()
     {
         var store = fixture.CreateStore();
