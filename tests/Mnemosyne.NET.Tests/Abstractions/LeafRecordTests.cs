@@ -57,6 +57,20 @@ public class LeafRecordTests
     }
 
     [Fact]
+    public void Provenance_TagKeyWithQuoteAndBackslash_IsEscapedInPath()
+    {
+        var tags = new Dictionary<string, string> { ["a\"b\\c"] = null! };
+        AssertInvalid(new ReasonletProvenance("s", null, null, tags).Validate(), "Tags[\"a\\\"b\\\\c\"]");
+    }
+
+    [Fact]
+    public void Provenance_TagKeyWithNewline_IsEscapedInPath()
+    {
+        var tags = new Dictionary<string, string> { ["a\nb"] = null! };
+        AssertInvalid(new ReasonletProvenance("s", null, null, tags).Validate(), "Tags[\"a\\u000Ab\"]");
+    }
+
+    [Fact]
     public void Provenance_NullTagKey_ReportsNull()
     {
         var tags = new NullKeyTags();
