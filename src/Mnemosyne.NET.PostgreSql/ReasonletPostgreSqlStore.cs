@@ -703,10 +703,11 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
     /// remembered while it runs is not erased by it. The Reasonlets are locked deepest first, the order a remember's
     /// path locks take, so an erase waits behind a remember rather than deadlocking with it. Then come the executions
     /// it removes, then the metrics rows it subtracts from, so two overlapping erases take their rows in one order and
-    /// complete. A concurrent prune locks in the same order. A deadlock that still happens answers
-    /// <see cref="MnemosyneErrorCode.Conflict"/>: with a remember that raced the lock walk, with a hand-written
-    /// transaction, or with another erase or a prune when a third erase cut a lineage between the moment one of them
-    /// read its depths and the moment it took its locks, so that the two order the rows they share by different depths.
+    /// complete. A concurrent prune never waits for a Reasonlet lock, so it cannot deadlock with an erase. A deadlock
+    /// that still happens answers <see cref="MnemosyneErrorCode.Conflict"/>: with a remember that raced the lock walk,
+    /// with a hand-written transaction, or with another erase when a third erase cut a lineage between the moment one
+    /// of them read its depths and the moment it took its locks, so that the two order the rows they share by
+    /// different depths.
     /// </remarks>
     /// <exception cref="ArgumentNullException"><paramref name="erasure"/> is null.</exception>
     public ValueTask<Result<ReasonletErasureResult, MnemosyneError>> EraseAsync(ReasonletErasure erasure, CancellationToken ct) =>
@@ -789,13 +790,15 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
     /// version below it was remembered or last ran at or after the cutoff, so a superseded version stays while a later
     /// one is in use, and a lineage goes only once its whole subtree is idle. <see cref="ReasonletStatus.PendingReview"/>
     /// Reasonlets are judged like active ones. The idle ones are listed once, deepest first, and deleted in batches of
-    /// at most 1,000 in that order, so no batch deletes a Reasonlet and keeps its child. A batch's runs go first, in
-    /// batches of their own, so that no transaction deletes more than 1,000 rows of either kind.
-    /// Each batch locks its Reasonlets, then their runs, then their metrics rows, the order every writer takes them
-    /// in, and re-checks before it deletes: a Reasonlet that ran, or gained a version, after the list was read is kept
-    /// and not counted, and so are its ancestors. An append or a remember that arrives after the locks waits, then
-    /// answers <see cref="MnemosyneErrorCode.NotFound"/>, as after an erase. A Reasonlet that becomes idle while the
-    /// prune runs, because an erase removed the version that kept it, waits for the next prune.
+    /// at most 1,000 in that order, so no batch deletes a Reasonlet and keeps its child. A batch deletes its
+    /// Reasonlets' runs with them, unless they hold more than 1,000, which then go first in batches of their own: no
+    /// transaction deletes more than 1,000 rows of either kind directly, and the metrics and feedback rows that
+    /// cascade come on top. Each batch locks its Reasonlets without waiting, skipping any that another transaction
+    /// holds, then their runs, then their metrics rows, and re-checks before it deletes: a Reasonlet that ran, or
+    /// gained a version, after the list was read is kept and not counted, and so are its ancestors, and a skipped
+    /// Reasonlet keeps its ancestors too, until a later prune. An append or a remember that arrives after the locks
+    /// waits, then answers <see cref="MnemosyneErrorCode.NotFound"/>, as after an erase. A Reasonlet that becomes idle
+    /// while the prune runs, because an erase removed the version that kept it, waits for the next prune.
     /// </para>
     /// <para>
     /// A batch that hits a deadlock or a serialization failure rolls back and is retried, up to three times, before
@@ -810,6 +813,12 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
 
     /// <summary>The batch size a prune uses: <see cref="PruneBatchSize"/>, unless a test sets a smaller one.</summary>
     internal int PruneBatchSizeOverride { get; set; } = PruneBatchSize;
+
+    /// <summary>
+    /// A test hook that each prune batch awaits inside its transaction, before its first statement, so a test can
+    /// commit a change from another transaction that the batch's locks and re-check must then see.
+    /// </summary>
+    internal Func<Task>? BeforePruneBatch { get; set; }
 
     /// <summary>
     /// A test hook that each prune batch awaits inside its transaction, after its statements and before the commit, so
@@ -899,172 +908,128 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
     /// <remarks>
     /// <para>
     /// The idle ids are listed once, deepest first, and taken a chunk of <paramref name="batchSize"/> at a time; that
-    /// order is what keeps a batch from deleting a parent without its children. Against a fixed cutoff a row can become
-    /// used but never idle, so the list only ever holds too much, and each batch's re-check drops what became used. A
-    /// chunk's runs go first, in run batches of at most <paramref name="batchSize"/> until one deletes nothing, so the
-    /// Reasonlet batch that follows deletes at most <paramref name="batchSize"/> Reasonlets and, normally, no runs.
+    /// order is what keeps a batch from deleting a parent without its children. The list can hold too much: a row
+    /// that became used since it was read is dropped by its batch's re-check. It can also hold too little: a row an
+    /// erase made idle since, by removing the descendant that kept it, waits for the next prune.
     /// </para>
     /// <para>
-    /// Each batch is its own transaction and locks in the order every writer uses: Reasonlets, then executions, then
-    /// metrics rows. Both kinds of batch lock the chunk's Reasonlets through <see cref="LockByCurrentDepthAsync"/>,
-    /// deepest first by the depths the lineages have when the batch runs, then by id. A run batch then deletes
-    /// executions, which it locks in id order; it takes no metrics lock. A Reasonlet batch locks the Reasonlets, then
-    /// their executions in id order, then their metrics rows in id order, and only then re-checks and deletes,
-    /// touching no row it does not hold.
-    /// So a cycle of waits with another writer would need that writer to hold a row later in this order while it
-    /// waits for an earlier one, and none does:
+    /// A chunk normally goes in one Reasonlet batch, which deletes its idle Reasonlets with their runs. When the
+    /// chunk's Reasonlets hold more than <paramref name="batchSize"/> runs, those runs go first, in run batches of at
+    /// most <paramref name="batchSize"/> until one comes back short, and the Reasonlet batch follows. A Reasonlet batch
+    /// still checks the bound on the rows it finds idle, and when they hold too many runs it deletes a batch of them
+    /// and leaves the Reasonlets for the next batch, so no transaction deletes more than <paramref name="batchSize"/>
+    /// rows of either kind directly.
+    /// </para>
+    /// <para>
+    /// Each batch is its own transaction. It locks the chunk's Reasonlets <c>FOR UPDATE SKIP LOCKED</c>, so it never
+    /// waits for a Reasonlet lock, and its re-check treats a row it does not hold as used, so a skipped row keeps
+    /// its whole ancestry until a later prune. A Reasonlet batch then locks the held rows' executions in id order,
+    /// then their metrics rows in id order, and only then re-checks and deletes, touching no row it does not hold
+    /// but the feedback its deletes cascade to. A run batch locks the held rows, then deletes executions it locks in
+    /// id order; it takes no metrics lock. So a batch waits only for an execution, a metrics row or a feedback row,
+    /// and a cycle of waits would need another writer to wait for the batch while it holds one of those. None does:
     /// </para>
     /// <list type="bullet">
     /// <item><description>
-    /// An append locks its Reasonlet <c>FOR KEY SHARE</c>, inserts a new execution, which no one else holds, and
-    /// upserts the metrics row. It waits for a prune only at the Reasonlet, before it holds anything the prune needs;
-    /// a prune waits for it only at that Reasonlet, before the prune holds any of its runs or metrics.
+    /// An append holds its Reasonlet <c>FOR KEY SHARE</c> from its first step, so a batch that comes later skips the
+    /// Reasonlet and never locks its runs or metrics row; the append's new run is not visible to it. An append that
+    /// comes later waits at the Reasonlet the batch holds, holding nothing, and then answers
+    /// <see cref="MnemosyneErrorCode.NotFound"/>.
     /// </description></item>
     /// <item><description>
-    /// Feedback takes <c>FOR KEY SHARE</c> on its execution and writes the feedback row, which the prune deletes only
-    /// through that execution, so the two meet first on the execution.
+    /// Feedback takes <c>FOR KEY SHARE</c> on its execution only when it inserts a new feedback row, which the batch
+    /// cannot see; replacing feedback holds the existing row and waits for nothing. So feedback can wait for the batch
+    /// at an execution, but the batch waits for no lock that feedback holds while it waits.
     /// </description></item>
     /// <item><description>
-    /// A remember locks its parent and every ancestor bottom-up, child before parent, then inserts new rows. The prune
-    /// locks a child before its parent too, because it locks deepest first by the lineages as they stand. So the two
-    /// lock any path in one direction.
+    /// A remember waits only for Reasonlets, and holds Reasonlets on its path and the rows it inserts. The batch skips
+    /// the held path rows, so it locks neither their runs nor their metrics, and cannot see the inserted rows.
     /// </description></item>
     /// <item><description>
-    /// An erase locks Reasonlets deepest first and by id, then executions in id order, then the metrics rows of the
-    /// Reasonlets it keeps in id order, then deletes only what it locked. That is the prune's order phase by phase,
-    /// and both read the depths fresh, so an erase that cut a lineage before either ran changes both orders alike. A
-    /// subject erase locks runs and the metrics row of a Reasonlet it keeps without locking that Reasonlet, which is
-    /// why the prune takes the runs before the metrics rows: the other way round, each would hold what the other
-    /// waits for. Two erases or two prunes meet in the same order as each other.
+    /// An erase locks Reasonlets, then executions in id order, then the metrics rows of the Reasonlets it keeps in id
+    /// order. While it waits for a Reasonlet it holds no execution or metrics row. While it waits for an execution the
+    /// batch holds, it holds executions of lower ids and no metrics row, and the batch, taking executions in id order
+    /// too, cannot be waiting for one of them. While it waits for a metrics row the batch holds, the batch has all its
+    /// executions and waits, if at all, for a metrics row of a higher id, which the erase does not hold yet, or for a
+    /// feedback row of its own executions, which the erase does not touch.
     /// </description></item>
     /// <item><description>
-    /// Run pruning locks executions only, in id order.
+    /// Two prune batches hold disjoint Reasonlets, so they lock disjoint executions and metrics rows. A batch of old
+    /// runs holds no Reasonlet and no metrics row, and takes executions in id order, as every batch does.
     /// </description></item>
     /// </list>
-    /// <para>
-    /// What remains is the window every erase has too: a batch reads its depths, then takes its locks, and an erase
-    /// that commits a cut in between leaves it ordering by the old depths while a later erase orders by the new ones.
-    /// A deadlock there is retried, and the erase answers <see cref="MnemosyneErrorCode.Conflict"/>, as two erases
-    /// would in the same window.
-    /// </para>
     /// </remarks>
     private async Task PruneIdleReasonletsAsync(string? scope, DateTime cutoff, int batchSize, PruneProgress progress, CancellationToken ct)
     {
         var idle = await ListIdleReasonletsAsync(scope, cutoff, ct).ConfigureAwait(false);
         foreach (var chunk in idle.Chunk(batchSize))
         {
-            // Until a batch deletes nothing, as for old runs: a short batch does not prove that none is left.
-            int deleted;
+            // Whether a batch that finds more runs than the bound sends them to run batches first. Once they have gone,
+            // the runs left belong to rows the re-check keeps, and the bounded delete handles the rare rest.
+            var stripRuns = true;
+            IdlePruneRow? batch;
             do
             {
-                deleted = await RunPruneBatchAsync(
+                var strip = stripRuns;
+                batch = await RunPruneBatchAsync(
                     async (connection, transaction) =>
                     {
                         var retention = new RetentionRepository(connection);
-                        var locked = await LockByCurrentDepthAsync(retention, chunk, transaction, ct).ConfigureAwait(false);
-                        return await retention.DeleteIdleExecutionsAsync(locked, cutoff, batchSize, transaction, ct).ConfigureAwait(false);
+                        var locked = await retention.LockIdleReasonletsAsync(chunk, transaction, ct).ConfigureAwait(false);
+                        var runs = await retention.LockIdleExecutionsAsync(locked, transaction, ct).ConfigureAwait(false);
+                        if (strip && runs > batchSize)
+                        {
+                            // Too many runs to delete with the Reasonlets: commit nothing, and strip them first.
+                            return null;
+                        }
+
+                        await retention.LockIdleMetricsAsync(locked, transaction, ct).ConfigureAwait(false);
+                        return await retention.DeleteStillIdleAsync(locked, cutoff, batchSize, transaction, ct).ConfigureAwait(false);
                     },
                     ct).ConfigureAwait(false);
-                progress.Executions += deleted;
+                if (batch is null)
+                {
+                    await StripIdleRunsAsync(chunk, cutoff, batchSize, progress, ct).ConfigureAwait(false);
+                    stripRuns = false;
+                }
+                else
+                {
+                    progress.Reasonlets += batch.Reasonlets;
+                    progress.Executions += batch.Executions;
+                }
             }
-            while (deleted > 0);
+            while (batch is null || batch.Stripped);
+        }
+    }
 
-            var batch = await RunPruneBatchAsync(
+    /// <summary>
+    /// Deletes the runs of a chunk's idle Reasonlets in run batches of at most <paramref name="batchSize"/>, until one
+    /// comes back short, and adds each to <paramref name="progress"/>.
+    /// </summary>
+    /// <remarks>
+    /// A short batch ends the loop even when a concurrent erase made it short while runs remain, because the
+    /// Reasonlet batch that follows checks the bound itself and deletes what is left a batch at a time.
+    /// </remarks>
+    private async Task StripIdleRunsAsync(Guid[] chunk, DateTime cutoff, int batchSize, PruneProgress progress, CancellationToken ct)
+    {
+        int deleted;
+        do
+        {
+            deleted = await RunPruneBatchAsync(
                 async (connection, transaction) =>
                 {
                     var retention = new RetentionRepository(connection);
-                    var locked = await LockByCurrentDepthAsync(retention, chunk, transaction, ct).ConfigureAwait(false);
-                    await retention.LockIdleExecutionsAsync(locked, transaction, ct).ConfigureAwait(false);
-                    await retention.LockIdleMetricsAsync(locked, transaction, ct).ConfigureAwait(false);
-
-                    // An aggregate always answers a row, so the null-forgiving operator only skips a check the query cannot fail.
-                    return (await retention.DeleteStillIdleAsync(locked, cutoff, transaction, ct).ConfigureAwait(false))!;
+                    var locked = await retention.LockIdleReasonletsAsync(chunk, transaction, ct).ConfigureAwait(false);
+                    return await retention.DeleteIdleExecutionsAsync(locked, cutoff, batchSize, transaction, ct).ConfigureAwait(false);
                 },
                 ct).ConfigureAwait(false);
-            progress.Reasonlets += batch.Reasonlets;
-            progress.Executions += batch.Executions;
+            progress.Executions += deleted;
         }
+        while (deleted == batchSize);
     }
 
     /// <summary>
-    /// Locks the Reasonlets of a chunk that still exist <c>FOR UPDATE</c>, deepest first by their depth below the top
-    /// of their lineage as it stands now, then by id, and answers them in that order. The first step of every batch.
-    /// </summary>
-    /// <remarks>
-    /// The chunk's rows come from the list, and that is what keeps a batch from deleting a parent without its
-    /// children. The order comes from the lineages now, so a prune and an erase put the rows they share in one order
-    /// even after an erase deleted an ancestor and made a subtree shallower since the list was read. Fresh depths
-    /// still put every child before its parent, so a remember, which locks a path bottom-up, meets the batch in the
-    /// same direction.
-    /// </remarks>
-    internal static async Task<Guid[]> LockByCurrentDepthAsync(
-        RetentionRepository retention, Guid[] chunk, IAsyncDbTransaction transaction, CancellationToken ct)
-    {
-        var links = await retention.WalkUpIdleAsync(chunk, transaction, ct).ConfigureAwait(false);
-        return await retention.LockIdleReasonletsAsync(ByCurrentDepth(chunk, links), transaction, ct).ConfigureAwait(false);
-    }
-
-    /// <summary>
-    /// Orders the rows of <paramref name="chunk"/> that <paramref name="links"/> still holds deepest first, by their
-    /// depth below the top of their lineage, then by id in PostgreSQL's order: the key
-    /// <see cref="ReasonletRepository.LockForErasureAsync"/> locks by.
-    /// </summary>
-    /// <remarks>
-    /// The links are every row from the chunk up to its tops, so numbering them down from the tops visits each once.
-    /// A row no top leads to, on or below a hand-written <c>parent_id</c> cycle, gets depth 0, as in an erase.
-    /// </remarks>
-    internal static Guid[] ByCurrentDepth(Guid[] chunk, List<ParentLinkRow> links)
-    {
-        var children = new Dictionary<Guid, List<Guid>>();
-        var depths = new Dictionary<Guid, int>();
-        var next = new Queue<Guid>();
-        foreach (var link in links)
-        {
-            if (link.ParentId is { } parent)
-            {
-                (CollectionsMarshal.GetValueRefOrAddDefault(children, parent, out _) ??= []).Add(link.Id);
-            }
-            else
-            {
-                depths[link.Id] = 0;
-                next.Enqueue(link.Id);
-            }
-        }
-
-        while (next.TryDequeue(out var id))
-        {
-            foreach (var child in children.GetValueOrDefault(id, []))
-            {
-                depths[child] = depths[id] + 1;
-                next.Enqueue(child);
-            }
-        }
-
-        var members = chunk.ToHashSet();
-        return [.. links
-            .Where(link => members.Contains(link.Id))
-            .OrderByDescending(link => depths.GetValueOrDefault(link.Id))
-            .ThenBy(link => link.Id, PostgresUuidOrder.Instance)
-            .Select(link => link.Id)];
-    }
-
-    /// <summary>Orders ids as PostgreSQL orders <c>uuid</c>: by their bytes in the order they are written.</summary>
-    private sealed class PostgresUuidOrder : IComparer<Guid>
-    {
-        public static readonly PostgresUuidOrder Instance = new();
-
-        public int Compare(Guid x, Guid y)
-        {
-            Span<byte> left = stackalloc byte[16];
-            Span<byte> right = stackalloc byte[16];
-            x.TryWriteBytes(left, bigEndian: true, out _);
-            y.TryWriteBytes(right, bigEndian: true, out _);
-            return left.SequenceCompareTo(right);
-        }
-    }
-
-    /// <summary>
-    /// Lists the idle Reasonlets of the scope, or of every scope, in lock order, in a transaction of its own with JIT
+    /// Lists the idle Reasonlets of the scope, or of every scope, deepest first, in a transaction of its own with JIT
     /// off. The list takes no lock, so nothing waits for it.
     /// </summary>
     private async Task<Guid[]> ListIdleReasonletsAsync(string? scope, DateTime cutoff, CancellationToken ct)
@@ -1137,6 +1102,11 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
         await using var connection = (await _dataSource.OpenConnectionAsync(ct).ConfigureAwait(false)).AsAsync();
         await using var transaction = await connection.BeginTransactionAsync(IsolationLevel.ReadCommitted, ct).ConfigureAwait(false);
         await SetLocalAsync(connection, transaction, "SET LOCAL jit = off", ct).ConfigureAwait(false);
+        if (BeforePruneBatch is { } before)
+        {
+            await before().ConfigureAwait(false);
+        }
+
         var result = await batch(connection, transaction).ConfigureAwait(false);
         if (BeforePruneBatchCommit is { } hook)
         {

@@ -81,7 +81,7 @@ The rules that follow from this:
 - Run records follow their procedure. Every execution and feedback on an erased Reasonlet is removed with it, including other subjects' runs of it.
 - The result counts the Reasonlets deleted and every execution removed. A cut parent link is not counted.
 - A kept Reasonlet that loses executions to the erase has them subtracted from its run counts. The counts are not recounted from the executions left, because they also hold runs whose records were pruned. When a removed run was the latest run or latest success, that time falls back to the latest one left. When none is left, `last_executed_at` falls back to the Reasonlet's `created_at`, and `last_success_at` to null, meaning unknown, even when `successes` still counts pruned successes. Keeping the stored time would keep the erased subject's own run time.
-- The whole erase is one transaction. It covers what exists when it takes its locks: a Reasonlet remembered while the erase runs is not erased by it, so run the erase again once the subject has stopped writing. A deadlock with a concurrent remember answers `Conflict`; retry it. An erase can also deadlock, rarely, with another erase or a prune: this happens when a third erase cuts a lineage between the moment one of them reads its depths and the moment it takes its locks, so the two order the rows they share by different depths. It answers `Conflict` too; retry it.
+- The whole erase is one transaction. It covers what exists when it takes its locks: a Reasonlet remembered while the erase runs is not erased by it, so run the erase again once the subject has stopped writing. A deadlock with a concurrent remember answers `Conflict`; retry it. An erase can also deadlock, rarely, with another erase: this happens when a third erase cuts a lineage between the moment one of them reads its depths and the moment it takes its locks, so the two order the rows they share by different depths. It answers `Conflict` too; retry it. A prune never waits for a Reasonlet lock, so it cannot deadlock with an erase.
 - Counts of runs that were pruned before the erase stay in `runs` and `successes`, because nothing can identify those runs any more. They are bare integers with no link to a person, so they are anonymous totals, not personal data.
 
 ### What erasure leaves on disk
@@ -133,11 +133,14 @@ var pruned = await store.PruneAsync(
 
 ### How a prune runs
 
-- It reads the database clock once and measures both windows back from it, so a long prune has a fixed target and ends. Rows that become idle while it runs wait for the next prune.
+- It reads the database clock once and measures both windows back from it, so a long prune has a fixed target and ends.
+- It lists the idle Reasonlets once, then works through the list. A Reasonlet that becomes used after the list is read is kept, as described below. One that becomes idle while the prune runs, for example because an erase removed the version that kept it, waits for the next prune.
 - Run records go first, then idle Reasonlets.
-- Work is done in batches of at most 1,000 rows, each its own transaction at READ COMMITTED.
+- Work is done in batches, each its own transaction at READ COMMITTED. A batch deletes at most 1,000 rows of each kind itself: up to 1,000 Reasonlets with up to 1,000 of their runs. The metrics and feedback rows that cascade from them come on top. When a batch's Reasonlets hold more than 1,000 runs, those runs go first, in batches of their own.
 - A batch that hits a deadlock or serialization failure is retried up to three times, then the prune answers `Conflict`. Any other failure ends the prune at once.
 - Before a batch deletes Reasonlets it locks them, then their runs, then their metrics, and checks again that they are still idle. A Reasonlet that ran or gained a version in the meantime survives and is not counted. An append or remember that arrives after the locks waits, then answers `NotFound`, as after an erase.
+- A batch never waits for a Reasonlet lock. It skips a Reasonlet that another transaction holds, for example one being run or getting a new version, and keeps it and all its ancestors until a later prune. So a prune never deadlocks with another writer.
+- The idle list is read into one array, so a single prune can handle at most about 60 million idle Reasonlets. On a store that size, prune by scope, or more often.
 - A failed prune leaves the batches it already committed deleted, and its result carries no counts. It is safe to run again: a rerun deletes only what is still older than its new cutoff. The telemetry counts every committed batch, including on the failure path.
 
 ### Counters survive pruning

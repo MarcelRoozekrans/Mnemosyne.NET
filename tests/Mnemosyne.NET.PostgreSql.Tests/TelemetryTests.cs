@@ -260,14 +260,15 @@ public sealed class TelemetryTests(PgVectorFixture fixture) : IClassFixture<PgVe
     [Fact]
     public async Task PruneFailureStillCountsCommittedBatches()
     {
-        // A chain of four in batches of two, as in PruneTests: the first chunk commits two runs and two Reasonlets,
-        // then every try of the next batch fails. The result carries no counts, but the signals count what committed.
+        // A chain of four in batches of two, as in PruneTests: the first batch commits two Reasonlets with their two
+        // runs, then every try of the next batch fails. The result carries no counts, but the signals count what
+        // committed.
         var store = await MigratedStoreAsync();
         var scope = PgVectorFixture.NewScope();
         await ChainAsync(store, scope, 4);
         store.PruneBatchSizeOverride = 2;
         var calls = 0;
-        store.BeforePruneBatchCommit = () => ++calls > 3 ? throw new PostgresException("injected", "ERROR", "ERROR", "40001") : Task.CompletedTask;
+        store.BeforePruneBatchCommit = () => ++calls > 1 ? throw new PostgresException("injected", "ERROR", "ERROR", "40001") : Task.CompletedTask;
         using var capture = new TelemetryCapture();
 
         var result = await store.PruneAsync(new ReasonletRetention { Scope = scope, ReasonletsUnusedFor = FiveDays }, Ct);

@@ -112,25 +112,31 @@ internal sealed partial class RetentionRepository(IAsyncDbConnection connection)
         """;
 
     /// <summary>
-    /// The rest of the statements that list idle Reasonlets, after the <c>candidate</c> rows. It answers their ids in
-    /// the order a batch locks them: deepest first by the depth below the top of the lineage, then by id.
+    /// The rest of the statements that list idle Reasonlets, after the <c>candidate</c> rows. It answers their ids
+    /// deepest first, by the depth below the top of the lineage, then by id.
     /// </summary>
     /// <remarks>
     /// <para>
     /// A Reasonlet is used when it was remembered at or after the cutoff, or last ran at or after it. Use is judged
     /// per lineage, so the used closure is the used rows and every ancestor of one: a walk up <c>parent_id</c>. Every
-    /// candidate outside the closure is idle. It follows that every child of an idle row is idle, so ordering all idle
-    /// rows deepest first means a batch that holds a row at depth k holds every listed row deeper than k, its children
-    /// among them, or they went in an earlier batch.
+    /// candidate outside the closure is idle. It follows that every child of an idle row is idle, so taking the list
+    /// in chunks, deepest first, means that when a batch holds a row at depth k, every listed row deeper than k, its
+    /// children among them, is in the same chunk or went in an earlier one. The order serves only that: a batch locks
+    /// its chunk without waiting, so the order it locks in cannot make it deadlock.
     /// </para>
     /// <para>
     /// The depth is computed as <see cref="ReasonletRepository.LockForErasureAsync"/> computes it: a walk up from the
-    /// idle rows finds the tops of their lineages, and a walk down from the tops numbers every row below them. So
-    /// prune and erase put their rows in one order, deepest first and then by id. The scope is carried along each walk
-    /// rather than bound, so the same walks serve a prune of every scope. Each step of each walk is an index probe in a
-    /// <c>LATERAL</c> subquery that <c>LIMIT 1</c> or <c>OFFSET 0</c> keeps from being flattened, and the walks up use
-    /// <c>UNION</c>, so each visits a row once and the whole statement is linear in the rows it covers. A row on a
-    /// hand-written <c>parent_id</c> cycle, which no walk down reaches, sorts at depth 0, as in an erase.
+    /// idle rows finds the tops of their lineages, and a walk down from the tops numbers every row below them. The
+    /// scope is carried along each walk rather than bound, so the same walks serve a prune of every scope. Each step
+    /// of each walk is an index probe in a <c>LATERAL</c> subquery that <c>LIMIT 1</c> or <c>OFFSET 0</c> keeps from
+    /// being flattened, and the walks up use <c>UNION</c>, so each visits a row once and the whole statement is linear
+    /// in the rows it covers. A row on a hand-written <c>parent_id</c> cycle, which no walk down reaches, sorts at
+    /// depth 0, as in an erase.
+    /// </para>
+    /// <para>
+    /// The list is one statement that answers one array, so it can hold no more ids than one PostgreSQL array value
+    /// can, about 1 GB: some 60 million Reasonlets idle at once, at 16 bytes an id. A prune past that fails; a store
+    /// that size needs a prune limited to a scope, or run more often.
     /// </para>
     /// </remarks>
     private const string IdleListTail = """
@@ -172,9 +178,9 @@ internal sealed partial class RetentionRepository(IAsyncDbConnection connection)
         """;
 
     /// <summary>
-    /// Lists every idle Reasonlet of every scope against <paramref name="cutoff"/>, in lock order. It takes no lock:
+    /// Lists every idle Reasonlet of every scope against <paramref name="cutoff"/>, deepest first. It takes no lock:
     /// a prune reads the list once and works through it in batches, each of which locks and re-checks its share.
-    /// <see cref="IdleListTail"/> defines idle and the order.
+    /// <see cref="IdleListTail"/> defines idle and the order, and gives the list's size limit.
     /// </summary>
     /// <remarks>
     /// A separate statement from <see cref="ListIdleReasonletsInScopeAsync"/>, as the run deletes are, so that neither
@@ -188,7 +194,7 @@ internal sealed partial class RetentionRepository(IAsyncDbConnection connection)
     public partial Task<Guid[]> ListIdleReasonletsAsync(DateTime cutoff, IAsyncDbTransaction transaction, CancellationToken ct);
 
     /// <summary>
-    /// Lists every idle Reasonlet of the scope against <paramref name="cutoff"/>, in lock order, as
+    /// Lists every idle Reasonlet of the scope against <paramref name="cutoff"/>, deepest first, as
     /// <see cref="ListIdleReasonletsAsync"/> does for every scope. A lineage never spans scopes: the scoped foreign key
     /// keeps every parent in its child's scope.
     /// </summary>
@@ -210,61 +216,29 @@ internal sealed partial class RetentionRepository(IAsyncDbConnection connection)
     public partial Task<Guid[]> ListIdleReasonletsInScopeAsync(string scope, DateTime cutoff, IAsyncDbTransaction transaction, CancellationToken ct);
 
     /// <summary>
-    /// Walks up <c>parent_id</c> from the Reasonlets of one chunk that still exist to the tops of their lineages, and
-    /// returns every link it met, in no particular order: the chunk's rows and all their ancestors, each once. The
-    /// store numbers the depths from these links, so that <see cref="LockIdleReasonletsAsync"/> locks by the lineages
-    /// as they stand now.
-    /// </summary>
-    /// <remarks>
-    /// <c>UNION</c> visits each row once and ends at a hand-written <c>parent_id</c> cycle, and each step is a
-    /// primary-key probe in a <c>LATERAL</c> subquery that <c>LIMIT 1</c> keeps from being flattened, as in
-    /// <see cref="ReasonletRepository.WalkUpAsync"/>. So the walk reads the chunk's paths to the top and no other
-    /// branch of their lineages, and is linear in that. The scope is carried rather than bound, so it serves a prune
-    /// of every scope. The depths are numbered in the store rather than by a walk down here: a walk down restricted to
-    /// these rows has to join each step to them, and PostgreSQL 17 planned that join to re-read them at every step,
-    /// which is quadratic in the depth of a chain.
-    /// </remarks>
-    [Query("""
-        WITH RECURSIVE up (id, parent_id, scope) AS (
-            SELECT r.id, r.parent_id, r.scope FROM mnemosyne.reasonlets r WHERE r.id = ANY(@ids)
-            UNION
-            SELECT p.id, p.parent_id, p.scope
-            FROM up CROSS JOIN LATERAL (
-                SELECT r.id, r.parent_id, r.scope FROM mnemosyne.reasonlets r
-                WHERE r.id = up.parent_id AND r.scope = up.scope
-                LIMIT 1
-            ) p
-        )
-        SELECT id, parent_id FROM up
-        """)]
-    public partial Task<List<ParentLinkRow>> WalkUpIdleAsync(Guid[] ids, IAsyncDbTransaction transaction, CancellationToken ct);
-
-    /// <summary>
-    /// Locks <c>FOR UPDATE</c>, until the transaction ends, the given Reasonlets that still exist, one after another
-    /// in the order given, and answers their ids in that order. The first lock step of every prune batch. The store
-    /// gives them deepest first by their depth now, then by id, the order an erase locks Reasonlets in.
+    /// Locks <c>FOR UPDATE SKIP LOCKED</c>, until the transaction ends, the given Reasonlets that still exist and that
+    /// no other transaction holds, and answers the ids it locked. The first lock step of every prune batch.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// A row a concurrent erase deleted while this waited for it is skipped. <c>FOR UPDATE</c> conflicts with every
-    /// lock a writer takes on a Reasonlet: an append's <c>FOR KEY SHARE</c>, and a remember's <c>FOR NO KEY UPDATE</c>
-    /// on the parent and <c>FOR KEY SHARE</c> on each ancestor. So from here until commit no run can be appended to a
-    /// locked row and no version remembered below one; a writer that comes later waits and then finds the row gone.
+    /// <c>SKIP LOCKED</c> means a prune never waits for a Reasonlet lock, so it cannot take part in a deadlock at this
+    /// step, whatever order another writer locks Reasonlets in. A row that another transaction holds in any mode is
+    /// left out: an append's <c>FOR KEY SHARE</c>, a remember's locks on its path, an erase's <c>FOR UPDATE</c>. The
+    /// re-check, <see cref="StillIdleSql"/>, treats a row the batch does not hold as used, so a skipped row keeps its
+    /// whole ancestry until a later prune. A row an erase has deleted is not found.
     /// </para>
     /// <para>
-    /// The <c>LockRows</c> step sits above the sort by ordinality and locks each row as the sort hands it over, as in
-    /// <see cref="ReasonletRepository.LockAncestorsAsync"/>. The <c>ANY</c> filter lets the rows be found by primary
-    /// key; joined to the array alone, PostgreSQL 17 hashed the array and scanned the whole table in testing.
+    /// <c>FOR UPDATE</c> conflicts with every lock a writer takes on a Reasonlet, so from here until commit no run can be
+    /// appended to a locked row and no version remembered below one; a writer that comes later waits and then finds
+    /// the row gone. The <c>ANY</c> filter finds the rows by primary key.
     /// </para>
     /// </remarks>
     [Query("""
-        SELECT coalesce(array_agg(l.id ORDER BY l.ord), '{}') FROM (
-            SELECT r.id, u.ord
+        SELECT coalesce(array_agg(l.id), '{}') FROM (
+            SELECT r.id
             FROM mnemosyne.reasonlets r
-            JOIN unnest(@ids::uuid[]) WITH ORDINALITY u (id, ord) ON u.id = r.id
-            WHERE r.id = ANY(@ids::uuid[])
-            ORDER BY u.ord
-            FOR UPDATE OF r
+            WHERE r.id = ANY(@ids)
+            FOR UPDATE OF r SKIP LOCKED
         ) l
         """)]
     public partial Task<Guid[]> LockIdleReasonletsAsync(Guid[] ids, IAsyncDbTransaction transaction, CancellationToken ct);
@@ -272,7 +246,8 @@ internal sealed partial class RetentionRepository(IAsyncDbConnection connection)
     /// <summary>
     /// Locks <c>FOR UPDATE</c>, in id order and until the transaction ends, every execution of the locked Reasonlets,
     /// and answers how many it locked. The second lock step of a Reasonlet batch, after
-    /// <see cref="LockIdleReasonletsAsync"/> and before <see cref="LockIdleMetricsAsync"/>.
+    /// <see cref="LockIdleReasonletsAsync"/> and before <see cref="LockIdleMetricsAsync"/>. The store reads the count to
+    /// decide whether the chunk's runs fit in the batch, or must first go in run batches of their own.
     /// </summary>
     /// <remarks>
     /// Executions before metrics, as an erase takes them: a subject erase locks runs of a Reasonlet it keeps and then
@@ -332,11 +307,18 @@ internal sealed partial class RetentionRepository(IAsyncDbConnection connection)
     /// every writer that could needs a lock on it or on a locked descendant.
     /// </para>
     /// <para>
-    /// A locked row is still idle when no row in its subtree is used now. So the walk goes down from the locked rows,
-    /// through the subtree as it stands, finds the used rows there, and walks up from those to mark their ancestors.
-    /// Deeper listed rows went in earlier batches or are locked in this one, so the subtrees are small: what is left
-    /// of them is this batch's rows, plus the rare rows that became used. A used child therefore keeps its locked
-    /// parent too, so a batch that drops a row never deletes the row's parent. Both walks use <c>UNION</c> and
+    /// A locked row is still idle when every row in its subtree is held by this batch and none of them is used now.
+    /// A subtree row the batch does not hold counts as used, whatever its times say: it is a row
+    /// <see cref="LockIdleReasonletsAsync"/> skipped because another transaction holds it, in this batch or an
+    /// earlier one, or one remembered since the list was read. So a skipped row keeps its whole ancestry, and the
+    /// batch never deletes a row whose child it cannot delete with it, nor cuts a link it does not hold.
+    /// </para>
+    /// <para>
+    /// The walk goes down from the locked rows, through the subtree as it stands, finds the used rows there, and walks
+    /// up from those to mark their ancestors. Deeper listed rows went in earlier batches or are locked in this one, so
+    /// the subtrees are small: what is left of them is this batch's rows, plus the rare rows that were skipped or became
+    /// used. A used child therefore keeps its locked parent too, so a batch that drops a row never deletes the row's
+    /// parent. Both walks use <c>UNION</c> and
     /// <c>LATERAL</c> index probes, as the list does, and each metrics row is read by a primary-key probe, so the
     /// re-check reads about what the batch holds whatever the size of the tables. Joined directly, PostgreSQL 17
     /// hashed whole sequential scans of the Reasonlets and the metrics in testing.
@@ -361,7 +343,7 @@ internal sealed partial class RetentionRepository(IAsyncDbConnection connection)
                 WHERE x.reasonlet_id = s.id
                 LIMIT 1
             ) m ON true
-            WHERE s.created_at >= @cutoff OR m.last_executed_at >= @cutoff
+            WHERE s.id <> ALL(@lockedIds) OR s.created_at >= @cutoff OR m.last_executed_at >= @cutoff
             UNION
             SELECT p.id, p.parent_id, p.scope
             FROM used CROSS JOIN LATERAL (
@@ -381,10 +363,10 @@ internal sealed partial class RetentionRepository(IAsyncDbConnection connection)
     /// Reasonlets.
     /// </summary>
     /// <remarks>
-    /// The run batches that come before a chunk's Reasonlet batch, so that no transaction deletes more than
-    /// <paramref name="batchSize"/> executions. Each runs after <see cref="LockIdleReasonletsAsync"/> in the same
-    /// transaction, so a Reasonlet that became used is left with its runs, and none can become used while the batch
-    /// runs. <see cref="StillIdleSql"/> is the re-check; <see cref="LockAndDeleteSql"/> locks the executions in id
+    /// The run batches that come before a chunk's Reasonlet batch when the chunk holds more runs than
+    /// <paramref name="batchSize"/>, so that no transaction deletes more than that many executions. Each runs after
+    /// <see cref="LockIdleReasonletsAsync"/> in the same transaction, so a Reasonlet that became used is left with its
+    /// runs, and none can become used while the batch runs. <see cref="StillIdleSql"/> is the re-check; <see cref="LockAndDeleteSql"/> locks the executions in id
     /// order and deletes them. The lock order is Reasonlets, then executions, a prefix of every writer's order. The
     /// runs of an idle Reasonlet are all older than the cutoff, so this is the run pruning the counters already keep.
     /// </remarks>
@@ -406,7 +388,9 @@ internal sealed partial class RetentionRepository(IAsyncDbConnection connection)
 
     /// <summary>
     /// Re-checks the locked Reasonlets and deletes those still idle, with their executions, and answers how many of
-    /// each it deleted. Feedback and metrics rows cascade. Locked rows that became used are kept and not counted.
+    /// each it deleted. Feedback and metrics rows cascade. Locked rows that became used are kept and not counted. When
+    /// the still-idle rows hold more than <paramref name="batchSize"/> executions, it deletes that many of them instead,
+    /// and no Reasonlet, and says so.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -417,33 +401,47 @@ internal sealed partial class RetentionRepository(IAsyncDbConnection connection)
     /// Reasonlet that gained a run is used and kept.
     /// </para>
     /// <para>
+    /// The bound is checked here, on the rows the re-check keeps idle, rather than only on the count of locked runs,
+    /// because the two statements see different moments: a row can become idle in between, when an erase removes the
+    /// skipped descendant that kept it, and bring runs of its own. Deciding in this statement keeps every batch within
+    /// <paramref name="batchSize"/> executions however the rows change, and a batch that strips runs this way leaves
+    /// the Reasonlets for the next one.
+    /// </para>
+    /// <para>
     /// Both deletes find their rows by primary key from an array, as <see cref="LockAndDeleteSql"/> does, and the
     /// executions through a probe per Reasonlet, so neither depends on the planner choosing an index.
     /// </para>
     /// <para>
     /// The executions are deleted by this statement rather than by the cascade, so that they are counted. The
     /// cascade from the Reasonlets fires at the end of the statement and finds them gone. Deleting a Reasonlet would
-    /// cut its children's link, but its children are idle and deeper, so they are in this batch or an earlier one,
-    /// and a child that became used keeps the Reasonlet too.
+    /// cut its children's link, but its children are idle, held and deeper, so they are in this batch or went in an
+    /// earlier one, and a child that is used or not held keeps the Reasonlet too.
     /// </para>
     /// </remarks>
     [Query(StillIdleSql + """
-        , gone_executions AS (
+        , idle_runs AS MATERIALIZED (
+            SELECT c.id
+            FROM idle i CROSS JOIN LATERAL (
+                SELECT x.id FROM mnemosyne.reasonlet_executions x
+                WHERE x.scope = i.scope AND x.reasonlet_id = i.id
+                OFFSET 0
+            ) c
+        ), fits AS MATERIALIZED (
+            SELECT count(*) <= @batchSize AS whole FROM idle_runs
+        ), gone_executions AS (
             DELETE FROM mnemosyne.reasonlet_executions e
-            WHERE e.id = ANY(ARRAY(
-                SELECT c.id
-                FROM idle i CROSS JOIN LATERAL (
-                    SELECT x.id FROM mnemosyne.reasonlet_executions x
-                    WHERE x.scope = i.scope AND x.reasonlet_id = i.id
-                    OFFSET 0
-                ) c))
+            WHERE e.id = ANY(ARRAY(SELECT r.id FROM idle_runs r LIMIT @batchSize))
             RETURNING e.id
         ), gone_reasonlets AS (
             DELETE FROM mnemosyne.reasonlets r
-            WHERE r.id = ANY(ARRAY(SELECT i.id FROM idle i))
+            WHERE (SELECT f.whole FROM fits f)
+              AND r.id = ANY(ARRAY(SELECT i.id FROM idle i))
             RETURNING r.id
         )
-        SELECT (SELECT count(*) FROM gone_reasonlets)::int, (SELECT count(*) FROM gone_executions)::int
+        SELECT (SELECT count(*) FROM gone_reasonlets)::int,
+               (SELECT count(*) FROM gone_executions)::int,
+               NOT (SELECT f.whole FROM fits f)
         """)]
-    public partial Task<IdlePruneRow?> DeleteStillIdleAsync(Guid[] lockedIds, DateTime cutoff, IAsyncDbTransaction transaction, CancellationToken ct);
+    public partial Task<IdlePruneRow?> DeleteStillIdleAsync(
+        Guid[] lockedIds, DateTime cutoff, int batchSize, IAsyncDbTransaction transaction, CancellationToken ct);
 }

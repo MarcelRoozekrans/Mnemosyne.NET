@@ -467,6 +467,7 @@ public sealed class PruneTests(PgVectorFixture fixture) : IClassFixture<PgVector
         // 2,500 versions in one chain, each with one old run. Batches of 1,000 go deepest first, so after every
         // committed batch each remaining row that had a parent still has it: no batch deletes a parent and keeps its
         // child. The foreign key would set a cut link to null rather than leave it dangling, so a null is the sign.
+        // Each chunk's 1,000 runs fit in its Reasonlet batch, so no run batch comes first.
         var store = await MigratedStoreAsync();
         store.PruneBatchSizeOverride = 1000;
         var scope = PgVectorFixture.NewScope();
@@ -487,34 +488,33 @@ public sealed class PruneTests(PgVectorFixture fixture) : IClassFixture<PgVector
         Assert.Equal((2500, 2500), (result.Reasonlets, result.Executions));
         Assert.Equal((0L, 0L), await CountsAsync(fixture.DataSource, scope));
 
-        // Per chunk of 1,000: a run batch that deletes the chunk's runs, an empty one, and the Reasonlet batch.
-        Assert.Equal(9, checks);
+        // One Reasonlet batch per chunk of 1,000.
+        Assert.Equal(3, checks);
     }
 
     [Fact(Timeout = 30_000)]
     public async Task AReasonletUsedAfterTheSelectSurvives()
     {
-        // Root -> candidate -> leaf, all idle when the prune lists them. Another transaction holds the candidate as an
-        // append does, so the prune, having listed it, waits for its lock. That transaction then appends a run with the
-        // store's own insert and commits. The re-check sees the run: the candidate and its root survive and are not
-        // counted. The leaf is still idle and goes; the root, the leaf's batch-mate, is not deleted with it.
+        // Root -> candidate -> leaf, all idle when the prune lists them. Before the batch takes its locks, another
+        // transaction appends a run to the candidate and commits. The re-check sees the run: the candidate and its
+        // root survive and are not counted. The leaf is still idle and goes; the root, the leaf's batch-mate, is not
+        // deleted with it.
         var store = await MigratedStoreAsync();
         var scope = PgVectorFixture.NewScope();
         var (root, candidate, leaf) = await IdleLineageAsync(store, scope);
-        await using var other = (await fixture.DataSource.OpenConnectionAsync(Ct)).AsAsync();
-        await using var transaction = await other.BeginTransactionAsync(System.Data.IsolationLevel.ReadCommitted, Ct);
-        var pid = await RunAsync(other, transaction, $"SELECT 1 FROM mnemosyne.reasonlets WHERE id = '{candidate.Id.Value}' FOR KEY SHARE");
+        var batches = 0;
+        store.BeforePruneBatch = async () =>
+        {
+            if (++batches == 1)
+            {
+                await AppendAsync(store, scope, candidate.Id, SubjectB);
+            }
+        };
 
-        var prune = store.PruneAsync(new ReasonletRetention { Scope = scope, ReasonletsUnusedFor = FiveDays }, Ct).AsTask();
-        await WaitForPruneLockWaitAsync(pid);
-        var appended = await new Repositories.ExecutionRepository(other).InsertAsync(
-            Guid.CreateVersion7(), candidate.Id.Value, scope.Value, true, 10, null, "test", null, SubjectB, null, transaction, Ct);
-        Assert.Equal(1, appended);
-        await transaction.CommitAsync(Ct);
-        var result = await prune;
+        var result = await PruneAsync(store, new ReasonletRetention { Scope = scope, ReasonletsUnusedFor = FiveDays });
 
-        Assert.True(result.IsSuccess, result.IsFailure ? result.Error.ToString() : null);
-        Assert.Equal((1, 1), (result.Value.Reasonlets, result.Value.Executions));
+        Assert.Equal(1, batches);
+        Assert.Equal((1, 1), (result.Reasonlets, result.Executions));
         Assert.Equal(
             new[] { root.Id.Value, candidate.Id.Value }.Order(),
             (await IdsAsync(fixture.DataSource, "SELECT id FROM mnemosyne.reasonlets WHERE scope = $1", scope.Value)).Order());
@@ -528,37 +528,57 @@ public sealed class PruneTests(PgVectorFixture fixture) : IClassFixture<PgVector
     [Fact(Timeout = 30_000)]
     public async Task AReasonletGivenANewVersionAfterTheSelectSurvives()
     {
-        // As above, but the other transaction remembers a new child version of the candidate, as the store's remember
-        // does: it locks the parent, inserts the child, and records the child's first run. The new child is used, so
-        // the candidate and its root are too.
+        // As above, but the other transaction remembers a new child version of the candidate through the store, which
+        // inserts the child with its first run. The new child is used, so the candidate and its root are too.
         var store = await MigratedStoreAsync();
         var scope = PgVectorFixture.NewScope();
         var (root, candidate, leaf) = await IdleLineageAsync(store, scope);
-        await using var other = (await fixture.DataSource.OpenConnectionAsync(Ct)).AsAsync();
-        await using var transaction = await other.BeginTransactionAsync(System.Data.IsolationLevel.ReadCommitted, Ct);
-        var pid = await RunAsync(other, transaction, $"SELECT 1 FROM mnemosyne.reasonlets WHERE id = '{candidate.Id.Value}' FOR NO KEY UPDATE");
+        ReasonletReceipt? newChild = null;
+        store.BeforePruneBatch = async () => newChild ??= await RememberAsync(store, scope, "new child", SubjectB, candidate.Id);
 
-        var prune = store.PruneAsync(new ReasonletRetention { Scope = scope, ReasonletsUnusedFor = FiveDays }, Ct).AsTask();
-        await WaitForPruneLockWaitAsync(pid);
-        var newChild = Guid.CreateVersion7();
-        await RunAsync(
-            other,
-            transaction,
-            "INSERT INTO mnemosyne.reasonlets (id, scope, name, intent, version, graph, content_hash, parent_id, status, source, created_at, embedding) "
-            + $"VALUES ('{newChild}', '{scope.Value}', 'n', 'i', '1.3', '{{}}', repeat('0', 64), '{candidate.Id.Value}', 1, 's', now(), '[1,0,0]')");
-        Assert.Equal(1, await new Repositories.ExecutionRepository(other).InsertAsync(
-            Guid.CreateVersion7(), newChild, scope.Value, true, 10, null, "test", null, SubjectB, null, transaction, Ct));
-        await transaction.CommitAsync(Ct);
-        var result = await prune;
+        var result = await PruneAsync(store, new ReasonletRetention { Scope = scope, ReasonletsUnusedFor = FiveDays });
 
-        Assert.True(result.IsSuccess, result.IsFailure ? result.Error.ToString() : null);
-        Assert.Equal((1, 1), (result.Value.Reasonlets, result.Value.Executions));
+        Assert.NotNull(newChild);
+        Assert.Equal((1, 1), (result.Reasonlets, result.Executions));
         Assert.Equal(
-            new[] { root.Id.Value, candidate.Id.Value, newChild }.Order(),
+            new[] { root.Id.Value, candidate.Id.Value, newChild.Id.Value }.Order(),
             (await IdsAsync(fixture.DataSource, "SELECT id FROM mnemosyne.reasonlets WHERE scope = $1", scope.Value)).Order());
         Assert.Equal(0L, await Entries.ScalarAsync<long>(fixture.DataSource, "SELECT count(*) FROM mnemosyne.reasonlets WHERE id = $1", leaf.Id.Value));
         Assert.Equal(candidate.Id.Value, await Entries.ScalarAsync<Guid>(
-            fixture.DataSource, "SELECT parent_id FROM mnemosyne.reasonlets WHERE id = $1", newChild));
+            fixture.DataSource, "SELECT parent_id FROM mnemosyne.reasonlets WHERE id = $1", newChild.Id.Value));
+    }
+
+    [Fact(Timeout = 30_000)]
+    public async Task ABatchSkipsAHeldCandidateWithoutWaitingAndKeepsItsAncestors()
+    {
+        // Root -> candidate -> leaf and a lone Reasonlet, all idle. Another transaction holds the candidate FOR KEY
+        // SHARE, as an append does, and stays open. The batch skips the candidate rather than wait for it, and the
+        // re-check treats the row it does not hold as used, so the candidate keeps the root. The leaf and the lone
+        // Reasonlet, its idle batch-mates, go, and the prune finishes while the other transaction is still open.
+        var store = await MigratedStoreAsync();
+        var scope = PgVectorFixture.NewScope();
+        var (root, candidate, leaf) = await IdleLineageAsync(store, scope);
+        var lone = await RememberAsync(store, scope, "lone", SubjectA);
+        await BackdateScopeAsync(fixture.DataSource, scope);
+        await using var other = (await fixture.DataSource.OpenConnectionAsync(Ct)).AsAsync();
+        await using var transaction = await other.BeginTransactionAsync(System.Data.IsolationLevel.ReadCommitted, Ct);
+        await RunAsync(other, transaction, $"SELECT 1 FROM mnemosyne.reasonlets WHERE id = '{candidate.Id.Value}' FOR KEY SHARE");
+
+        var prune = store.PruneAsync(new ReasonletRetention { Scope = scope, ReasonletsUnusedFor = FiveDays }, Ct).AsTask();
+        var finishedFirst = await Task.WhenAny(prune, Task.Delay(TimeSpan.FromSeconds(10), Ct)) == prune;
+        await transaction.RollbackAsync(Ct);
+        var result = await prune;
+
+        Assert.True(finishedFirst, "The prune waited for the held candidate.");
+        Assert.True(result.IsSuccess, result.IsFailure ? result.Error.ToString() : null);
+        Assert.Equal((2, 2), (result.Value.Reasonlets, result.Value.Executions));
+        Assert.Equal(
+            new[] { root.Id.Value, candidate.Id.Value }.Order(),
+            (await IdsAsync(fixture.DataSource, "SELECT id FROM mnemosyne.reasonlets WHERE scope = $1", scope.Value)).Order());
+        Assert.Equal(root.Id.Value, await Entries.ScalarAsync<Guid>(
+            fixture.DataSource, "SELECT parent_id FROM mnemosyne.reasonlets WHERE id = $1", candidate.Id.Value));
+        Assert.Equal(0L, await Entries.ScalarAsync<long>(
+            fixture.DataSource, "SELECT count(*) FROM mnemosyne.reasonlets WHERE id = ANY($1)", new[] { leaf.Id.Value, lone.Id.Value }));
     }
 
     [Fact(Timeout = 30_000)]
@@ -572,7 +592,15 @@ public sealed class PruneTests(PgVectorFixture fixture) : IClassFixture<PgVector
         var store = await MigratedStoreAsync();
         var scope = PgVectorFixture.NewScope();
         var r = await RememberAsync(store, scope, "r", SubjectB);
-        await AppendAsync(store, scope, r.Id, SubjectA);
+
+        // Version 7 ids made in the same millisecond sort at random, so A's run gets an id a second later, which sorts
+        // after B's remember run whatever the clock did.
+        await using (var connection = (await fixture.DataSource.OpenConnectionAsync(Ct)).AsAsync())
+        {
+            Assert.Equal(1, await new Repositories.ExecutionRepository(connection).InsertAsync(
+                Guid.CreateVersion7(DateTimeOffset.UtcNow.AddSeconds(1)), r.Id.Value, scope.Value, true, 10, null, "test", null, SubjectA, null, Ct));
+        }
+
         await BackdateScopeAsync(fixture.DataSource, scope);
         await using var other = (await fixture.DataSource.OpenConnectionAsync(Ct)).AsAsync();
         await using var transaction = await other.BeginTransactionAsync(System.Data.IsolationLevel.ReadCommitted, Ct);
@@ -596,37 +624,71 @@ public sealed class PruneTests(PgVectorFixture fixture) : IClassFixture<PgVector
     }
 
     [Fact]
-    public async Task ABatchLocksByTheDepthsItFindsNotTheListsDepths()
+    public async Task AChunkWhoseRunsExceedTheBoundLosesThemInRunBatchesFirst()
     {
-        // Two idle chains, a0 -> a1 -> a2 -> a3 and b0 -> b1, listed deepest first. Then a2's link to a1 is cut, as an
-        // erase of a1 by another subject would leave it, so a2 now tops its own lineage and a3 sits at depth 1. A later
-        // erase locks by those fresh depths, so the batch must too, or the two could take shared rows in opposite
-        // orders. The lock answers its rows in the order it locked them.
-        await MigratedStoreAsync();
+        // One idle Reasonlet with five old runs, in batches of two. Its runs do not fit in its Reasonlet batch, so they
+        // go first, two at a time, until a run batch comes back short; the Reasonlet batch then deletes it with no run
+        // left. No batch deletes more than two executions.
+        var store = await MigratedStoreAsync();
+        store.PruneBatchSizeOverride = 2;
         var scope = PgVectorFixture.NewScope();
-        var a = await ChainAsync(fixture.DataSource, scope, 4);
-        var b = await ChainAsync(fixture.DataSource, scope, 2);
-        await using var connection = (await fixture.DataSource.OpenConnectionAsync(Ct)).AsAsync();
-        await using var transaction = await connection.BeginTransactionAsync(System.Data.IsolationLevel.ReadCommitted, Ct);
-        var retention = new Repositories.RetentionRepository(connection);
-        var listed = await retention.ListIdleReasonletsInScopeAsync(scope.Value, DateTime.UtcNow.AddDays(-5), transaction, Ct);
-        Assert.Equal(ByDepth((a[3], 3), (a[2], 2), (a[1], 1), (b[1], 1), (a[0], 0), (b[0], 0)), listed);
-        await Entries.ExecuteAsync(fixture.DataSource, "UPDATE mnemosyne.reasonlets SET parent_id = NULL WHERE id = $1", a[2]);
+        await OldRunsAsync(store, scope, 5);
+        await BackdateScopeAsync(fixture.DataSource, scope);
+        var left = new List<long>();
+        store.AfterPruneBatch = async () => left.Add((await CountsAsync(fixture.DataSource, scope)).Executions);
 
-        var locked = await ReasonletPostgreSqlStore.LockByCurrentDepthAsync(retention, listed, transaction, Ct);
+        var result = await PruneAsync(store, new ReasonletRetention { Scope = scope, ReasonletsUnusedFor = FiveDays });
 
-        Assert.Equal(ByDepth((a[3], 1), (a[1], 1), (b[1], 1), (a[2], 0), (a[0], 0), (b[0], 0)), locked);
+        Assert.Equal((1, 5), (result.Reasonlets, result.Executions));
+        Assert.Equal((0L, 0L), await CountsAsync(fixture.DataSource, scope));
+
+        // The first batch finds five runs and commits nothing; three run batches follow, then the Reasonlet batch.
+        Assert.Equal([5L, 3L, 1L, 0L, 0L], left);
     }
 
-    /// <summary>Orders ids as a prune and an erase lock them: deepest first, then by id.</summary>
-    private static Guid[] ByDepth(params (Guid Id, int Depth)[] rows) =>
-        [.. rows.OrderByDescending(r => r.Depth).ThenBy(r => r.Id.ToString(), StringComparer.Ordinal).Select(r => r.Id)];
+    [Fact(Timeout = 30_000)]
+    public async Task ARowThatBecomesIdleAfterItsRunsWereStrippedStillGoesWithinTheBound()
+    {
+        // Y, with three old runs, has a child C that another transaction holds, in batches of two. The first batch
+        // finds three runs and commits nothing. The run batch skips C, so C keeps Y, and it deletes nothing. Then the
+        // other transaction ends and C is erased, so Y is idle with three runs when its Reasonlet batch runs. That
+        // batch checks the bound on the rows it finds idle: it deletes two runs and keeps Y, and the next batch deletes
+        // Y with its last run.
+        var store = await MigratedStoreAsync();
+        store.PruneBatchSizeOverride = 2;
+        var scope = PgVectorFixture.NewScope();
+        var y = await RememberAsync(store, scope, "y", SubjectA);
+        await AppendAsync(store, scope, y.Id, SubjectA);
+        await AppendAsync(store, scope, y.Id, SubjectA);
+        var c = await RememberAsync(store, scope, "c", SubjectB, y.Id);
+        await BackdateScopeAsync(fixture.DataSource, scope);
+        await using var other = (await fixture.DataSource.OpenConnectionAsync(Ct)).AsAsync();
+        await using var transaction = await other.BeginTransactionAsync(System.Data.IsolationLevel.ReadCommitted, Ct);
+        await RunAsync(other, transaction, $"SELECT 1 FROM mnemosyne.reasonlets WHERE id = '{c.Id.Value}' FOR KEY SHARE");
+        var left = new List<long>();
+        store.AfterPruneBatch = async () =>
+        {
+            left.Add(await Entries.ScalarAsync<long>(
+                fixture.DataSource, "SELECT count(*) FROM mnemosyne.reasonlet_executions WHERE reasonlet_id = $1", y.Id.Value));
+            if (left.Count == 2)
+            {
+                await transaction.CommitAsync(Ct);
+                Assert.True((await store.EraseAsync(new ReasonletErasure(scope, SubjectB), Ct)).IsSuccess);
+            }
+        };
+
+        var result = await PruneAsync(store, new ReasonletRetention { Scope = scope, ReasonletsUnusedFor = FiveDays });
+
+        Assert.Equal((1, 3), (result.Reasonlets, result.Executions));
+        Assert.Equal([3L, 3L, 1L, 0L], left);
+        Assert.Equal((0L, 0L), await CountsAsync(fixture.DataSource, scope));
+    }
 
     [Fact(Timeout = 30_000)]
     public async Task IdleRowsOnAHandWrittenParentCycleArePruned()
     {
-        // Only hand-written SQL can make a cycle. No top leads to its rows, so they lock at depth 0, as an erase locks
-        // them, and both walks end; the rows are idle, so they go.
+        // Only hand-written SQL can make a cycle. No top leads to its rows, so they list at depth 0, as an erase locks
+        // them, and every walk ends; the rows are idle and in one batch, which holds the whole cycle, so they go.
         var store = await MigratedStoreAsync();
         var scope = PgVectorFixture.NewScope();
         var chain = await ChainAsync(fixture.DataSource, scope, 2);
@@ -641,13 +703,13 @@ public sealed class PruneTests(PgVectorFixture fixture) : IClassFixture<PgVector
     [Fact]
     public async Task AFailedIdlePruneKeepsEarlierBatches()
     {
-        // A chain of four in batches of two. The first chunk commits: a run batch deletes its two runs, an empty run
-        // batch ends that loop, and the Reasonlet batch deletes the two deepest versions. Every try of the next batch
-        // then fails. What was committed stays deleted, and the progress the telemetry reads counts it.
+        // A chain of four in batches of two. The first batch commits the two deepest versions with their two runs.
+        // Every try of the next batch then fails. What was committed stays deleted, and the progress the telemetry
+        // reads counts it.
         var store = await MigratedStoreAsync();
         store.PruneBatchSizeOverride = 2;
         var calls = 0;
-        store.BeforePruneBatchCommit = () => ++calls > 3 ? throw Pg("40001") : Task.CompletedTask;
+        store.BeforePruneBatchCommit = () => ++calls > 1 ? throw Pg("40001") : Task.CompletedTask;
         var scope = PgVectorFixture.NewScope();
         var chain = await ChainAsync(fixture.DataSource, scope, 4);
         var progress = new PruneProgress();
@@ -655,7 +717,7 @@ public sealed class PruneTests(PgVectorFixture fixture) : IClassFixture<PgVector
         var result = await store.PruneAsync(new ReasonletRetention { Scope = scope, ReasonletsUnusedFor = FiveDays }, progress, Ct);
 
         Assert.Equal(MnemosyneErrorCode.Conflict, result.Error.Code);
-        Assert.Equal(7, calls);
+        Assert.Equal(5, calls);
         Assert.Equal((2, 2), (progress.Reasonlets, progress.Executions));
         Assert.Equal(
             chain[..2].Order(),
