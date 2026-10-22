@@ -1,4 +1,5 @@
 using Mnemosyne.NET.Abstractions;
+using Npgsql;
 using Xunit;
 
 namespace Mnemosyne.NET.PostgreSql.Tests;
@@ -185,6 +186,139 @@ public sealed class ExecutionTests(PgVectorFixture fixture) : IClassFixture<PgVe
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(
             async () => await store.AppendFeedbackAsync(scope, receipt.Execution, new ReasonletFeedback(0.5, 0.5, 0.5), cancelled.Token));
+    }
+
+    [Fact]
+    public async Task TheMetricsCountEveryExecutionExactlyThroughRememberAppendAndASubjectErase()
+    {
+        // R is C's. C remembered it (a success), A re-ran it as an execution only (a failure), B appended a success
+        // and A appended the last success. R's child N has its own row. Erasing A keeps R and recounts it from the
+        // runs left: C's and B's.
+        var store = fixture.CreateStore();
+        Assert.True((await store.MigrateAsync(Ct)).IsSuccess);
+        var scope = PgVectorFixture.NewScope();
+        var r = (await store.RememberAsync(Entries.Entry(scope, provenance: Subject("c")), Ct)).Value;
+        Assert.Equal((1, 1), await MetricsAsync(r.Id));
+        Assert.Equal(
+            ReasonletCaptureKind.ExecutionOnly,
+            (await store.RememberAsync(Entries.Entry(scope, parentId: r.Id, outcome: new ReasonletOutcome(false, TimeSpan.Zero, null), provenance: Subject("a")), Ct)).Value.Kind);
+        Assert.Equal((2, 1), await MetricsAsync(r.Id));
+        var bRun = (await store.AppendExecutionAsync(scope, r.Id, new ReasonletOutcome(true, TimeSpan.Zero, null), Subject("b"), Ct)).Value;
+        Assert.True((await store.AppendExecutionAsync(scope, r.Id, new ReasonletOutcome(true, TimeSpan.Zero, null), Subject("a"), Ct)).IsSuccess);
+        Assert.Equal((4, 3), await MetricsAsync(r.Id));
+        var n = (await store.RememberAsync(Entries.Entry(scope, Entries.Graph("n"), r.Id, provenance: Subject("b")), Ct)).Value;
+        Assert.Equal((1, 1), await MetricsAsync(n.Id));
+        await AssertMetricsMatchTheExecutionsAsync(scope);
+
+        var erased = await store.EraseAsync(new ReasonletErasure(scope, "a"), Ct);
+
+        Assert.Equal((0, 2), (erased.Value.Reasonlets, erased.Value.Executions));
+        Assert.Equal((2, 2), await MetricsAsync(r.Id));
+        Assert.Equal(
+            await Entries.ScalarAsync<DateTime>(fixture.DataSource, "SELECT executed_at::timestamp FROM mnemosyne.reasonlet_executions WHERE id = $1", bRun.Value),
+            await Entries.ScalarAsync<DateTime>(fixture.DataSource, "SELECT last_success_at::timestamp FROM mnemosyne.reasonlet_metrics WHERE reasonlet_id = $1", r.Id.Value));
+        await AssertMetricsMatchTheExecutionsAsync(scope);
+    }
+
+    [Fact]
+    public async Task ConcurrentAppendsToOneReasonletLoseNoCount()
+    {
+        var (store, scope, receipt) = await RememberedAsync();
+
+        var results = await Task.WhenAll(Enumerable.Range(0, 50).Select(i => Task.Run(
+            () => store.AppendExecutionAsync(scope, receipt.Id, new ReasonletOutcome(i % 2 == 0, TimeSpan.Zero, null), Entries.Provenance(), Ct).AsTask(),
+            Ct)));
+
+        Assert.All(results, r => Assert.True(r.IsSuccess));
+        Assert.Equal((51, 26), await MetricsAsync(receipt.Id));
+        await AssertMetricsMatchTheExecutionsAsync(scope);
+    }
+
+    [Fact]
+    public async Task AnAppendThatWaitsForAnEraseOfItsReasonletIsNotFound()
+    {
+        // The append locks the Reasonlet FOR KEY SHARE before it writes anything, so it waits for the erase's lock and
+        // then finds the Reasonlet gone.
+        var (store, scope, receipt) = await RememberedAsync();
+        await using var erase = await fixture.DataSource.OpenConnectionAsync(Ct);
+        await using var transaction = await erase.BeginTransactionAsync(Ct);
+        await RunAsync(erase, $"DELETE FROM mnemosyne.reasonlets WHERE id = '{receipt.Id.Value}'");
+
+        var append = store.AppendExecutionAsync(scope, receipt.Id, Outcome, Entries.Provenance(), Ct).AsTask();
+        await WaitForLockWaitAsync(erase);
+        await transaction.CommitAsync(Ct);
+        var result = await append;
+
+        Assert.Equal(MnemosyneErrorCode.NotFound, result.Error.Code);
+        Assert.Equal(0L, await CountAsync("SELECT count(*) FROM mnemosyne.reasonlet_executions WHERE scope = $1", scope.Value));
+    }
+
+    [Fact]
+    public async Task FeedbackThatWaitsForAnEraseOfItsExecutionIsAConflict()
+    {
+        // The upsert reads the execution, then its foreign-key check waits for the erase's lock on it and finds it
+        // gone: 23503, a lost race with the erase.
+        var (store, scope, receipt) = await RememberedAsync();
+        await using var erase = await fixture.DataSource.OpenConnectionAsync(Ct);
+        await using var transaction = await erase.BeginTransactionAsync(Ct);
+        await RunAsync(erase, $"DELETE FROM mnemosyne.reasonlet_executions WHERE id = '{receipt.Execution.Value}'");
+
+        var feedback = store.AppendFeedbackAsync(scope, receipt.Execution, new ReasonletFeedback(0.5, 0.5, 0.5), Ct).AsTask();
+        await WaitForLockWaitAsync(erase);
+        await transaction.CommitAsync(Ct);
+        var result = await feedback;
+
+        Assert.Equal(MnemosyneErrorCode.Conflict, result.Error.Code);
+        Assert.Contains("23503", result.Error.Detail, StringComparison.Ordinal);
+    }
+
+    private static ReasonletProvenance Subject(string subject) => new() { Source = "test", SubjectId = subject };
+
+    private async Task<(int Runs, int Successes)> MetricsAsync(ReasonletId id) => (
+        await Entries.ScalarAsync<int>(fixture.DataSource, "SELECT runs FROM mnemosyne.reasonlet_metrics WHERE reasonlet_id = $1", id.Value),
+        await Entries.ScalarAsync<int>(fixture.DataSource, "SELECT successes FROM mnemosyne.reasonlet_metrics WHERE reasonlet_id = $1", id.Value));
+
+    /// <summary>Asserts that every Reasonlet of the scope has a metrics row equal to an aggregate of its executions.</summary>
+    private async Task AssertMetricsMatchTheExecutionsAsync(ReasonletScope scope) => Assert.Equal(
+        0L,
+        await Entries.ScalarAsync<long>(
+            fixture.DataSource,
+            """
+            SELECT count(*) FROM mnemosyne.reasonlets r
+            LEFT JOIN mnemosyne.reasonlet_metrics m ON m.reasonlet_id = r.id
+            LEFT JOIN LATERAL (SELECT count(*)::int AS runs, (count(*) FILTER (WHERE success))::int AS successes,
+                                      max(executed_at) FILTER (WHERE success) AS last_success_at
+                               FROM mnemosyne.reasonlet_executions e WHERE e.reasonlet_id = r.id) a ON true
+            WHERE r.scope = $1
+              AND (m.reasonlet_id IS NULL OR m.scope <> r.scope OR (m.runs, m.successes) <> (a.runs, a.successes)
+                   OR m.last_success_at IS DISTINCT FROM a.last_success_at)
+            """,
+            scope.Value));
+
+    private static async Task RunAsync(NpgsqlConnection connection, string sql)
+    {
+        await using var command = new NpgsqlCommand(sql, connection);
+        await command.ExecuteNonQueryAsync(Ct);
+    }
+
+    /// <summary>Waits until a backend other than <paramref name="other"/>'s is blocked on a lock.</summary>
+    private async Task WaitForLockWaitAsync(NpgsqlConnection other)
+    {
+        for (var attempt = 0; attempt < 200; attempt++)
+        {
+            var waiting = await Entries.ScalarAsync<long>(
+                fixture.DataSource,
+                "SELECT count(*) FROM pg_stat_activity WHERE wait_event_type = 'Lock' AND pid <> $1",
+                other.ProcessID);
+            if (waiting > 0)
+            {
+                return;
+            }
+
+            await Task.Delay(25, Ct);
+        }
+
+        Assert.Fail("The store never waited for a lock.");
     }
 
     private async Task<(ReasonletPostgreSqlStore Store, ReasonletScope Scope, ReasonletReceipt Receipt)> RememberedAsync()

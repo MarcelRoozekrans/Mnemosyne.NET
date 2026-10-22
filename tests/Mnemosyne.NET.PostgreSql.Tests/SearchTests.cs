@@ -102,19 +102,20 @@ public sealed class SearchTests(PgVectorFixture fixture) : IClassFixture<PgVecto
         var (store, scope) = await MigratedAsync();
         var id = await RememberAsync(store, scope, new float[] { 1, 0, 0 }, "measured");
         var bare = await RememberAsync(store, scope, new float[] { 0, 1, 0 }, "bare");
+        var success = (await store.AppendExecutionAsync(scope, id, new ReasonletOutcome(true, TimeSpan.Zero, null), Entries.Provenance(), Ct)).Value;
+        Assert.True((await store.AppendExecutionAsync(scope, id, new ReasonletOutcome(false, TimeSpan.Zero, null), Entries.Provenance(), Ct)).IsSuccess);
 
-        // Remember records one successful execution of each; replace them so the numbers are exact.
-        await Entries.ExecuteAsync(fixture.DataSource, "DELETE FROM mnemosyne.reasonlet_executions WHERE reasonlet_id = $1 OR reasonlet_id = $2", id.Value, bare.Value);
-        await InsertExecutionAsync(scope, id, success: true, "2026-01-01T10:00:00Z");
-        await InsertExecutionAsync(scope, id, success: false, "2026-03-01T10:00:00Z");
-        await InsertExecutionAsync(scope, id, success: true, "2026-02-01T10:00:00Z");
+        // The store never leaves a Reasonlet without a metrics row; search still reads a missing one as no runs.
+        await Entries.ExecuteAsync(fixture.DataSource, "DELETE FROM mnemosyne.reasonlet_metrics WHERE reasonlet_id = $1", bare.Value);
 
         var result = await store.SearchAsync(scope, new float[] { 1, 0, 0 }, null, 10, Ct);
 
         var measured = result.Value[0].Metrics;
         Assert.Equal(3, measured.Runs);
         Assert.Equal(2, measured.Successes);
-        Assert.Equal(DateTimeOffset.Parse("2026-02-01T10:00:00Z"), measured.LastSuccessAt);
+        Assert.Equal(
+            await Entries.ScalarAsync<DateTime>(fixture.DataSource, "SELECT executed_at FROM mnemosyne.reasonlet_executions WHERE id = $1", success.Value),
+            measured.LastSuccessAt!.Value.UtcDateTime);
         Assert.Equal(new ReasonletMetrics(0, 0, null), result.Value[1].Metrics);
     }
 
@@ -168,14 +169,16 @@ public sealed class SearchTests(PgVectorFixture fixture) : IClassFixture<PgVecto
     }
 
     [Fact]
-    public async Task AScopeWithASmallShareOfTheTableStillGetsItsFullLimitThroughTheIndex()
+    public async Task AScopeWithASmallShareOfTheTableStillGetsItsLimitThroughTheIndex()
     {
-        // enable_seqscan is off and the btree indexes are dropped, so the planner has only the HNSW index left. A plain
-        // index scan would collect about ef_search nearest rows of the whole table and filter them by scope afterwards.
+        // enable_seqscan is off and the scoped btree indexes are dropped, so the planner has only the HNSW index left. A
+        // plain index scan would collect about ef_search nearest rows of the whole table and filter them by scope
+        // afterwards. UNIQUE (scope, id) goes too, with the foreign keys that need it, in this throwaway database.
         var dataSource = await fixture.CreateEmptyDatabaseAsync("-c enable_seqscan=off");
         var store = new ReasonletPostgreSqlStore(dataSource, new MnemosynePostgreSqlOptions { Dimensions = 3 });
         Assert.True((await store.MigrateAsync(Ct)).IsSuccess);
-        foreach (var index in new[] { "scope_status_intent", "scope_parent_id", "scope_content_hash", "scope_subject_id" })
+        await Entries.ExecuteAsync(dataSource, "ALTER TABLE mnemosyne.reasonlets DROP CONSTRAINT reasonlets_scope_id_key CASCADE");
+        foreach (var index in new[] { "scope_status_intent", "scope_parent_id", "scope_subject_id" })
         {
             await Entries.ExecuteAsync(dataSource, $"DROP INDEX mnemosyne.reasonlets_{index}");
         }
@@ -235,11 +238,6 @@ public sealed class SearchTests(PgVectorFixture fixture) : IClassFixture<PgVecto
         Assert.True(result.IsSuccess);
         return result.Value.Id;
     }
-
-    private Task InsertExecutionAsync(ReasonletScope scope, ReasonletId id, bool success, string executedAt) => Entries.ExecuteAsync(
-        fixture.DataSource,
-        "INSERT INTO mnemosyne.reasonlet_executions (id, reasonlet_id, scope, success, duration_ticks, source, executed_at) VALUES ($1, $2, $3, $4, 0, 'test', $5)",
-        Guid.NewGuid(), id.Value, scope.Value, success, DateTimeOffset.Parse(executedAt));
 
     private static void AssertValidation(string message, MnemosyneError error)
     {

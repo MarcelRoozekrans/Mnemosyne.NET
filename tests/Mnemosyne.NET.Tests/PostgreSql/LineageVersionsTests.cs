@@ -9,34 +9,28 @@ public sealed class LineageVersionsTests
     public void InitialIsOneZero() => Assert.Equal("1.0", LineageVersions.Initial);
 
     [Theory]
-    [InlineData("1.0", "1.1")]
-    [InlineData("1.0,1.1,1.3", "1.4")]
-    [InlineData("1.2", "1.3")]
-    public void NextIsMaxMinorPlusOne(string versions, string expected) =>
-        Assert.Equal(expected, LineageVersions.Next(versions.Split(',')));
+    [InlineData(0L, "1.1")]
+    [InlineData(3L, "1.4")]
+    [InlineData(2147483646L, "1.2147483647")]
+    public void NextIsMaxMinorPlusOne(long maxMinor, string expected) =>
+        Assert.Equal(expected, LineageVersions.Next(maxMinor, null));
 
     [Fact]
-    public void MinorParses() => Assert.Equal(0, LineageVersions.Minor("1.0"));
+    public void NextOfALineageWithoutAWellFormedVersionIsOneOne() =>
+        // Only reachable for a lineage with no rows, which a locked top rules out. A new Reasonlet uses Initial.
+        Assert.Equal("1.1", LineageVersions.Next(null, null));
 
     [Theory]
-    [InlineData("")]
-    [InlineData("1")]
-    [InlineData("2.1")]
-    [InlineData("1.x")]
-    [InlineData("1.-1")]
-    [InlineData("1.01")]
-    [InlineData("1.007")]
-    [InlineData(" 1.2")]
-    [InlineData("1.2 ")]
-    public void MalformedThrows(string version) =>
-        Assert.Throws<FormatException>(() => LineageVersions.Minor(version));
+    [InlineData(2147483647L)]
+    [InlineData(99999999999L)]
+    public void NextThrowsRatherThanOverflow(long maxMinor) =>
+        Assert.Throws<OverflowException>(() => LineageVersions.Next(maxMinor, null));
 
     [Fact]
-    public void NextOfEmptyLineageIsOneOne() =>
-        // Only reachable for a lineage with no rows. A brand new Reasonlet uses Initial, not Next.
-        Assert.Equal("1.1", LineageVersions.Next([]));
+    public void AMalformedVersionInTheLineageIsABugAndThrows()
+    {
+        var thrown = Assert.Throws<FormatException>(() => LineageVersions.Next(3, "1.01"));
 
-    [Fact]
-    public void NextThrowsRatherThanOverflow() =>
-        Assert.Throws<OverflowException>(() => LineageVersions.Next(["1.2147483647"]));
+        Assert.Equal("'1.01' is not a lineage version of the form 1.k.", thrown.Message);
+    }
 }

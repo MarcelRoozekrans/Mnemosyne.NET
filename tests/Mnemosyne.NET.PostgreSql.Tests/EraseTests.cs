@@ -227,6 +227,35 @@ public sealed class EraseTests(PgVectorFixture fixture) : IClassFixture<PgVector
     }
 
     [Fact]
+    public async Task ARecountThatWaitsForAConcurrentAppendCountsIt()
+    {
+        // K is B's and A ran it, so erasing A recounts K. Another transaction appends to K as the store does, inserting
+        // B's execution and incrementing K's metrics row, and holds it open. The erase waits for the row; once the
+        // append commits, the recount must include B's execution rather than overwrite the increment.
+        var store = await MigratedStoreAsync();
+        var scope = PgVectorFixture.NewScope();
+        var k = await RememberAsync(store, scope, "k", SubjectB);
+        await AppendAsync(store, scope, k.Id, SubjectA);
+
+        await using var append = await fixture.DataSource.OpenConnectionAsync(Ct);
+        await using var transaction = await append.BeginTransactionAsync(Ct);
+        await RunAsync(
+            append,
+            "INSERT INTO mnemosyne.reasonlet_executions (id, reasonlet_id, scope, executed_at, success, duration_ticks, source, subject_id) "
+            + $"VALUES (gen_random_uuid(), '{k.Id.Value}', '{scope.Value}', now(), true, 0, 'test', '{SubjectB}')");
+        await RunAsync(append, $"UPDATE mnemosyne.reasonlet_metrics SET runs = runs + 1, successes = successes + 1 WHERE reasonlet_id = '{k.Id.Value}'");
+
+        var erase = store.EraseAsync(new ReasonletErasure(scope, SubjectA), Ct).AsTask();
+        await WaitForLockWaitAsync(append);
+        await transaction.CommitAsync(Ct);
+        var result = await erase;
+
+        Assert.Equal((0, 1), (result.Value.Reasonlets, result.Value.Executions));
+        Assert.Equal(2, await Entries.ScalarAsync<int>(fixture.DataSource, "SELECT runs FROM mnemosyne.reasonlet_metrics WHERE reasonlet_id = $1", k.Id.Value));
+        Assert.Equal(2, await Entries.ScalarAsync<int>(fixture.DataSource, "SELECT successes FROM mnemosyne.reasonlet_metrics WHERE reasonlet_id = $1", k.Id.Value));
+    }
+
+    [Fact]
     public async Task ADeadlockWithAConcurrentTransactionIsAConflict()
     {
         // The other transaction holds R. The erase locks C, its deepest row, then waits for R; the other transaction

@@ -46,12 +46,16 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
         _options = options;
     }
 
-    /// <summary>Creates or updates the <c>mnemosyne</c> schema and applies the embedding dimension.</summary>
+    /// <summary>Creates or updates the <c>mnemosyne</c> schema and applies the embedding dimension and HNSW options.</summary>
     /// <remarks>
-    /// Calling it again is harmless. The first call fixes the dimension at
-    /// <see cref="MnemosynePostgreSqlOptions.Dimensions"/>; a later call with a different dimension fails with
-    /// <see cref="MnemosyneErrorCode.Validation"/> and changes nothing, because mixing embedding models would
-    /// corrupt similarity. A database failure answers <see cref="MnemosyneErrorCode.Unavailable"/>.
+    /// Calling it again is harmless. The server must run PostgreSQL 15 or later and pgvector 0.8.0 or later, or the
+    /// call fails with <see cref="MnemosyneErrorCode.Validation"/>. The first call fixes the dimension at
+    /// <see cref="MnemosynePostgreSqlOptions.Dimensions"/> and builds the HNSW index with
+    /// <see cref="MnemosynePostgreSqlOptions.HnswM"/> and <see cref="MnemosynePostgreSqlOptions.HnswEfConstruction"/>.
+    /// A later call with a different dimension fails with <see cref="MnemosyneErrorCode.Validation"/> and changes
+    /// nothing, because mixing embedding models would corrupt similarity; so does a later call with different HNSW
+    /// options, because they apply only when the index is built. A database failure answers
+    /// <see cref="MnemosyneErrorCode.Unavailable"/>.
     /// </remarks>
     /// <param name="ct">The cancellation token.</param>
     /// <returns>Success, or the error.</returns>
@@ -74,6 +78,16 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
     private async Task<UnitResult<MnemosyneError>> MigrateCoreAsync(CancellationToken ct)
     {
         await using var connection = (await _dataSource.OpenConnectionAsync(ct).ConfigureAwait(false)).AsAsync();
+
+        // Before the migrations, which an older server cannot even parse.
+        var server = await new SettingsRepository(connection).GetServerVersionAsync(ct).ConfigureAwait(false);
+        if (!PostgresVersion.IsSupported(server!.Number))
+        {
+            return new MnemosyneError(
+                MnemosyneErrorCode.Validation,
+                $"PostgreSQL {server.Text} is running, but the store needs PostgreSQL {PostgresVersion.MinimumMajor} or later for its scoped foreign keys.");
+        }
+
         var source = new EmbeddedResourceMigrationSource(typeof(ReasonletPostgreSqlStore).Assembly, MigrationResourcePrefix);
         await new MigrationRunner(connection, source, new PostgresMigrationDialect()).RunAsync(ct).ConfigureAwait(false);
 
@@ -88,18 +102,25 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
         await using var transaction = await connection.BeginTransactionAsync(ct).ConfigureAwait(false);
         var settings = new SettingsRepository(connection);
         await settings.LockAsync(transaction, ct).ConfigureAwait(false);
-        var recorded = await settings.GetDimensionsAsync(transaction, ct).ConfigureAwait(false);
-        if (recorded is { } dimensions)
+
+        // One row, whatever is recorded, so the null-forgiving operator only skips a check the query cannot fail.
+        var recorded = (await settings.GetAsync(transaction, ct).ConfigureAwait(false))!;
+        if (recorded.Dimensions is { } dimensions)
         {
             if (dimensions != _options.Dimensions)
             {
                 return DimensionMismatch(dimensions);
             }
+
+            if (recorded.HnswM != _options.HnswM || recorded.HnswEfConstruction != _options.HnswEfConstruction)
+            {
+                return HnswMismatch(recorded);
+            }
         }
         else
         {
             await ApplyDimensionsAsync(connection, transaction, ct).ConfigureAwait(false);
-            await settings.RecordDimensionsAsync(_options.Dimensions, transaction, ct).ConfigureAwait(false);
+            await settings.RecordAsync(_options.Dimensions, _options.HnswM, _options.HnswEfConstruction, transaction, ct).ConfigureAwait(false);
             await transaction.CommitAsync(ct).ConfigureAwait(false);
         }
 
@@ -109,12 +130,19 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
 
     /// <inheritdoc />
     /// <remarks>
-    /// One transaction at READ COMMITTED decides between a new Reasonlet, an execution only and a new version. Row
-    /// locks on the parent and on the top of its lineage serialize concurrent children, so their versions never
-    /// collide. A new version that loses a race with a concurrent erase of its lineage answers
-    /// <see cref="MnemosyneErrorCode.Conflict"/>.
+    /// <para>
+    /// One transaction at READ COMMITTED decides between a new Reasonlet, an execution only and a new version, and
+    /// counts the execution in the Reasonlet's metrics. A new version takes row locks going up its lineage, in this
+    /// order: the parent <c>FOR NO KEY UPDATE</c>, then every ancestor between the parent and the top of the lineage
+    /// <c>FOR KEY SHARE</c>, bottom-up, then the top <c>FOR NO KEY UPDATE</c>. The top's lock serializes concurrent
+    /// children of the lineage, so their versions never collide, and the ancestor locks keep an erase from cutting
+    /// the path to the top until commit. An execution only locks the parent alone. A new version that loses a race
+    /// with a concurrent erase of its lineage answers <see cref="MnemosyneErrorCode.Conflict"/>.
+    /// </para>
+    /// <para>
     /// The embedding must have <see cref="MnemosynePostgreSqlOptions.Dimensions"/> values, or the entry is a
     /// <see cref="MnemosyneErrorCode.Validation"/> failure.
+    /// </para>
     /// </remarks>
     /// <exception cref="ArgumentNullException"><paramref name="entry"/> is null.</exception>
     /// <exception cref="InvalidOperationException">
@@ -187,40 +215,32 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
             else
             {
                 // The lineage is the top above the parent and the top's whole subtree, derived from parent_id within the
-                // scope. Every lock is taken going up the tree: the parent FOR UPDATE, then each ancestor between the
-                // parent and the top FOR KEY SHARE, bottom-up, then the top FOR UPDATE. When the parent is the top, the
-                // top lock is a re-lock. A transaction only ever waits for a row above every row it holds, so
+                // scope. Every lock is taken going up the tree: the parent FOR NO KEY UPDATE, then each ancestor between
+                // the parent and the top FOR KEY SHARE, bottom-up, then the top FOR NO KEY UPDATE. When the parent is the
+                // top, the top lock is a re-lock. A transaction only ever waits for a row above every row it holds, so
                 // remembers cannot deadlock one another.
                 var scope = capture.Scope.Value;
-
-                // The walk starts at the parent this transaction holds, so the path is never empty.
-                var path = await reasonlets.FindLineagePathAsync(scope, parent.Id, transaction, ct).ConfigureAwait(false);
-                var top = path[^1];
-                if (top.IsCycle)
-                {
-                    // The store never links a Reasonlet to a descendant, so a cycle is corrupt data: a bug, not a result.
-                    throw new InvalidOperationException(
-                        $"The parent_id links above Reasonlet {parent.Id} form a cycle through {top.Id}; the stored lineage is corrupt.");
-                }
+                var path = FollowToTop(parent.Id, await reasonlets.WalkUpAsync(scope, parent.Id, transaction, ct).ConfigureAwait(false));
 
                 // The path locks hold every link from the parent to the top until commit, because an erase must delete
                 // an ancestor to cut a link. A row that vanished between the walk and its lock means a concurrent erase
                 // already cut the path, so the walk's top and subtree are stale: a lost race with an erase.
-                for (var i = 1; i < path.Count - 1; i++)
-                {
-                    if (await reasonlets.LockAncestorAsync(scope, path[i].Id, transaction, ct).ConfigureAwait(false) is null)
-                    {
-                        return LineageConflict();
-                    }
-                }
-
-                if (await reasonlets.LockLineageTopAsync(scope, top.Id, transaction, ct).ConfigureAwait(false) is null)
+                // Between the parent and the top; none when the parent is the top or its child.
+                var ancestors = path[1..Math.Max(1, path.Length - 1)];
+                if (ancestors.Length > 0
+                    && await reasonlets.LockAncestorsAsync(scope, ancestors, transaction, ct).ConfigureAwait(false) != ancestors.Length)
                 {
                     return LineageConflict();
                 }
 
-                var version = LineageVersions.Next(
-                    await reasonlets.GetLineageVersionsAsync(scope, top.Id, transaction, ct).ConfigureAwait(false));
+                var top = path[^1];
+                if (await reasonlets.LockLineageTopAsync(scope, top, transaction, ct).ConfigureAwait(false) is null)
+                {
+                    return LineageConflict();
+                }
+
+                var lineage = (await reasonlets.GetLineageMinorAsync(scope, top, transaction, ct).ConfigureAwait(false))!;
+                var version = LineageVersions.Next(lineage.MaxMinor, lineage.Malformed);
                 receipt = await InsertReasonletAsync(
                     reasonlets, executions, entry, hash, version, parent.Id, ReasonletCaptureKind.NewVersion, transaction, ct)
                     .ConfigureAwait(false);
@@ -229,6 +249,36 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
 
         await transaction.CommitAsync(ct).ConfigureAwait(false);
         return receipt;
+    }
+
+    /// <summary>
+    /// Follows the links of a walk up from <paramref name="start"/> to the top of its lineage, and returns the path:
+    /// <paramref name="start"/> first and the top last.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">The links lead back to a Reasonlet already on the path.</exception>
+    private static Guid[] FollowToTop(Guid start, List<ParentLinkRow> links)
+    {
+        var parents = new Dictionary<Guid, Guid?>(links.Count);
+        foreach (var link in links)
+        {
+            parents[link.Id] = link.ParentId;
+        }
+
+        var path = new List<Guid>(links.Count) { start };
+        var visited = new HashSet<Guid> { start };
+        while (parents[path[^1]] is { } next)
+        {
+            if (!visited.Add(next))
+            {
+                // The store never links a Reasonlet to a descendant, so a cycle is corrupt data: a bug, not a result.
+                throw new InvalidOperationException(
+                    $"The parent_id links above Reasonlet {start} form a cycle through {next}; the stored lineage is corrupt.");
+            }
+
+            path.Add(next);
+        }
+
+        return [.. path];
     }
 
     private static async Task<ReasonletReceipt> InsertReasonletAsync(
@@ -266,6 +316,7 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
         return new ReasonletReceipt(id, version, execution, kind, ReasonletStatus.Active);
     }
 
+    /// <summary>Inserts the capture's execution of a Reasonlet this transaction holds or has just inserted, and counts it in the Reasonlet's metrics.</summary>
     private static async Task<ExecutionId> InsertExecutionAsync(
         ExecutionRepository executions, Guid reasonletId, ReasonletCapture capture, IAsyncDbTransaction transaction, CancellationToken ct)
     {
@@ -350,9 +401,11 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
 
     /// <inheritdoc />
     /// <remarks>
-    /// One scoped <c>INSERT … SELECT</c> from the Reasonlet's row, so a Reasonlet that is missing or in another
-    /// scope answers <see cref="MnemosyneErrorCode.NotFound"/> without a prior read. A Reasonlet erased
-    /// concurrently answers <see cref="MnemosyneErrorCode.NotFound"/> or <see cref="MnemosyneErrorCode.Conflict"/>.
+    /// One scoped statement inserts the execution from the Reasonlet's row and counts it in the Reasonlet's metrics,
+    /// so a Reasonlet that is missing or in another scope answers <see cref="MnemosyneErrorCode.NotFound"/> without a
+    /// prior read. The statement takes the Reasonlet <c>FOR KEY SHARE</c>, which a remember's locks let through, so an
+    /// append never waits for a remember in the same lineage; it waits only for an erase that holds the Reasonlet,
+    /// and a Reasonlet that erase deletes answers <see cref="MnemosyneErrorCode.NotFound"/>.
     /// </remarks>
     public async ValueTask<Result<ExecutionId, MnemosyneError>> AppendExecutionAsync(
         ReasonletScope scope, ReasonletId id, ReasonletOutcome outcome, ReasonletProvenance provenance, CancellationToken ct)
@@ -377,7 +430,7 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
     {
         var executionId = ExecutionId.New();
         await using var connection = (await _dataSource.OpenConnectionAsync(ct).ConfigureAwait(false)).AsAsync();
-        var inserted = await new ExecutionRepository(connection).InsertForExistingAsync(
+        var inserted = await new ExecutionRepository(connection).InsertAsync(
             executionId.Value,
             id.Value,
             scope.Value,
@@ -400,7 +453,9 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
     /// <inheritdoc />
     /// <remarks>
     /// One scoped upsert keyed on the execution, so feedback recorded again replaces the earlier feedback. An
-    /// execution that is missing or in another scope answers <see cref="MnemosyneErrorCode.NotFound"/>.
+    /// execution that is missing or in another scope answers <see cref="MnemosyneErrorCode.NotFound"/>. An execution
+    /// that a concurrent erase deletes while the upsert waits for it answers <see cref="MnemosyneErrorCode.Conflict"/>:
+    /// the foreign-key check finds the execution gone.
     /// </remarks>
     public async ValueTask<UnitResult<MnemosyneError>> AppendFeedbackAsync(
         ReasonletScope scope, ExecutionId execution, ReasonletFeedback feedback, CancellationToken ct)
@@ -452,8 +507,10 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
     /// <inheritdoc />
     /// <remarks>
     /// Runs in one READ COMMITTED transaction with iterative HNSW scans, so a scope that holds a small share of the
-    /// table still gets up to <paramref name="limit"/> results, nearest first. Candidates at exactly equal distance
-    /// come back in an unspecified order: a second sort key could stop the index from serving the ordering.
+    /// table usually still gets up to <paramref name="limit"/> results, sorted exactly by distance; HNSW recall is
+    /// approximate. The scan stops at <c>hnsw.max_scan_tuples</c> (20,000 by default), so a very small scope in a very
+    /// large table can still come back short. Candidates at exactly equal distance come back in an unspecified
+    /// order: a second sort key could stop the index from serving the ordering.
     /// </remarks>
     public async ValueTask<Result<IReadOnlyList<ReasonletCandidate>, MnemosyneError>> SearchAsync(
         ReasonletScope scope, ReadOnlyMemory<float> embedding, string? intent, int limit, CancellationToken ct)
@@ -511,10 +568,11 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
     /// and the filters run afterwards, so a scope with a small share of the rows gets fewer rows than the limit.
     /// </summary>
     /// <remarks>
-    /// <c>strict_order</c> rather than <c>relaxed_order</c>, so results stay exactly nearest first.
-    /// <c>hnsw.max_scan_tuples</c> stays at its default (20,000), which bounds the work of a very selective scope.
-    /// <c>SET</c> takes no bind parameter, so <c>ef_search</c> is an integer that the limit check already bounded,
-    /// written with the invariant culture, as the dimension DDL is. <c>SET LOCAL</c> ends with the transaction.
+    /// <c>strict_order</c> rather than <c>relaxed_order</c>, so results stay sorted exactly by distance; HNSW recall
+    /// is approximate either way. <c>hnsw.max_scan_tuples</c> stays at its default (20,000), which bounds the work of
+    /// a very selective scope. <c>SET</c> takes no bind parameter, so <c>ef_search</c> is an integer that the limit
+    /// check already bounded, written with the invariant culture, as the dimension DDL is. <c>SET LOCAL</c> ends with
+    /// the transaction.
     /// </remarks>
     private static async Task ApplyIterativeScanAsync(IAsyncDbConnection connection, IAsyncDbTransaction transaction, int limit, CancellationToken ct)
     {
@@ -550,11 +608,13 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
     /// <remarks>
     /// One transaction at READ COMMITTED. An erasure by subject deletes the subject's Reasonlets in the scope with
     /// every execution and feedback on them, other subjects' runs included, then the subject's executions on the
-    /// Reasonlets it keeps. Other subjects' children of a deleted Reasonlet survive with a null parent, each the top
-    /// of its own lineage. The counts are of rows removed, each once; a cut lineage link is not a removal. The rows
-    /// are locked deepest first, the order a remember's path locks take, so an erase waits behind a remember rather
-    /// than deadlocking with it; a deadlock that still happens, with a remember that raced the lock walk or with a
-    /// hand-written transaction, answers <see cref="MnemosyneErrorCode.Conflict"/>.
+    /// Reasonlets it keeps, whose metrics it recounts from the executions left. Other subjects' children of a deleted
+    /// Reasonlet survive with a null parent, each the top of its own lineage. The counts are of rows removed, each
+    /// once; a cut lineage link is not a removal. The erase covers what exists when it takes its locks: a Reasonlet
+    /// remembered while it runs is not erased by it. The rows are locked deepest first, the order a remember's path
+    /// locks take, so an erase waits behind a remember rather than deadlocking with it; a deadlock that still
+    /// happens, with a remember that raced the lock walk or with a hand-written transaction, answers
+    /// <see cref="MnemosyneErrorCode.Conflict"/>.
     /// </remarks>
     /// <exception cref="ArgumentNullException"><paramref name="erasure"/> is null.</exception>
     public async ValueTask<Result<ReasonletErasureResult, MnemosyneError>> EraseAsync(ReasonletErasure erasure, CancellationToken ct)
@@ -581,16 +641,23 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
         await using var connection = (await _dataSource.OpenConnectionAsync(ct).ConfigureAwait(false)).AsAsync();
         await using var transaction = await connection.BeginTransactionAsync(IsolationLevel.ReadCommitted, ct).ConfigureAwait(false);
         var reasonlets = new ReasonletRepository(connection);
+        var executions = new ExecutionRepository(connection);
 
         // Lock first, deepest first, and keep the ids: the later statements take fresh snapshots, and must delete the
         // set that was locked, not Reasonlets remembered since. The executions go before the Reasonlets, so that none
-        // is left to cascade uncounted.
+        // is left to cascade uncounted. The locks go Reasonlets, then executions, then metrics rows, each in a fixed
+        // order, and so do the cascades of the final delete.
         var doomed = await reasonlets.LockForErasureAsync(scope, erasure.SubjectId, transaction, ct).ConfigureAwait(false);
-        var executions = await new ExecutionRepository(connection)
-            .DeleteForErasureAsync(scope, doomed, erasure.SubjectId, transaction, ct).ConfigureAwait(false);
+        var erased = (await executions.DeleteForErasureAsync(scope, doomed, erasure.SubjectId, transaction, ct).ConfigureAwait(false))!;
+        if (erased.Recount.Length > 0)
+        {
+            await executions.LockMetricsAsync(scope, erased.Recount, transaction, ct).ConfigureAwait(false);
+            await executions.RecountMetricsAsync(scope, erased.Recount, transaction, ct).ConfigureAwait(false);
+        }
+
         var removed = await reasonlets.DeleteAsync(scope, doomed, transaction, ct).ConfigureAwait(false);
         await transaction.CommitAsync(ct).ConfigureAwait(false);
-        return new ReasonletErasureResult { Reasonlets = removed, Executions = executions };
+        return new ReasonletErasureResult { Reasonlets = removed, Executions = erased.Count };
     }
 
     /// <summary>
@@ -692,6 +759,12 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
 
     private static MnemosyneError LineageConflict() =>
         new(MnemosyneErrorCode.Conflict, "The lineage changed under a concurrent erase.");
+
+    private MnemosyneError HnswMismatch(SettingsRow recorded) => new(
+        MnemosyneErrorCode.Validation,
+        string.Create(
+            CultureInfo.InvariantCulture,
+            $"HnswM and HnswEfConstruction: the database's HNSW index was built with m = {recorded.HnswM} and ef_construction = {recorded.HnswEfConstruction}, but the store is configured with m = {_options.HnswM} and ef_construction = {_options.HnswEfConstruction}. The options apply only when the first MigrateAsync builds the index."));
 
     private MnemosyneError DimensionMismatch(int recorded) => new(
         MnemosyneErrorCode.Validation,

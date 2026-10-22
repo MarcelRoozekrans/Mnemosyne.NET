@@ -234,28 +234,77 @@ public sealed class RememberTests(PgVectorFixture fixture) : IClassFixture<PgVec
         Assert.Equal(["1.1", "1.2", "1.3"], await SubtreeVersionsAsync(p.Id));
     }
 
-    [Fact]
-    public async Task RowsInAnotherScopeThatPointIntoTheLineageDoNotCount()
+    [Fact(Timeout = 30_000)]
+    public async Task ADeepLineageGetsItsNextVersionInLinearTime()
     {
+        // A 4,000-deep chain. Walks that carry their path, or one lock statement per ancestor, take seconds here.
         var store = await MigratedStoreAsync();
         var scope = PgVectorFixture.NewScope();
-        var root = (await store.RememberAsync(Entries.Entry(scope, Entries.Graph("root")), Ct)).Value;
-        var child = (await store.RememberAsync(Entries.Entry(scope, Entries.Graph("child"), root.Id), Ct)).Value;
-        foreach (var (parent, version) in new[] { (root.Id, "1.50"), (child.Id, "1.60") })
-        {
-            await Entries.ExecuteAsync(
-                fixture.DataSource,
-                "INSERT INTO mnemosyne.reasonlets (id, scope, name, intent, version, graph, content_hash, parent_id, status, source, created_at, embedding) "
-                + "VALUES ($1, $2, 'n', 'i', $3, '{}', repeat('0', 64), $4, 1, 's', now(), '[1,0,0]')",
-                Guid.CreateVersion7(),
-                PgVectorFixture.NewScope().Value,
-                version,
-                parent.Value);
-        }
+        var leaf = await ChainAsync(scope, 4000);
 
-        var next = (await store.RememberAsync(Entries.Entry(scope, Entries.Graph("next"), child.Id), Ct)).Value;
+        var started = System.Diagnostics.Stopwatch.StartNew();
+        var next = (await store.RememberAsync(Entries.Entry(scope, Entries.Graph("next"), new ReasonletId(leaf)), Ct)).Value;
+        started.Stop();
 
-        Assert.Equal("1.2", next.Version);
+        Assert.Equal((ReasonletCaptureKind.NewVersion, "1.4000"), (next.Kind, next.Version));
+        Assert.InRange(started.Elapsed, TimeSpan.Zero, TimeSpan.FromSeconds(2));
+    }
+
+    [Fact]
+    public async Task TheAncestorsAreLockedBottomUpInOneStatement()
+    {
+        // P <- A1 <- A2 <- A3 <- T, P the deepest. Another transaction holds A2, so the store's lock statement takes A1
+        // and waits for A2. While it waits, A1 is locked and A3 is not: the rows are locked in path order.
+        var store = await MigratedStoreAsync();
+        var scope = PgVectorFixture.NewScope();
+        var t = (await store.RememberAsync(Entries.Entry(scope, Entries.Graph("t")), Ct)).Value;
+        var a3 = (await store.RememberAsync(Entries.Entry(scope, Entries.Graph("a3"), t.Id), Ct)).Value;
+        var a2 = (await store.RememberAsync(Entries.Entry(scope, Entries.Graph("a2"), a3.Id), Ct)).Value;
+        var a1 = (await store.RememberAsync(Entries.Entry(scope, Entries.Graph("a1"), a2.Id), Ct)).Value;
+        var p = (await store.RememberAsync(Entries.Entry(scope, Entries.Graph("p"), a1.Id), Ct)).Value;
+
+        await using var holder = await fixture.DataSource.OpenConnectionAsync(Ct);
+        await using var transaction = await holder.BeginTransactionAsync(Ct);
+        await RunAsync(holder, $"SELECT id FROM mnemosyne.reasonlets WHERE id = '{a2.Id.Value}' FOR UPDATE");
+
+        var remember = store.RememberAsync(Entries.Entry(scope, Entries.Graph("next"), p.Id), Ct).AsTask();
+        await WaitForLockWaitAsync(holder);
+        var a1Locked = await IsLockedAsync(a1.Id);
+        var a3Locked = await IsLockedAsync(a3.Id);
+        await transaction.CommitAsync(Ct);
+        var result = await remember;
+
+        Assert.True(a1Locked);
+        Assert.False(a3Locked);
+        Assert.Equal((ReasonletCaptureKind.NewVersion, "1.5"), (result.Value.Kind, result.Value.Version));
+    }
+
+    [Fact]
+    public async Task AnAppendToAParentThatARememberHoldsDoesNotWait()
+    {
+        // The store's remember of a child of P holds P and waits for T, which another transaction holds as a remember
+        // would. Its FOR NO KEY UPDATE on P lets the append's FOR KEY SHARE through, so the append completes meanwhile.
+        var store = await MigratedStoreAsync();
+        var scope = PgVectorFixture.NewScope();
+        var t = (await store.RememberAsync(Entries.Entry(scope, Entries.Graph("t")), Ct)).Value;
+        var p = (await store.RememberAsync(Entries.Entry(scope, Entries.Graph("p"), t.Id), Ct)).Value;
+
+        await using var holder = await fixture.DataSource.OpenConnectionAsync(Ct);
+        await using var transaction = await holder.BeginTransactionAsync(Ct);
+        await RunAsync(holder, $"SELECT id FROM mnemosyne.reasonlets WHERE id = '{t.Id.Value}' FOR NO KEY UPDATE");
+
+        var remember = store.RememberAsync(Entries.Entry(scope, Entries.Graph("next"), p.Id), Ct).AsTask();
+        await WaitForLockWaitAsync(holder);
+        var append = store.AppendExecutionAsync(scope, p.Id, new ReasonletOutcome(true, TimeSpan.Zero, null), Entries.Provenance(), Ct).AsTask();
+        var appended = await Task.WhenAny(append, Task.Delay(TimeSpan.FromSeconds(10), Ct));
+        var rememberWaited = !remember.IsCompleted;
+        await transaction.CommitAsync(Ct);
+        var result = await remember;
+
+        Assert.Same(append, appended);
+        Assert.True((await append).IsSuccess);
+        Assert.True(rememberWaited);
+        Assert.Equal("1.2", result.Value.Version);
     }
 
     [Fact(Timeout = 30_000)]
@@ -465,6 +514,47 @@ public sealed class RememberTests(PgVectorFixture fixture) : IClassFixture<PgVec
     }
 
     private Task<long> CountAsync(string sql, object parameter) => Entries.ScalarAsync<long>(fixture.DataSource, sql, parameter);
+
+    /// <summary>Whether another transaction holds a lock on the Reasonlet that a FOR UPDATE would wait for.</summary>
+    private async Task<bool> IsLockedAsync(ReasonletId id)
+    {
+        await using var probe = await fixture.DataSource.OpenConnectionAsync(Ct);
+        await using var transaction = await probe.BeginTransactionAsync(Ct);
+        try
+        {
+            await RunAsync(probe, $"SELECT id FROM mnemosyne.reasonlets WHERE id = '{id.Value}' FOR UPDATE NOWAIT");
+            return false;
+        }
+        catch (PostgresException e) when (e.SqlState == PostgresErrorCodes.LockNotAvailable)
+        {
+            return true;
+        }
+        finally
+        {
+            await transaction.RollbackAsync(Ct);
+        }
+    }
+
+    /// <summary>Inserts a chain of the given depth in the scope, versions 1.0 down to 1.(depth - 1), and returns its leaf.</summary>
+    private async Task<Guid> ChainAsync(ReasonletScope scope, int depth)
+    {
+        var leaf = Guid.CreateVersion7();
+        await Entries.ExecuteAsync(
+            fixture.DataSource,
+            $$"""
+            DO $$
+            DECLARE previous uuid; current uuid;
+            BEGIN
+                FOR i IN 0..{{depth - 1}} LOOP
+                    current := CASE WHEN i = {{depth - 1}} THEN '{{leaf}}'::uuid ELSE gen_random_uuid() END;
+                    INSERT INTO mnemosyne.reasonlets (id, scope, name, intent, version, graph, content_hash, parent_id, status, source, created_at, embedding)
+                    VALUES (current, '{{scope.Value}}', 'n', 'i', '1.' || i, '{}', repeat('0', 64), previous, 1, 's', now(), '[1,0,0]');
+                    previous := current;
+                END LOOP;
+            END $$
+            """);
+        return leaf;
+    }
 
     /// <summary>Reads the parent_id of a Reasonlet, or null when it has none.</summary>
     private async Task<Guid?> ParentOfAsync(ReasonletId id)

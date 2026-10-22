@@ -17,14 +17,59 @@ public sealed class MigrationTests(PgVectorFixture fixture) : IClassFixture<PgVe
         var tables = await ScalarAsync<long>(
             fixture.DataSource,
             "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'mnemosyne' "
-            + "AND table_name IN ('reasonlets', 'reasonlet_executions', 'reasonlet_feedback', 'settings')");
-        Assert.Equal(4, tables);
+            + "AND table_name IN ('reasonlets', 'reasonlet_executions', 'reasonlet_feedback', 'reasonlet_metrics', 'settings')");
+        Assert.Equal(5, tables);
         Assert.Equal("vector(3)", await EmbeddingTypeAsync(fixture.DataSource));
         var index = await HnswIndexAsync(fixture.DataSource);
         Assert.Contains("USING hnsw (embedding vector_cosine_ops)", index, StringComparison.Ordinal);
         Assert.Contains("m='16'", index, StringComparison.Ordinal);
         Assert.Contains("ef_construction='64'", index, StringComparison.Ordinal);
-        Assert.Equal("3", await ScalarAsync<string>(fixture.DataSource, "SELECT value FROM mnemosyne.settings WHERE key = 'dimensions'"));
+        Assert.Equal(
+            "dimensions=3,hnsw_ef_construction=64,hnsw_m=16",
+            string.Join(",", await RowsAsync(fixture.DataSource, "SELECT key || '=' || value FROM mnemosyne.settings ORDER BY key")));
+    }
+
+    [Fact]
+    public async Task AServerOlderThanPostgreSql15IsRejectedWithItsVersionAndTheMinimum()
+    {
+        // server_version_num is fixed by the server, so the test shadows current_setting: a schema listed before
+        // pg_catalog on the search_path is searched first. MigrateAsync must stop before the migrations, which an
+        // older server could not parse.
+        var dataSource = await fixture.CreateEmptyDatabaseAsync("-c search_path=old_server,pg_catalog,public");
+        await Entries.ExecuteAsync(
+            dataSource,
+            """
+            CREATE SCHEMA old_server;
+            CREATE FUNCTION old_server.current_setting(name text) RETURNS text LANGUAGE sql
+                AS $$ SELECT CASE name WHEN 'server_version_num' THEN '140011' WHEN 'server_version' THEN '14.11' END $$;
+            """);
+
+        var result = await new ReasonletPostgreSqlStore(dataSource, new MnemosynePostgreSqlOptions { Dimensions = 3 }).MigrateAsync(Ct);
+
+        Assert.Equal(MnemosyneErrorCode.Validation, result.Error.Code);
+        Assert.Equal(
+            "PostgreSQL 14.11 is running, but the store needs PostgreSQL 15 or later for its scoped foreign keys.",
+            result.Error.Message);
+        Assert.True(await ScalarAsync<bool>(dataSource, "SELECT to_regclass('mnemosyne.reasonlets') IS NULL"));
+    }
+
+    [Theory]
+    [InlineData(8, 64)]
+    [InlineData(16, 100)]
+    public async Task DifferentHnswOptionsLaterFailWithBothValuesAndLeaveTheIndexAlone(int m, int efConstruction)
+    {
+        var dataSource = await fixture.CreateEmptyDatabaseAsync();
+        Assert.True((await new ReasonletPostgreSqlStore(dataSource, new MnemosynePostgreSqlOptions { Dimensions = 3 }).MigrateAsync(Ct)).IsSuccess);
+        var before = await HnswIndexAsync(dataSource);
+
+        var result = await new ReasonletPostgreSqlStore(
+            dataSource, new MnemosynePostgreSqlOptions { Dimensions = 3, HnswM = m, HnswEfConstruction = efConstruction }).MigrateAsync(Ct);
+
+        Assert.Equal(MnemosyneErrorCode.Validation, result.Error.Code);
+        Assert.Equal(
+            $"HnswM and HnswEfConstruction: the database's HNSW index was built with m = 16 and ef_construction = 64, but the store is configured with m = {m} and ef_construction = {efConstruction}. The options apply only when the first MigrateAsync builds the index.",
+            result.Error.Message);
+        Assert.Equal(before, await HnswIndexAsync(dataSource));
     }
 
     [Fact]
@@ -72,23 +117,25 @@ public sealed class MigrationTests(PgVectorFixture fixture) : IClassFixture<PgVe
     }
 
     [Fact]
-    public async Task TheSchemaHasTheSpecifiedForeignKeysAndIndexes()
+    public async Task TheSchemaHasTheSpecifiedConstraintsAndIndexes()
     {
         Assert.True((await fixture.CreateStore().MigrateAsync(Ct)).IsSuccess);
 
-        // confdeltype: n = SET NULL, c = CASCADE.
-        var foreignKeys = await RowsAsync(
+        var constraints = await RowsAsync(
             fixture.DataSource,
-            "SELECT conrelid::regclass::text || '.' || a.attname || ' -> ' || confrelid::regclass::text || ' ' || confdeltype::text "
-            + "FROM pg_constraint c JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1] "
-            + "WHERE c.contype = 'f' AND c.connamespace = 'mnemosyne'::regnamespace ORDER BY 1");
+            "SELECT conrelid::regclass::text || ' ' || pg_get_constraintdef(oid) FROM pg_constraint "
+            + "WHERE contype IN ('f', 'u', 'c') AND connamespace = 'mnemosyne'::regnamespace ORDER BY 1");
         Assert.Equal(
             [
-                "mnemosyne.reasonlet_executions.reasonlet_id -> mnemosyne.reasonlets c",
-                "mnemosyne.reasonlet_feedback.execution_id -> mnemosyne.reasonlet_executions c",
-                "mnemosyne.reasonlets.parent_id -> mnemosyne.reasonlets n",
+                "mnemosyne.reasonlet_executions FOREIGN KEY (scope, reasonlet_id) REFERENCES mnemosyne.reasonlets(scope, id) ON DELETE CASCADE",
+                "mnemosyne.reasonlet_executions UNIQUE (scope, id)",
+                "mnemosyne.reasonlet_feedback FOREIGN KEY (scope, execution_id) REFERENCES mnemosyne.reasonlet_executions(scope, id) ON DELETE CASCADE",
+                "mnemosyne.reasonlet_metrics FOREIGN KEY (scope, reasonlet_id) REFERENCES mnemosyne.reasonlets(scope, id) ON DELETE CASCADE",
+                "mnemosyne.reasonlets CHECK ((length(content_hash) = 64))",
+                "mnemosyne.reasonlets FOREIGN KEY (scope, parent_id) REFERENCES mnemosyne.reasonlets(scope, id) ON DELETE SET NULL (parent_id)",
+                "mnemosyne.reasonlets UNIQUE (scope, id)",
             ],
-            foreignKeys);
+            constraints);
 
         var indexes = await RowsAsync(
             fixture.DataSource,
@@ -96,16 +143,71 @@ public sealed class MigrationTests(PgVectorFixture fixture) : IClassFixture<PgVe
             + "WHERE schemaname = 'mnemosyne' AND indexname NOT LIKE '%_pkey' ORDER BY 1");
         Assert.Equal(
             [
-                "reasonlet_executions: USING btree (reasonlet_id)",
+                "reasonlet_executions: USING btree (scope, id)",
+                "reasonlet_executions: USING btree (scope, reasonlet_id)",
                 "reasonlet_executions: USING btree (scope, subject_id)",
-                "reasonlets: USING btree (parent_id)",
-                "reasonlets: USING btree (scope, content_hash)",
+                "reasonlets: USING btree (scope, id)",
                 "reasonlets: USING btree (scope, parent_id)",
                 "reasonlets: USING btree (scope, status, intent)",
                 "reasonlets: USING btree (scope, subject_id)",
                 "reasonlets: USING hnsw (embedding vector_cosine_ops) WITH (m='16', ef_construction='64')",
             ],
             indexes);
+        Assert.Equal("text", await ScalarAsync<string>(
+            fixture.DataSource,
+            "SELECT format_type(atttypid, atttypmod) FROM pg_attribute WHERE attrelid = 'mnemosyne.reasonlets'::regclass AND attname = 'content_hash'"));
+    }
+
+    [Fact]
+    public async Task TheForeignKeysRefuseARowThatPointsIntoAnotherScope()
+    {
+        var store = fixture.CreateStore();
+        Assert.True((await store.MigrateAsync(Ct)).IsSuccess);
+        var scope = PgVectorFixture.NewScope();
+        var receipt = (await store.RememberAsync(Entries.Entry(scope), Ct)).Value;
+        var other = PgVectorFixture.NewScope().Value;
+
+        var child = await Assert.ThrowsAsync<PostgresException>(() => Entries.ExecuteAsync(
+            fixture.DataSource,
+            "INSERT INTO mnemosyne.reasonlets (id, scope, name, intent, version, graph, content_hash, parent_id, status, source, created_at, embedding) "
+            + "VALUES ($1, $2, 'n', 'i', '1.1', '{}', repeat('0', 64), $3, 1, 's', now(), '[1,0,0]')",
+            Guid.CreateVersion7(),
+            other,
+            receipt.Id.Value));
+        var execution = await Assert.ThrowsAsync<PostgresException>(() => Entries.ExecuteAsync(
+            fixture.DataSource,
+            "INSERT INTO mnemosyne.reasonlet_executions (id, reasonlet_id, scope, executed_at, success, duration_ticks, source) "
+            + "VALUES ($1, $2, $3, now(), true, 0, 's')",
+            Guid.CreateVersion7(),
+            receipt.Id.Value,
+            other));
+        var feedback = await Assert.ThrowsAsync<PostgresException>(() => Entries.ExecuteAsync(
+            fixture.DataSource,
+            "INSERT INTO mnemosyne.reasonlet_feedback (execution_id, scope, utility, correctness, reusability, recorded_at) "
+            + "VALUES ($1, $2, 0, 0, 0, now())",
+            receipt.Execution.Value,
+            other));
+        var metrics = await Assert.ThrowsAsync<PostgresException>(() => Entries.ExecuteAsync(
+            fixture.DataSource,
+            "UPDATE mnemosyne.reasonlet_metrics SET scope = $1 WHERE reasonlet_id = $2",
+            other,
+            receipt.Id.Value));
+
+        Assert.All(new[] { child, execution, feedback, metrics }, e => Assert.Equal(PostgresErrorCodes.ForeignKeyViolation, e.SqlState));
+    }
+
+    [Fact]
+    public async Task AContentHashOfAnotherLengthIsRefused()
+    {
+        Assert.True((await fixture.CreateStore().MigrateAsync(Ct)).IsSuccess);
+
+        var thrown = await Assert.ThrowsAsync<PostgresException>(() => Entries.ExecuteAsync(
+            fixture.DataSource,
+            "INSERT INTO mnemosyne.reasonlets (id, scope, name, intent, version, graph, content_hash, status, source, created_at, embedding) "
+            + "VALUES ($1, 's', 'n', 'i', '1.0', '{}', repeat('0', 63), 1, 's', now(), '[1,0,0]')",
+            Guid.CreateVersion7()));
+
+        Assert.Equal(PostgresErrorCodes.CheckViolation, thrown.SqlState);
     }
 
     [Fact]

@@ -1,7 +1,11 @@
 -- The Mnemosyne schema. Every statement names the schema in full; there is no search_path.
 -- The embedding column is left as an untyped vector here: a migration file is static, so it
 -- cannot know the configured dimension. MigrateAsync alters it to vector(N) and creates the
--- HNSW index after this runs, and records N in mnemosyne.settings.
+-- HNSW index after this runs, and records N and the HNSW options in mnemosyne.settings.
+--
+-- Every foreign key carries scope next to the id it references, against a UNIQUE (scope, id),
+-- so no row can point at a row in another scope. The column-list form of ON DELETE SET NULL
+-- needs PostgreSQL 15 or later, which MigrateAsync checks.
 
 CREATE SCHEMA IF NOT EXISTS mnemosyne;
 
@@ -17,29 +21,30 @@ CREATE TABLE mnemosyne.reasonlets (
     -- text, not jsonb: jsonb normalises numbers and key order, so the graph read back would no
     -- longer match content_hash.
     graph         text        NOT NULL,
-    content_hash  char(64)    NOT NULL,
-    -- SET NULL: erasing a Reasonlet keeps its descendants and cuts their lineage link. The lineage is
-    -- derived from parent_id alone, so an orphan's subtree becomes its own lineage with its numbering intact.
-    parent_id     uuid        NULL REFERENCES mnemosyne.reasonlets (id) ON DELETE SET NULL,
+    content_hash  text        NOT NULL CHECK (length(content_hash) = 64),
+    parent_id     uuid        NULL,
     status        smallint    NOT NULL,
     source        text        NOT NULL,
     run_id        text        NULL,
     subject_id    text        NULL,
     tags          jsonb       NULL,
     created_at    timestamptz NOT NULL,
-    embedding     vector      NOT NULL
+    embedding     vector      NOT NULL,
+    UNIQUE (scope, id),
+    -- SET NULL (parent_id): erasing a Reasonlet keeps its descendants and cuts their lineage link,
+    -- leaving scope alone. The lineage is derived from parent_id alone, so an orphan's subtree
+    -- becomes its own lineage with its numbering intact.
+    FOREIGN KEY (scope, parent_id) REFERENCES mnemosyne.reasonlets (scope, id) ON DELETE SET NULL (parent_id)
 );
 
 CREATE INDEX reasonlets_scope_status_intent ON mnemosyne.reasonlets (scope, status, intent);
+-- The walks down the lineage and the foreign key's SET NULL both look rows up by (scope, parent_id).
 CREATE INDEX reasonlets_scope_parent_id ON mnemosyne.reasonlets (scope, parent_id);
--- Unscoped: ON DELETE SET NULL finds the rows to cut by parent_id alone.
-CREATE INDEX reasonlets_parent_id ON mnemosyne.reasonlets (parent_id);
-CREATE INDEX reasonlets_scope_content_hash ON mnemosyne.reasonlets (scope, content_hash);
 CREATE INDEX reasonlets_scope_subject_id ON mnemosyne.reasonlets (scope, subject_id);
 
 CREATE TABLE mnemosyne.reasonlet_executions (
     id              uuid             PRIMARY KEY,
-    reasonlet_id    uuid             NOT NULL REFERENCES mnemosyne.reasonlets (id) ON DELETE CASCADE,
+    reasonlet_id    uuid             NOT NULL,
     scope           text             NOT NULL,
     executed_at     timestamptz      NOT NULL,
     success         boolean          NOT NULL,
@@ -48,23 +53,39 @@ CREATE TABLE mnemosyne.reasonlet_executions (
     source          text             NOT NULL,
     run_id          text             NULL,
     subject_id      text             NULL,
-    tags            jsonb            NULL
+    tags            jsonb            NULL,
+    UNIQUE (scope, id),
+    FOREIGN KEY (scope, reasonlet_id) REFERENCES mnemosyne.reasonlets (scope, id) ON DELETE CASCADE
 );
 
 CREATE INDEX reasonlet_executions_scope_subject_id ON mnemosyne.reasonlet_executions (scope, subject_id);
-CREATE INDEX reasonlet_executions_reasonlet_id ON mnemosyne.reasonlet_executions (reasonlet_id);
+-- The foreign key's cascade, the erase and the metrics recount look executions up by Reasonlet.
+CREATE INDEX reasonlet_executions_scope_reasonlet_id ON mnemosyne.reasonlet_executions (scope, reasonlet_id);
 
 -- One row per execution: recording feedback again replaces it.
 CREATE TABLE mnemosyne.reasonlet_feedback (
-    execution_id  uuid             PRIMARY KEY REFERENCES mnemosyne.reasonlet_executions (id) ON DELETE CASCADE,
+    execution_id  uuid             PRIMARY KEY,
     scope         text             NOT NULL,
     utility       double precision NOT NULL,
     correctness   double precision NOT NULL,
     reusability   double precision NOT NULL,
-    recorded_at   timestamptz      NOT NULL
+    recorded_at   timestamptz      NOT NULL,
+    FOREIGN KEY (scope, execution_id) REFERENCES mnemosyne.reasonlet_executions (scope, id) ON DELETE CASCADE
 );
 
--- The dimensions key records the embedding dimension MigrateAsync applied.
+-- One row per Reasonlet: its execution counts, kept in the transaction of every execution insert
+-- and recounted when an erase removes a subject's executions from a Reasonlet it keeps. Search
+-- reads it instead of aggregating the executions.
+CREATE TABLE mnemosyne.reasonlet_metrics (
+    reasonlet_id     uuid        PRIMARY KEY,
+    scope            text        NOT NULL,
+    runs             integer     NOT NULL,
+    successes        integer     NOT NULL,
+    last_success_at  timestamptz NULL,
+    FOREIGN KEY (scope, reasonlet_id) REFERENCES mnemosyne.reasonlets (scope, id) ON DELETE CASCADE
+);
+
+-- The dimensions, hnsw_m and hnsw_ef_construction keys record what MigrateAsync applied.
 CREATE TABLE mnemosyne.settings (
     key    text PRIMARY KEY,
     value  text
