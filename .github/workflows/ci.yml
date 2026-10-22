@@ -224,6 +224,19 @@ jobs:
   aot-publish:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    # The native binary round-trips a Reasonlet through a real pgvector server (0.8.0 or later).
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -237,6 +250,8 @@ jobs:
         run: dotnet publish tests/Mnemosyne.NET.AotSmoke -c Release -r linux-x64 -p:PublishAot=true -warnaserror
 
       - name: Run the native binary
+        env:
+          MNEMOSYNE_AOT_PG: Host=localhost;Port=5432;Username=postgres;Password=postgres;Database=postgres
         run: tests/Mnemosyne.NET.AotSmoke/bin/Release/net10.0/linux-x64/publish/Mnemosyne.NET.AotSmoke
 
   # The real push to nuget.org. Two ways in: a published release (the automatic path), or a
