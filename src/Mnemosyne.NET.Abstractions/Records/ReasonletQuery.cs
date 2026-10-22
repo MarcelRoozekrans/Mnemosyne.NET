@@ -12,6 +12,11 @@ public sealed record ReasonletQuery
     /// <summary>Gets the question to match. Must not be blank.</summary>
     public required string Question { get; init; }
 
+    /// <summary>
+    /// Gets the run and subject this recall serves, for audit and erasure by subject. Must not be null.
+    /// </summary>
+    public required ReasonletProvenance Provenance { get; init; }
+
     /// <summary>Gets an optional intent filter. When present it must not be blank.</summary>
     public string? Intent { get; init; }
 
@@ -23,6 +28,8 @@ public sealed record ReasonletQuery
     public UnitResult<MnemosyneError> Validate() => Check.All(
         () => Check.Nested(Scope.Validate(), nameof(Scope)),
         () => Check.NotBlank(Question, nameof(Question)),
+        () => Check.NotNull(Provenance, nameof(Provenance)),
+        () => Check.Nested(Provenance.Validate(), nameof(Provenance)),
         () => Intent is null ? UnitResult<MnemosyneError>.Success() : Check.NotBlank(Intent, nameof(Intent)),
         () => Check.Range(Top, 1, 50, nameof(Top)));
 }

@@ -4,7 +4,7 @@ using ZeroAlloc.Results;
 
 namespace Mnemosyne.NET.Abstractions;
 
-/// <summary>Records where a Reasonlet or an execution came from.</summary>
+/// <summary>Records where a Reasonlet, an execution or a recall came from.</summary>
 /// <remarks>Init-only, so later phases can add members without breaking callers.</remarks>
 public sealed record ReasonletProvenance
 {

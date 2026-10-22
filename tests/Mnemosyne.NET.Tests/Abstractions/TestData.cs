@@ -25,6 +25,13 @@ internal static class TestData
         CreatedAt = DateTimeOffset.UnixEpoch,
     };
 
+    public static ReasonletQuery Query() => new()
+    {
+        Scope = new ReasonletScope("scope"),
+        Question = "question",
+        Provenance = Provenance(),
+    };
+
     public static ReasonletCapture Capture() => new()
     {
         Scope = new ReasonletScope("scope"),
