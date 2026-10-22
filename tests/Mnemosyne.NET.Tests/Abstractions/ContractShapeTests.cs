@@ -63,6 +63,8 @@ public class ContractShapeTests
     [InlineData(typeof(ReasonletProvenance))]
     [InlineData(typeof(ReasonletQuery))]
     [InlineData(typeof(ReasonletErasureResult))]
+    [InlineData(typeof(ReasonletRetention))]
+    [InlineData(typeof(ReasonletPruneResult))]
     public void GrowableRecordsAreInitOnly(Type record)
     {
         var constructors = record.GetConstructors();
@@ -86,6 +88,24 @@ public class ContractShapeTests
         Assert.Equal(5, result.Executions);
 
         // Init-only so later phases can add members; a with-expression copies the rest.
+        var copy = result with { Executions = 6 };
+        Assert.Equal(2, copy.Reasonlets);
+        Assert.Equal(6, copy.Executions);
+    }
+
+    [Fact]
+    public void PruneAsyncReturnsAPruneResult() =>
+        Assert.Equal(
+            typeof(ValueTask<Result<ReasonletPruneResult, MnemosyneError>>),
+            typeof(IReasonletStore).GetMethod("PruneAsync")!.ReturnType);
+
+    [Fact]
+    public void PruneResult_CarriesCounts()
+    {
+        var result = new ReasonletPruneResult { Reasonlets = 2, Executions = 5 };
+        Assert.Equal(2, result.Reasonlets);
+        Assert.Equal(5, result.Executions);
+
         var copy = result with { Executions = 6 };
         Assert.Equal(2, copy.Reasonlets);
         Assert.Equal(6, copy.Executions);

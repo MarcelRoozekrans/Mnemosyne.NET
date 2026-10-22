@@ -182,4 +182,41 @@ public class LeafRecordTests
         Assert.True(new ReasonletScore(0, 0, 0, 0).Validate().IsSuccess);
         Assert.True(new ReasonletScore(1, 1, 1, 1).Validate().IsSuccess);
     }
+
+    [Fact]
+    public void Retention_OneWindow_Passes()
+    {
+        Assert.True(new ReasonletRetention { ExecutionsOlderThan = TimeSpan.FromDays(1) }.Validate().IsSuccess);
+        Assert.True(new ReasonletRetention { ReasonletsUnusedFor = TimeSpan.FromTicks(1) }.Validate().IsSuccess);
+        var both = new ReasonletRetention { Scope = new ReasonletScope("s"), ExecutionsOlderThan = TimeSpan.MaxValue, ReasonletsUnusedFor = TimeSpan.FromDays(1) };
+        Assert.True(both.Validate().IsSuccess);
+
+        // Init-only, so a with-expression copies the rest: the scope and the other window stay.
+        Assert.True((both with { ExecutionsOlderThan = null }).Validate().IsSuccess);
+    }
+
+    [Fact]
+    public void Retention_NoWindow_Fails() =>
+        AssertInvalid(new ReasonletRetention { Scope = new ReasonletScope("s") }.Validate(), "ExecutionsOlderThan");
+
+    [Theory]
+    [InlineData(0L, null, "ExecutionsOlderThan")]
+    [InlineData(-1L, null, "ExecutionsOlderThan")]
+    [InlineData(null, 0L, "ReasonletsUnusedFor")]
+    [InlineData(null, -1L, "ReasonletsUnusedFor")]
+    [InlineData(1L, 0L, "ReasonletsUnusedFor")]
+    public void Retention_NotPositiveWindow_Fails(long? executionTicks, long? reasonletTicks, string path) =>
+        AssertInvalid(
+            new ReasonletRetention
+            {
+                ExecutionsOlderThan = executionTicks is { } e ? TimeSpan.FromTicks(e) : null,
+                ReasonletsUnusedFor = reasonletTicks is { } r ? TimeSpan.FromTicks(r) : null,
+            }.Validate(),
+            path);
+
+    [Fact]
+    public void Retention_DefaultScope_Fails() =>
+        AssertInvalid(
+            new ReasonletRetention { Scope = default(ReasonletScope), ExecutionsOlderThan = TimeSpan.FromDays(1) }.Validate(),
+            "Scope.Value");
 }

@@ -25,6 +25,12 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
     private const int DefaultEfSearch = 40;
     private const string MigrationResourcePrefix = "Mnemosyne.NET.PostgreSql.Migrations.";
 
+    /// <summary>The most rows one prune transaction deletes, so no batch holds its locks for long.</summary>
+    internal const int PruneBatchSize = 1000;
+
+    /// <summary>The number of times a prune batch that deadlocked or failed to serialize is tried again.</summary>
+    private const int PruneRetries = 3;
+
     private readonly NpgsqlDataSource _dataSource;
     private readonly MnemosynePostgreSqlOptions _options;
     private volatile bool _migrated;
@@ -615,7 +621,7 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
 
     /// <summary>
     /// Runs <c>SET LOCAL</c> statements, which end with the transaction. The store turns JIT off in its search and
-    /// erase transactions: their statements are short, yet a large table can push the planner's cost estimate past
+    /// erase and prune transactions: their statements are short, yet a large table can push the planner's cost estimate past
     /// <c>jit_above_cost</c>, and compiling then costs more than the statement saves.
     /// </summary>
     private static async Task SetLocalAsync(IAsyncDbConnection connection, IAsyncDbTransaction transaction, string settings, CancellationToken ct)
@@ -706,6 +712,150 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
         var removed = await reasonlets.DeleteAsync(scope, doomed, transaction, ct).ConfigureAwait(false);
         await transaction.CommitAsync(ct).ConfigureAwait(false);
         return new ReasonletErasureResult { Reasonlets = removed, Executions = erased!.Value };
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// The prune reads the database's clock once and measures each window back from it, so a long prune has a fixed
+    /// target and ends. Executions recorded before <c>now - </c><see cref="ReasonletRetention.ExecutionsOlderThan"/> are
+    /// deleted, with their feedback, in batches of at most 1,000, each its own READ COMMITTED transaction; the
+    /// Reasonlets' counters keep them, because a pruned run still happened. A batch locks its executions in id order,
+    /// as an erase does, and takes no metrics lock, so it never waits for an append.
+    /// </para>
+    /// <para>
+    /// A batch that hits a deadlock or a serialization failure rolls back and is retried, up to three times, before
+    /// the prune gives up with <see cref="MnemosyneErrorCode.Conflict"/>. Any other failure ends the prune at once. On
+    /// a failure the batches committed before it stay committed and the result carries no counts; running the prune
+    /// again deletes what is still older than its new cutoff.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="ArgumentNullException"><paramref name="retention"/> is null.</exception>
+    public ValueTask<Result<ReasonletPruneResult, MnemosyneError>> PruneAsync(ReasonletRetention retention, CancellationToken ct) =>
+        PruneAsync(retention, new PruneProgress(), ct);
+
+    /// <summary>The batch size a prune uses: <see cref="PruneBatchSize"/>, unless a test sets a smaller one.</summary>
+    internal int PruneBatchSizeOverride { get; set; } = PruneBatchSize;
+
+    /// <summary>
+    /// A test hook that each prune batch awaits inside its transaction, after its statements and before the commit, so
+    /// a test can make a batch fail and roll back.
+    /// </summary>
+    internal Func<Task>? BeforePruneBatchCommit { get; set; }
+
+    /// <summary>
+    /// Prunes as <see cref="PruneAsync(ReasonletRetention, CancellationToken)"/> does, and adds every committed batch to
+    /// <paramref name="progress"/>, which therefore holds what was deleted even when the prune fails.
+    /// </summary>
+    internal async ValueTask<Result<ReasonletPruneResult, MnemosyneError>> PruneAsync(
+        ReasonletRetention retention, PruneProgress progress, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(retention);
+        var migrated = await EnsureMigratedAsync(ct).ConfigureAwait(false);
+        if (migrated.IsFailure)
+        {
+            return migrated.Error;
+        }
+
+        var valid = retention.Validate();
+        if (valid.IsFailure)
+        {
+            return valid.Error;
+        }
+
+        return await GuardAsync(PruneCoreAsync(retention, progress, ct)).ConfigureAwait(false);
+    }
+
+    private async Task<Result<ReasonletPruneResult, MnemosyneError>> PruneCoreAsync(
+        ReasonletRetention retention, PruneProgress progress, CancellationToken ct)
+    {
+        var scope = retention.Scope?.Value;
+        var batchSize = PruneBatchSizeOverride;
+        var now = await ReadNowAsync(ct).ConfigureAwait(false);
+
+        // Run records go first, so that the idle-lineage pass that follows counts only runs this pass left.
+        if (retention.ExecutionsOlderThan is { } window)
+        {
+            var cutoff = Cutoff(now, window);
+            int deleted;
+            do
+            {
+                deleted = await RunPruneBatchAsync(
+                    (connection, transaction) => new RetentionRepository(connection).DeleteOldExecutionsAsync(scope, cutoff, batchSize, transaction, ct),
+                    ct).ConfigureAwait(false);
+                progress.Executions += deleted;
+            }
+            while (deleted == batchSize);
+        }
+
+        return new ReasonletPruneResult { Reasonlets = progress.Reasonlets, Executions = progress.Executions };
+    }
+
+    private async Task<DateTime> ReadNowAsync(CancellationToken ct)
+    {
+        await using var connection = (await _dataSource.OpenConnectionAsync(ct).ConfigureAwait(false)).AsAsync();
+
+        // SELECT now() always answers a row, so the null-forgiving operator only skips a check the query cannot fail.
+        return (await new RetentionRepository(connection).NowAsync(ct).ConfigureAwait(false))!.Value;
+    }
+
+    /// <summary>
+    /// Answers <paramref name="now"/> less <paramref name="window"/>. A window that reaches back past the first
+    /// representable instant answers that instant, before every stored row, so the window deletes nothing rather
+    /// than throwing.
+    /// </summary>
+    private static DateTime Cutoff(DateTime now, TimeSpan window) =>
+        window < now - DateTime.MinValue ? now - window : DateTime.SpecifyKind(DateTime.MinValue, DateTimeKind.Utc);
+
+    /// <summary>
+    /// Runs one prune batch in its own READ COMMITTED transaction, with JIT off as in an erase, and commits it. A
+    /// batch that fails with a deadlock (<c>40P01</c>) or a serialization failure (<c>40001</c>) has rolled back, so it
+    /// is run again from the start, up to <see cref="PruneRetries"/> times; the last such failure, and any other,
+    /// propagates for <see cref="GuardAsync{T}"/> to map.
+    /// </summary>
+    /// <remarks>
+    /// The batch receives the connection as well as the transaction, because the repositories are bound to a
+    /// connection. Every try opens a fresh connection, so a retry never runs on a connection the failure left in an
+    /// unknown state.
+    /// </remarks>
+    private async Task<T> RunPruneBatchAsync<T>(Func<IAsyncDbConnection, IAsyncDbTransaction, Task<T>> batch, CancellationToken ct)
+    {
+        for (var retries = 0; ; retries++)
+        {
+            // A flag rather than a return inside the try, so every line of the method can execute.
+            var retry = false;
+            T result = default!;
+            try
+            {
+                result = await RunPruneBatchOnceAsync(batch, ct).ConfigureAwait(false);
+            }
+            catch (PostgresException ex) when (ex.SqlState is PostgresErrorCodes.DeadlockDetected or PostgresErrorCodes.SerializationFailure
+                && retries < PruneRetries)
+            {
+                // The transaction rolled back when it was disposed, so the next try starts over.
+                retry = true;
+            }
+
+            if (!retry)
+            {
+                return result;
+            }
+        }
+    }
+
+    private async Task<T> RunPruneBatchOnceAsync<T>(Func<IAsyncDbConnection, IAsyncDbTransaction, Task<T>> batch, CancellationToken ct)
+    {
+        await using var connection = (await _dataSource.OpenConnectionAsync(ct).ConfigureAwait(false)).AsAsync();
+        await using var transaction = await connection.BeginTransactionAsync(IsolationLevel.ReadCommitted, ct).ConfigureAwait(false);
+        await SetLocalAsync(connection, transaction, "SET LOCAL jit = off", ct).ConfigureAwait(false);
+        var result = await batch(connection, transaction).ConfigureAwait(false);
+        if (BeforePruneBatchCommit is { } hook)
+        {
+            await hook().ConfigureAwait(false);
+        }
+
+        await transaction.CommitAsync(ct).ConfigureAwait(false);
+        return result;
     }
 
     /// <summary>

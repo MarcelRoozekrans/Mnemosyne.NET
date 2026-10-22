@@ -48,6 +48,24 @@ public sealed class ReasonletPostgreSqlStoreTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task PruneAgainstAnUnreachableServerIsUnavailable()
+    {
+        var result = await new ReasonletPostgreSqlStore(_unreachable, Options)
+            .PruneAsync(new ReasonletRetention { ExecutionsOlderThan = TimeSpan.FromDays(1) }, TestContext.Current.CancellationToken);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(MnemosyneErrorCode.Unavailable, result.Error.Code);
+    }
+
+    [Fact]
+    public async Task ANullRetentionThrows()
+    {
+        var store = new ReasonletPostgreSqlStore(_unreachable, Options);
+
+        await Assert.ThrowsAsync<ArgumentNullException>(async () => await store.PruneAsync(null!, TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
     public async Task CancellationThrowsRatherThanReturningAnError()
     {
         var store = new ReasonletPostgreSqlStore(_unreachable, Options);
