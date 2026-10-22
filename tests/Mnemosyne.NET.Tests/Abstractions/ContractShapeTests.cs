@@ -54,6 +54,18 @@ public class ContractShapeTests
         }
     }
 
+    [Theory]
+    [InlineData(typeof(ReasonletCapture))]
+    [InlineData(typeof(ReasonletDefinition))]
+    [InlineData(typeof(ReasonletProvenance))]
+    [InlineData(typeof(ReasonletQuery))]
+    public void GrowableRecordsAreInitOnly(Type record)
+    {
+        var constructors = record.GetConstructors();
+        Assert.Single(constructors);
+        Assert.Empty(constructors[0].GetParameters());
+    }
+
     [Fact]
     public void AbstractionsReferencesOnlyZeroAllocResults()
     {

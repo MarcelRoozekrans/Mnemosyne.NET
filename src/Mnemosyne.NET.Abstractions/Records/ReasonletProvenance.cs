@@ -4,17 +4,22 @@ using ZeroAlloc.Results;
 
 namespace Mnemosyne.NET.Abstractions;
 
-/// <summary>Records where a Reasonlet came from.</summary>
-/// <param name="Source">The originating source. Must not be blank.</param>
-/// <param name="RunId">An optional identifier of the originating run.</param>
-/// <param name="SubjectId">An optional identifier of the subject the Reasonlet is about.</param>
-/// <param name="Tags">Optional free-form tags. Keys must not be blank and values must not be null; blank values are allowed.</param>
-public sealed record ReasonletProvenance(
-    string Source,
-    string? RunId,
-    string? SubjectId,
-    IReadOnlyDictionary<string, string>? Tags)
+/// <summary>Records where a Reasonlet or an execution came from.</summary>
+/// <remarks>Init-only, so later phases can add members without breaking callers.</remarks>
+public sealed record ReasonletProvenance
 {
+    /// <summary>Gets the originating source. Must not be blank.</summary>
+    public required string Source { get; init; }
+
+    /// <summary>Gets an optional identifier of the originating run.</summary>
+    public string? RunId { get; init; }
+
+    /// <summary>Gets an optional identifier of the subject the record is about, so it can be erased by subject.</summary>
+    public string? SubjectId { get; init; }
+
+    /// <summary>Gets optional free-form tags. Keys must not be blank and values must not be null; blank values are allowed.</summary>
+    public IReadOnlyDictionary<string, string>? Tags { get; init; }
+
     /// <summary>Validates the provenance.</summary>
     /// <returns>Success, or a validation failure with a path relative to this record.</returns>
     public UnitResult<MnemosyneError> Validate()

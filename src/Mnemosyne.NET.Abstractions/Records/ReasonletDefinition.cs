@@ -3,28 +3,39 @@ using ZeroAlloc.Results;
 namespace Mnemosyne.NET.Abstractions;
 
 /// <summary>The stored definition of a Reasonlet.</summary>
-/// <param name="Id">The identifier. Must not be the default id.</param>
-/// <param name="Scope">The scope the Reasonlet belongs to.</param>
-/// <param name="Name">The name. Must not be blank.</param>
-/// <param name="Intent">The intent text. Must not be blank.</param>
-/// <param name="Version">The version label. Must not be blank.</param>
-/// <param name="Graph">The graph. Must not be null.</param>
-/// <param name="ParentId">The optional parent Reasonlet. When present it must not be the default id.</param>
-/// <param name="Provenance">Where the Reasonlet came from. Must not be null.</param>
-/// <param name="Status">The lifecycle status. Must be a defined value.</param>
-/// <param name="CreatedAt">When the Reasonlet was created.</param>
-public sealed record ReasonletDefinition(
-    ReasonletId Id,
-    ReasonletScope Scope,
-    string Name,
-    string Intent,
-    string Version,
-    ReasonletGraph Graph,
-    ReasonletId? ParentId,
-    ReasonletProvenance Provenance,
-    ReasonletStatus Status,
-    DateTimeOffset CreatedAt)
+/// <remarks>Init-only, so later phases can add members without breaking callers.</remarks>
+public sealed record ReasonletDefinition
 {
+    /// <summary>Gets the identifier. Must not be the default id.</summary>
+    public required ReasonletId Id { get; init; }
+
+    /// <summary>Gets the scope the Reasonlet belongs to.</summary>
+    public required ReasonletScope Scope { get; init; }
+
+    /// <summary>Gets the name. Must not be blank.</summary>
+    public required string Name { get; init; }
+
+    /// <summary>Gets the intent text. Must not be blank.</summary>
+    public required string Intent { get; init; }
+
+    /// <summary>Gets the version label. Must not be blank.</summary>
+    public required string Version { get; init; }
+
+    /// <summary>Gets the graph. Must not be null.</summary>
+    public required ReasonletGraph Graph { get; init; }
+
+    /// <summary>Gets where the Reasonlet came from. Must not be null.</summary>
+    public required ReasonletProvenance Provenance { get; init; }
+
+    /// <summary>Gets the lifecycle status. Must be a defined value.</summary>
+    public required ReasonletStatus Status { get; init; }
+
+    /// <summary>Gets when the Reasonlet was created.</summary>
+    public required DateTimeOffset CreatedAt { get; init; }
+
+    /// <summary>Gets the optional parent Reasonlet. When present it must not be the default id.</summary>
+    public ReasonletId? ParentId { get; init; }
+
     /// <summary>Validates the definition.</summary>
     /// <returns>Success, or a validation failure with a path relative to this record.</returns>
     public UnitResult<MnemosyneError> Validate() => Check.All(

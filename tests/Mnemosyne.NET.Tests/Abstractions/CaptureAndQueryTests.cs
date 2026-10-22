@@ -22,13 +22,13 @@ public class CaptureAndQueryTests
 
     [Fact]
     public void Capture_BlankProvenanceSource_ReportsNestedPath() =>
-        AssertInvalid((TestData.Capture() with { Provenance = new ReasonletProvenance(" ", null, null, null) }).Validate(), "Provenance.Source");
+        AssertInvalid((TestData.Capture() with { Provenance = new ReasonletProvenance { Source = " " } }).Validate(), "Provenance.Source");
 
     [Fact]
     public void Capture_BlankProvenanceTagKey_ReportsNestedPath()
     {
         var tags = new Dictionary<string, string> { [" "] = "v" };
-        AssertInvalid((TestData.Capture() with { Provenance = new ReasonletProvenance("s", null, null, tags) }).Validate(), "Provenance.Tags[\" \"]");
+        AssertInvalid((TestData.Capture() with { Provenance = new ReasonletProvenance { Source = "s", Tags = tags } }).Validate(), "Provenance.Tags[\" \"]");
     }
 
     [Fact]
@@ -80,29 +80,29 @@ public class CaptureAndQueryTests
     [InlineData(0)]
     [InlineData(51)]
     public void Query_TopOutOfRange_Fails(int top) =>
-        AssertInvalid(new ReasonletQuery(new ReasonletScope("s"), "q", null, top).Validate(), "Top");
+        AssertInvalid(new ReasonletQuery { Scope = new ReasonletScope("s"), Question = "q", Top = top }.Validate(), "Top");
 
     [Theory]
     [InlineData(1)]
     [InlineData(50)]
     public void Query_TopInRange_Passes(int top) =>
-        Assert.True(new ReasonletQuery(new ReasonletScope("s"), "q", null, top).Validate().IsSuccess);
+        Assert.True(new ReasonletQuery { Scope = new ReasonletScope("s"), Question = "q", Top = top }.Validate().IsSuccess);
 
     [Fact]
     public void Query_TopDefaultsToThree() =>
-        Assert.Equal(3, new ReasonletQuery(new ReasonletScope("s"), "q", null).Top);
+        Assert.Equal(3, new ReasonletQuery { Scope = new ReasonletScope("s"), Question = "q" }.Top);
 
     [Fact]
     public void Query_BlankQuestion_Fails() =>
-        AssertInvalid(new ReasonletQuery(new ReasonletScope("s"), " ", null).Validate(), "Question");
+        AssertInvalid(new ReasonletQuery { Scope = new ReasonletScope("s"), Question = " " }.Validate(), "Question");
 
     [Fact]
     public void Query_BlankIntent_Fails() =>
-        AssertInvalid(new ReasonletQuery(new ReasonletScope("s"), "q", "").Validate(), "Intent");
+        AssertInvalid(new ReasonletQuery { Scope = new ReasonletScope("s"), Question = "q", Intent = "" }.Validate(), "Intent");
 
     [Fact]
     public void Query_DefaultScope_Fails() =>
-        AssertInvalid(new ReasonletQuery(default, "q", null).Validate(), "Scope.Value");
+        AssertInvalid(new ReasonletQuery { Scope = default, Question = "q" }.Validate(), "Scope.Value");
 
     [Fact]
     public void Erasure_BlankSubject_Fails() =>

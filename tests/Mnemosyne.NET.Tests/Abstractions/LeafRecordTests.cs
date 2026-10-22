@@ -26,55 +26,55 @@ public class LeafRecordTests
 
     [Fact]
     public void Provenance_NullSource_Fails() =>
-        AssertInvalid(new ReasonletProvenance(null!, null, null, null).Validate(), "Source");
+        AssertInvalid(new ReasonletProvenance { Source = null! }.Validate(), "Source");
 
     [Fact]
     public void Provenance_BlankTagKey_ReportsIndex()
     {
         var tags = new Dictionary<string, string> { ["ok"] = "1", [" "] = "2" };
-        AssertInvalid(new ReasonletProvenance("s", null, null, tags).Validate(), "Tags[\" \"]");
+        AssertInvalid(new ReasonletProvenance { Source = "s", Tags = tags }.Validate(), "Tags[\" \"]");
     }
 
     [Fact]
     public void Provenance_EmptyTagKey_ReportsKey()
     {
         var tags = new Dictionary<string, string> { [""] = "v" };
-        AssertInvalid(new ReasonletProvenance("s", null, null, tags).Validate(), "Tags[\"\"]");
+        AssertInvalid(new ReasonletProvenance { Source = "s", Tags = tags }.Validate(), "Tags[\"\"]");
     }
 
     [Fact]
     public void Provenance_NullTagValue_ReportsKey()
     {
         var tags = new Dictionary<string, string> { ["k"] = null! };
-        AssertInvalid(new ReasonletProvenance("s", null, null, tags).Validate(), "Tags[\"k\"]");
+        AssertInvalid(new ReasonletProvenance { Source = "s", Tags = tags }.Validate(), "Tags[\"k\"]");
     }
 
     [Fact]
     public void Provenance_BlankTagValue_Passes()
     {
         var tags = new Dictionary<string, string> { ["k"] = " " };
-        Assert.True(new ReasonletProvenance("s", null, null, tags).Validate().IsSuccess);
+        Assert.True(new ReasonletProvenance { Source = "s", Tags = tags }.Validate().IsSuccess);
     }
 
     [Fact]
     public void Provenance_TagKeyWithQuoteAndBackslash_IsEscapedInPath()
     {
         var tags = new Dictionary<string, string> { ["a\"b\\c"] = null! };
-        AssertInvalid(new ReasonletProvenance("s", null, null, tags).Validate(), "Tags[\"a\\\"b\\\\c\"]");
+        AssertInvalid(new ReasonletProvenance { Source = "s", Tags = tags }.Validate(), "Tags[\"a\\\"b\\\\c\"]");
     }
 
     [Fact]
     public void Provenance_TagKeyWithNewline_IsEscapedInPath()
     {
         var tags = new Dictionary<string, string> { ["a\nb"] = null! };
-        AssertInvalid(new ReasonletProvenance("s", null, null, tags).Validate(), "Tags[\"a\\u000Ab\"]");
+        AssertInvalid(new ReasonletProvenance { Source = "s", Tags = tags }.Validate(), "Tags[\"a\\u000Ab\"]");
     }
 
     [Fact]
     public void Provenance_NullTagKey_ReportsNull()
     {
         var tags = new NullKeyTags();
-        AssertInvalid(new ReasonletProvenance("s", null, null, tags).Validate(), "Tags[null]");
+        AssertInvalid(new ReasonletProvenance { Source = "s", Tags = tags }.Validate(), "Tags[null]");
     }
 
     private sealed class NullKeyTags : IReadOnlyDictionary<string, string>
@@ -105,8 +105,8 @@ public class LeafRecordTests
     [Fact]
     public void Provenance_Boundary_Passes()
     {
-        Assert.True(new ReasonletProvenance("s", null, null, null).Validate().IsSuccess);
-        Assert.True(new ReasonletProvenance("s", "r", "u", new Dictionary<string, string> { ["k"] = "v" }).Validate().IsSuccess);
+        Assert.True(new ReasonletProvenance { Source = "s" }.Validate().IsSuccess);
+        Assert.True(new ReasonletProvenance { Source = "s", RunId = "r", SubjectId = "u", Tags = new Dictionary<string, string> { ["k"] = "v" } }.Validate().IsSuccess);
     }
 
     [Fact]

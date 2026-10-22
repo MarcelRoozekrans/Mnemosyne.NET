@@ -3,12 +3,21 @@ using ZeroAlloc.Results;
 namespace Mnemosyne.NET.Abstractions;
 
 /// <summary>A request for the best matching Reasonlets.</summary>
-/// <param name="Scope">The scope to search.</param>
-/// <param name="Question">The question to match. Must not be blank.</param>
-/// <param name="Intent">An optional intent filter. When present it must not be blank.</param>
-/// <param name="Top">The maximum number of matches, from 1 to 50. Defaults to 3.</param>
-public sealed record ReasonletQuery(ReasonletScope Scope, string Question, string? Intent, int Top = 3)
+/// <remarks>Init-only, so later phases can add members without breaking callers.</remarks>
+public sealed record ReasonletQuery
 {
+    /// <summary>Gets the scope to search.</summary>
+    public required ReasonletScope Scope { get; init; }
+
+    /// <summary>Gets the question to match. Must not be blank.</summary>
+    public required string Question { get; init; }
+
+    /// <summary>Gets an optional intent filter. When present it must not be blank.</summary>
+    public string? Intent { get; init; }
+
+    /// <summary>Gets the maximum number of matches, from 1 to 50. Defaults to 3.</summary>
+    public int Top { get; init; } = 3;
+
     /// <summary>Validates the query.</summary>
     /// <returns>Success, or a validation failure with a path relative to this record.</returns>
     public UnitResult<MnemosyneError> Validate() => Check.All(
