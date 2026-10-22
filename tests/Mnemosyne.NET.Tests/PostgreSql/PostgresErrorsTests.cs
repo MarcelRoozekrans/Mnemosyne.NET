@@ -13,6 +13,7 @@ public sealed class PostgresErrorsTests
     [InlineData("40001")]
     [InlineData("40P01")]
     [InlineData("23503")]
+    [InlineData("55P03")]
     public void ConflictStates(string sqlState)
     {
         var error = PostgresErrors.Map(Pg(sqlState));
@@ -24,7 +25,12 @@ public sealed class PostgresErrorsTests
     [Theory]
     [InlineData("08006")]
     [InlineData("57P01")]
-    public void ConnectionStatesAreUnavailable(string sqlState)
+    [InlineData("53100")]
+    [InlineData("53200")]
+    [InlineData("53300")]
+    [InlineData("57014")]
+    [InlineData("25006")]
+    public void ConnectionAndResourceStatesAreUnavailable(string sqlState)
     {
         var error = PostgresErrors.Map(Pg(sqlState));
         Assert.NotNull(error);
@@ -53,8 +59,12 @@ public sealed class PostgresErrorsTests
         Assert.Equal(MnemosyneErrorCode.Unavailable, error.Value.Code);
     }
 
-    [Fact]
-    public void OtherPostgresStateIsNull() => Assert.Null(PostgresErrors.Map(Pg("42P01")));
+    [Theory]
+    [InlineData("42P01")]
+    [InlineData("23505")]
+    [InlineData("57000")]
+    [InlineData("25001")]
+    public void OtherPostgresStateIsNull(string sqlState) => Assert.Null(PostgresErrors.Map(Pg(sqlState)));
 
     [Fact]
     public void OtherExceptionIsNull() => Assert.Null(PostgresErrors.Map(new InvalidOperationException()));
