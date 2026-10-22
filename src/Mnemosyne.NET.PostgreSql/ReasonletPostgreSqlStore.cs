@@ -829,16 +829,17 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
     /// <para>
     /// The idle ids are listed once, deepest first, and taken a chunk of <paramref name="batchSize"/> at a time; that
     /// order is what keeps a batch from deleting a parent without its children. Against a fixed cutoff a row can become
-    /// used but never idle, so the list only ever holds too much, and each batch's re-check drops what became used. A chunk's runs go first, in run batches of at most
-    /// <paramref name="batchSize"/> until one deletes nothing, so the Reasonlet batch that follows deletes at most
-    /// <paramref name="batchSize"/> Reasonlets and, normally, no runs.
+    /// used but never idle, so the list only ever holds too much, and each batch's re-check drops what became used. A
+    /// chunk's runs go first, in run batches of at most <paramref name="batchSize"/> until one deletes nothing, so the
+    /// Reasonlet batch that follows deletes at most <paramref name="batchSize"/> Reasonlets and, normally, no runs.
     /// </para>
     /// <para>
     /// Each batch is its own transaction and locks in the order every writer uses: Reasonlets, then executions, then
     /// metrics rows. Both kinds of batch lock the chunk's Reasonlets through <see cref="LockByCurrentDepthAsync"/>,
     /// deepest first by the depths the lineages have when the batch runs, then by id. A run batch then deletes
-    /// executions, which it locks in id order; it takes no metrics lock. A Reasonlet batch locks the Reasonlets, then their executions in id order,
-    /// then their metrics rows in id order, and only then re-checks and deletes, touching no row it does not hold.
+    /// executions, which it locks in id order; it takes no metrics lock. A Reasonlet batch locks the Reasonlets, then
+    /// their executions in id order, then their metrics rows in id order, and only then re-checks and deletes,
+    /// touching no row it does not hold.
     /// So a cycle of waits with another writer would need that writer to hold a row later in this order while it
     /// waits for an earlier one, and none does:
     /// </para>
