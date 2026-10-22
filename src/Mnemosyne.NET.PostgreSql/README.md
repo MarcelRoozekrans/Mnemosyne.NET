@@ -81,7 +81,7 @@ The rules that follow from this:
 - Run records follow their procedure. Every execution and feedback on an erased Reasonlet is removed with it, including other subjects' runs of it.
 - The result counts the Reasonlets deleted and every execution removed. A cut parent link is not counted.
 - A kept Reasonlet that loses executions to the erase has them subtracted from its run counts. The counts are not recounted from the executions left, because they also hold runs whose records were pruned. When a removed run was the latest run or latest success, that time falls back to the latest one left; when none is left, the stored time stays, possibly older than the truth.
-- The whole erase is one transaction. It covers what exists when it takes its locks: a Reasonlet remembered while the erase runs is not erased by it, so run the erase again once the subject has stopped writing. A deadlock with a concurrent remember answers `Conflict`; retry it. In rare cases a concurrent erase or prune deadlocks with another erase, which also answers `Conflict`; retry that too.
+- The whole erase is one transaction. It covers what exists when it takes its locks: a Reasonlet remembered while the erase runs is not erased by it, so run the erase again once the subject has stopped writing. A deadlock with a concurrent remember answers `Conflict`; retry it. An erase can also deadlock, rarely, with another erase or a prune: this happens when a third erase cuts a lineage between the moment one of them reads its depths and the moment it takes its locks, so the two order the rows they share by different depths. It answers `Conflict` too; retry it.
 - Counts of runs that were pruned before the erase stay in `runs` and `successes`, because nothing can identify those runs any more. They are bare integers with no link to a person, so they are anonymous totals, not personal data.
 
 ### What erasure leaves on disk
@@ -106,12 +106,14 @@ The write-ahead log, streaming replicas and backups keep the data for their own 
 | Property | Meaning |
 |---|---|
 | `Scope` | The scope to prune. Null prunes every scope. |
-| `ExecutionsOlderThan` | Delete run records older than this. Null keeps all runs. |
+| `ExecutionsOlderThan` | Delete run records, together with their feedback, older than this. Null keeps all runs. |
 | `ReasonletsUnusedFor` | Delete Reasonlets that have not been used for this long. Null keeps all Reasonlets. |
 
 A policy with both windows null, a window that is not positive, or an invalid scope answers a validation error. The result counts the Reasonlets and executions deleted.
 
 ```csharp
+using Mnemosyne.NET.Abstractions;
+
 var pruned = await store.PruneAsync(
     new ReasonletRetention
     {
@@ -166,18 +168,18 @@ There is one activity per operation.
 | `mnemosyne.get` | |
 | `mnemosyne.execution.append` | |
 | `mnemosyne.feedback.append` | |
-| `mnemosyne.search` | `mnemosyne.search.limit`, `mnemosyne.search.returned`, `mnemosyne.search.top_similarity` |
-| `mnemosyne.erase` | `mnemosyne.erase.by` (`scope` or `subject`), `mnemosyne.erased.reasonlets`, `mnemosyne.erased.executions` |
-| `mnemosyne.prune` | `mnemosyne.pruned.reasonlets`, `mnemosyne.pruned.executions` |
+| `mnemosyne.search` | `mnemosyne.search.limit`, always; on success `mnemosyne.search.returned`, and `mnemosyne.search.top_similarity` only when a candidate is returned |
+| `mnemosyne.erase` | `mnemosyne.erase.by` (`scope` or `subject`), always; on success `mnemosyne.erased.reasonlets` and `mnemosyne.erased.executions` |
+| `mnemosyne.prune` | `mnemosyne.pruned.reasonlets`, `mnemosyne.pruned.executions`, always; they count the committed batches, including when the prune fails |
 
 - A failure result sets `error.type` to the `MnemosyneErrorCode` name and the status to Error.
-- When an exception propagates, cancellation included, the activity gets an `exception` event with `exception.type` only, and the status is Error. The message and stack trace are never recorded, because an unmapped PostgreSQL error can quote stored values.
+- When an exception propagates, cancellation included, the activity gets an `exception` event with `exception.type` only, `error.type` is set to the full exception type name, and the status is Error. The message and stack trace are never recorded, because an unmapped PostgreSQL error can quote stored values.
 
 ### Metrics
 
 | Instrument | Type | Tags |
 |---|---|---|
-| `mnemosyne.operations` | counter | `mnemosyne.operation`, `mnemosyne.outcome` (`ok` or the error code) |
+| `mnemosyne.operations` | counter | `mnemosyne.operation`, `mnemosyne.outcome` (`ok`, the error code, or `exception`) |
 | `mnemosyne.operation.duration` | histogram, seconds | `mnemosyne.operation` |
 | `mnemosyne.reasonlets.remembered` | counter | `mnemosyne.capture_kind` |
 | `mnemosyne.search.returned` | histogram | none |
