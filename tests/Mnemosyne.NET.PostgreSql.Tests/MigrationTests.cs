@@ -96,6 +96,23 @@ public sealed class MigrationTests(PgVectorFixture fixture) : IClassFixture<PgVe
     }
 
     [Fact]
+    public async Task ConcurrentFirstMigrationsBothSucceedAndApplyTheDimensionOnce()
+    {
+        var dataSource = await fixture.CreateEmptyDatabaseAsync();
+        var options = new MnemosynePostgreSqlOptions { Dimensions = 3 };
+
+        var results = await Task.WhenAll(
+            new ReasonletPostgreSqlStore(dataSource, options).MigrateAsync(Ct).AsTask(),
+            new ReasonletPostgreSqlStore(dataSource, options).MigrateAsync(Ct).AsTask());
+
+        Assert.All(results, r => Assert.True(r.IsSuccess));
+        Assert.Equal(1, await ScalarAsync<long>(dataSource, "SELECT count(*) FROM mnemosyne.settings WHERE key = 'dimensions'"));
+        Assert.Equal(1, await ScalarAsync<long>(
+            dataSource, "SELECT count(*) FROM pg_indexes WHERE schemaname = 'mnemosyne' AND indexdef LIKE '%USING hnsw%'"));
+        Assert.Equal("vector(3)", await EmbeddingTypeAsync(dataSource));
+    }
+
+    [Fact]
     public async Task ADifferentDimensionFailsWithBothNumbersAndLeavesTheColumnAlone()
     {
         Assert.True((await fixture.CreateStore(3).MigrateAsync(Ct)).IsSuccess);

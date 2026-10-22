@@ -46,16 +46,22 @@ public sealed class PgVectorFixture : IAsyncLifetime
 
     public async ValueTask DisposeAsync()
     {
-        foreach (var dataSource in _emptyDatabases)
+        // The container goes in a finally: a data source that throws on disposal must not leave it running.
+        try
         {
-            await dataSource.DisposeAsync();
-        }
+            foreach (var dataSource in _emptyDatabases)
+            {
+                await dataSource.DisposeAsync();
+            }
 
-        if (DataSource is not null)
+            if (DataSource is not null)
+            {
+                await DataSource.DisposeAsync();
+            }
+        }
+        finally
         {
-            await DataSource.DisposeAsync();
+            await _container.DisposeAsync();
         }
-
-        await _container.DisposeAsync();
     }
 }
