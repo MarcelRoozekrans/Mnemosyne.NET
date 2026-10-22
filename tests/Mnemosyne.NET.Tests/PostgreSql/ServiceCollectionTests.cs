@@ -6,12 +6,16 @@ using Xunit;
 
 namespace Mnemosyne.NET.Tests.PostgreSql;
 
-public sealed class ServiceCollectionTests
+public sealed class ServiceCollectionTests : IAsyncDisposable
 {
-    private static ServiceProvider Provider(MnemosynePostgreSqlOptions options)
+    // Registered as an instance, so the container does not own it and the test disposes it.
+    private readonly NpgsqlDataSource _dataSource =
+        new NpgsqlDataSourceBuilder("Host=127.0.0.1;Port=1;Username=u;Password=p;Database=d").Build();
+
+    private ServiceProvider Provider(MnemosynePostgreSqlOptions options)
     {
         var services = new ServiceCollection();
-        services.AddSingleton(new NpgsqlDataSourceBuilder("Host=127.0.0.1;Port=1;Username=u;Password=p;Database=d").Build());
+        services.AddSingleton(_dataSource);
         services.AddMnemosynePostgreSql(options);
         return services.BuildServiceProvider();
     }
@@ -40,4 +44,6 @@ public sealed class ServiceCollectionTests
         Assert.Throws<ArgumentNullException>(() => ServiceCollectionExtensions.AddMnemosynePostgreSql(null!, new MnemosynePostgreSqlOptions { Dimensions = 3 }));
         Assert.Throws<ArgumentNullException>(() => new ServiceCollection().AddMnemosynePostgreSql(null!));
     }
+
+    public ValueTask DisposeAsync() => _dataSource.DisposeAsync();
 }
