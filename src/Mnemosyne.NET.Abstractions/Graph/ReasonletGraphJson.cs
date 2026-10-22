@@ -11,8 +11,9 @@ namespace Mnemosyne.NET.Abstractions;
 /// <remarks>
 /// The JSON uses camelCase member names and leaves out null members and null or empty <c>properties</c>.
 /// Strings are written with <see cref="JavaScriptEncoder.UnsafeRelaxedJsonEscaping"/>, the same encoder the
-/// <see cref="ReasonletGraphLimits.MaxPropertiesBytes"/> limit measures with. The output is meant to be stored and
-/// hashed, not embedded in HTML.
+/// <see cref="ReasonletGraphLimits.MaxPropertiesBytes"/> limit measures with. The output is meant to be stored, not
+/// embedded in HTML. <see cref="ReasonletGraph.ComputeContentHash"/> does not hash this text: it uses its own canonical
+/// form with a fixed escape set.
 /// </remarks>
 public static class ReasonletGraphJson
 {

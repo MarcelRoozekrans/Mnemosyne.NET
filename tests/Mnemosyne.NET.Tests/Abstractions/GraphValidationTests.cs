@@ -329,6 +329,47 @@ public class GraphValidationTests
         AssertInvalid(Graph([Node("a", props)]).Validate(), "Nodes[0].Properties[\"a.\\uD800\"]");
     }
 
+    [Theory]
+    [InlineData("Name", "")]
+    [InlineData("Name", " ")]
+    [InlineData("Tool", "")]
+    [InlineData("Tool", "\t")]
+    public void BlankOptionalNodeField_Fails(string field, string blank)
+    {
+        var node = field == "Name" ? Node("a") with { Name = blank } : Node("a") with { Tool = blank };
+        var r = Graph([node]).Validate();
+        AssertInvalid(r, $"Nodes[0].{field}");
+        Assert.Contains("must not be blank", r.Error.Message);
+    }
+
+    [Fact]
+    public void BlankNodeName_ReportedBeforeBlankTool() =>
+        AssertInvalid(Graph([Node("a") with { Name = " ", Tool = " " }]).Validate(), "Nodes[0].Name");
+
+    [Fact]
+    public void NonBlankOptionalNodeFields_Pass() =>
+        Assert.True(Graph([Node("a") with { Name = "n", Tool = "t" }]).Validate().IsSuccess);
+
+    [Theory]
+    [InlineData("""{"a":1,"a":2}""")]
+    [InlineData("""{"a":1,"\u0061":2}""")]
+    [InlineData("""{"x":[{"b":1}, {"b":2,"c":{"d":1,"d":1}}]}""")]
+    [InlineData("""[{"k":true,"k":false}]""")]
+    public void DuplicateMemberNameInPropertyValue_Fails(string json)
+    {
+        var props = new Dictionary<string, JsonElement> { ["a.k"] = Json(json) };
+        var r = Graph([Node("a", props)]).Validate();
+        AssertInvalid(r, "Nodes[0].Properties[\"a.k\"]");
+        Assert.Contains("duplicate member name", r.Error.Message);
+    }
+
+    [Fact]
+    public void SameMemberNameInSiblingObjects_Passes()
+    {
+        var props = new Dictionary<string, JsonElement> { ["a.k"] = Json("""{"x":{"a":1},"y":{"a":1},"a":[{"a":1},{"a":2}]}""") };
+        Assert.True(Graph([Node("a", props)]).Validate().IsSuccess);
+    }
+
     [Fact]
     public void KeyPath_EscapesAndHandlesNull()
     {

@@ -73,10 +73,21 @@ public sealed record ReasonletGraph
     /// 64 lowercase hex characters, or the <see cref="MnemosyneErrorCode.Validation"/> failure from <see cref="Validate"/>.
     /// </returns>
     /// <remarks>
+    /// <para>
     /// Equal graphs hash the same however their nodes, edges and property members are ordered, and whether their
     /// strings are escaped or not. Arrays inside property values keep their order, numbers keep their raw text so
     /// <c>1</c> and <c>1.0</c> differ, null and empty properties are the same, and <see cref="SchemaVersion"/> is
     /// included. The canonical form is a permanent contract, because stored hashes depend on it.
+    /// </para>
+    /// <para>
+    /// Strings are written with the fixed RFC 8785 (JCS) escape set: only <c>"</c>, <c>\</c> and U+0000 to U+001F are
+    /// escaped, and everything else is raw UTF-8. This differs on purpose from <see cref="ReasonletGraphJson"/>, whose
+    /// encoder follows the runtime's Unicode tables, so a .NET upgrade cannot change a hash.
+    /// </para>
+    /// <para>
+    /// Members, nodes and edges are sorted in .NET ordinal order, which compares UTF-16 code units, not UTF-8 bytes or
+    /// code points. Hashes are only ever computed in .NET, by this method; nothing else reproduces them.
+    /// </para>
     /// </remarks>
     public Result<string, MnemosyneError> ComputeContentHash()
     {

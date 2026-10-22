@@ -17,8 +17,9 @@ internal static class PropertyChecks
     /// <summary>
     /// Checks the keys and values of a properties dictionary and returns the first failure.
     /// A key is two or more dot-separated segments, none of them empty, and valid UTF-16. A value must be defined,
-    /// nested at most <see cref="ReasonletGraphLimits.MaxPropertyDepth"/> levels deep, and hold only valid UTF-8 and
-    /// UTF-16 in its strings and member names, so that measuring and writing it cannot throw.
+    /// nested at most <see cref="ReasonletGraphLimits.MaxPropertyDepth"/> levels deep, hold only valid UTF-8 and
+    /// UTF-16 in its strings and member names, so that measuring and writing it cannot throw, and have no duplicate
+    /// member names in any object, so that its canonical form is unambiguous.
     /// </summary>
     public static UnitResult<MnemosyneError> Validate(IReadOnlyDictionary<string, JsonElement>? props, string pathPrefix)
     {
@@ -120,7 +121,10 @@ internal static class PropertyChecks
         }
     }
 
-    /// <summary>Walks a value once, checking its depth and that every string and member name is valid UTF-16.</summary>
+    /// <summary>
+    /// Walks a value once, checking its depth, that every string and member name is valid UTF-8 and UTF-16, and that
+    /// no object repeats a member name. Names are compared after unescaping, so <c>"a"</c> and <c>"\u0061"</c> clash.
+    /// </summary>
     private static string? FindValueProblem(JsonElement element, int level)
     {
         if (level > ReasonletGraphLimits.MaxPropertyDepth)
@@ -143,11 +147,18 @@ internal static class PropertyChecks
 
                 return null;
             case JsonValueKind.Object:
+                HashSet<string>? names = null;
                 foreach (var member in element.EnumerateObject())
                 {
                     if (!IsValidText(JsonMarshal.GetRawUtf8PropertyName(member)))
                     {
                         return InvalidText;
+                    }
+
+                    names ??= new HashSet<string>(StringComparer.Ordinal);
+                    if (!names.Add(member.Name))
+                    {
+                        return "value must not contain a duplicate member name in any object";
                     }
 
                     if (FindValueProblem(member.Value, level + 1) is { } problem)

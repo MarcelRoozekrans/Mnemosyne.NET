@@ -18,10 +18,10 @@ public sealed record ReasonletNode
     /// <summary>Gets the node type. Must not be blank.</summary>
     public required string Type { get; init; }
 
-    /// <summary>Gets the optional display name.</summary>
+    /// <summary>Gets the optional display name. Must not be blank when present.</summary>
     public string? Name { get; init; }
 
-    /// <summary>Gets the optional name of the tool this node invokes.</summary>
+    /// <summary>Gets the optional name of the tool this node invokes. Must not be blank when present.</summary>
     public string? Tool { get; init; }
 
     /// <summary>Gets the optional free-form properties of the node.</summary>
@@ -34,6 +34,8 @@ public sealed record ReasonletNode
         () => Check.ValidUtf16(Id, nameof(Id)),
         () => Check.NotBlank(Type, nameof(Type)),
         () => Check.ValidUtf16(Type, nameof(Type)),
+        () => Name is null ? UnitResult<MnemosyneError>.Success() : Check.NotBlank(Name, nameof(Name)),
         () => Check.ValidUtf16(Name, nameof(Name)),
+        () => Tool is null ? UnitResult<MnemosyneError>.Success() : Check.NotBlank(Tool, nameof(Tool)),
         () => Check.ValidUtf16(Tool, nameof(Tool)));
 }
