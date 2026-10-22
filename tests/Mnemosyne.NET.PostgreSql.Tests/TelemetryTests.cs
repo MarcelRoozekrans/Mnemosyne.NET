@@ -267,6 +267,7 @@ public sealed class TelemetryTests(PgVectorFixture fixture) : IClassFixture<PgVe
         var scope = PgVectorFixture.NewScope();
         await ChainAsync(store, scope, 4);
         store.PruneBatchSizeOverride = 2;
+        store.PruneRetryDelay = (_, _) => Task.CompletedTask;
         var calls = 0;
         store.BeforePruneBatchCommit = () => ++calls > 1 ? throw new PostgresException("injected", "ERROR", "ERROR", "40001") : Task.CompletedTask;
         using var capture = new TelemetryCapture();

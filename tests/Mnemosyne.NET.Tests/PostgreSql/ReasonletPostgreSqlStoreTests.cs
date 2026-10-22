@@ -28,6 +28,20 @@ public sealed class ReasonletPostgreSqlStoreTests : IAsyncDisposable
         Assert.Throws<ArgumentNullException>(() => new ReasonletPostgreSqlStore(_unreachable, null!));
     }
 
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    public void APruneRetryBacksOffFiftyMillisecondsPerAttemptGiveOrTakeHalf(int attempt)
+    {
+        var delays = Enumerable.Range(0, 1000).Select(_ => ReasonletPostgreSqlStore.PruneRetryBackoff(attempt).TotalMilliseconds).ToArray();
+
+        Assert.All(delays, delay => Assert.InRange(delay, 25.0 * attempt, 75.0 * attempt));
+
+        // Jittered, not fixed: a thousand draws spread over most of the range.
+        Assert.True(delays.Max() - delays.Min() > 40.0 * attempt);
+    }
+
     [Fact]
     public async Task MigrateAgainstAnUnreachableServerIsUnavailable()
     {

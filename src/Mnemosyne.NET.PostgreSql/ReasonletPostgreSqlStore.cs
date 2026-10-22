@@ -801,8 +801,8 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
     /// while the prune runs, because an erase removed the version that kept it, waits for the next prune.
     /// </para>
     /// <para>
-    /// A batch that hits a deadlock or a serialization failure rolls back and is retried, up to three times, before
-    /// the prune gives up with <see cref="MnemosyneErrorCode.Conflict"/>. Any other failure ends the prune at once. On
+    /// A batch that hits a deadlock or a serialization failure rolls back and is retried after a short jittered wait,
+    /// up to three times, before the prune gives up with <see cref="MnemosyneErrorCode.Conflict"/>. Any other failure ends the prune at once. On
     /// a failure the batches committed before it stay committed and the result carries no counts; running the prune
     /// again deletes what is still older than its new cutoff.
     /// </para>
@@ -830,6 +830,12 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
     /// A test hook that each prune batch awaits after its commit, so a test can check what a committed batch left.
     /// </summary>
     internal Func<Task>? AfterPruneBatch { get; set; }
+
+    /// <summary>
+    /// Waits out the backoff before a prune batch is tried again: <see cref="Task.Delay(TimeSpan, CancellationToken)"/>,
+    /// unless a test replaces it, so the retry tests need not sleep.
+    /// </summary>
+    internal Func<TimeSpan, CancellationToken, Task> PruneRetryDelay { get; set; } = Task.Delay;
 
     /// <summary>
     /// Prunes as <see cref="PruneAsync(ReasonletRetention, CancellationToken)"/> does, and adds every committed batch to
@@ -1064,17 +1070,19 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
     /// <summary>
     /// Runs one prune batch in its own READ COMMITTED transaction, with JIT off as in an erase, and commits it. A
     /// batch that fails with a deadlock (<c>40P01</c>) or a serialization failure (<c>40001</c>) has rolled back, so it
-    /// is run again from the start, up to <see cref="PruneRetries"/> times; the last such failure, and any other,
-    /// propagates for <see cref="GuardAsync{T}"/> to map.
+    /// is run again from the start, up to <see cref="PruneRetries"/> times, after a backoff from
+    /// <see cref="PruneRetryBackoff"/>; the last such failure, and any other, propagates for
+    /// <see cref="GuardAsync{T}"/> to map.
     /// </summary>
     /// <remarks>
     /// The batch receives the connection as well as the transaction, because the repositories are bound to a
     /// connection. Every try opens a fresh connection, so a retry never runs on a connection the failure left in an
-    /// unknown state.
+    /// unknown state. The backoff gives the transaction the batch collided with time to finish, so the retry does not
+    /// meet it again at once, and its jitter keeps two prunes that collided from retrying in step.
     /// </remarks>
     private async Task<T> RunPruneBatchAsync<T>(Func<IAsyncDbConnection, IAsyncDbTransaction, Task<T>> batch, CancellationToken ct)
     {
-        for (var retries = 0; ; retries++)
+        for (var attempt = 1; ; attempt++)
         {
             // A flag rather than a return inside the try, so every line of the method can execute.
             var retry = false;
@@ -1084,7 +1092,7 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
                 result = await RunPruneBatchOnceAsync(batch, ct).ConfigureAwait(false);
             }
             catch (PostgresException ex) when (ex.SqlState is PostgresErrorCodes.DeadlockDetected or PostgresErrorCodes.SerializationFailure
-                && retries < PruneRetries)
+                && attempt <= PruneRetries)
             {
                 // The transaction rolled back when it was disposed, so the next try starts over.
                 retry = true;
@@ -1094,8 +1102,17 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
             {
                 return result;
             }
+
+            await PruneRetryDelay(PruneRetryBackoff(attempt), ct).ConfigureAwait(false);
         }
     }
+
+    /// <summary>
+    /// The wait before the <paramref name="attempt"/>th retry of a prune batch: 50 ms times the attempt, give or take
+    /// half, drawn from <see cref="Random.Shared"/>.
+    /// </summary>
+    internal static TimeSpan PruneRetryBackoff(int attempt) =>
+        TimeSpan.FromMilliseconds(50 * attempt * (0.5 + Random.Shared.NextDouble()));
 
     private async Task<T> RunPruneBatchOnceAsync<T>(Func<IAsyncDbConnection, IAsyncDbTransaction, Task<T>> batch, CancellationToken ct)
     {
@@ -1113,7 +1130,9 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
             await hook().ConfigureAwait(false);
         }
 
-        await transaction.CommitAsync(ct).ConfigureAwait(false);
+        // Not cancellable: once the commit is sent, cancelling it could leave the server committed while this side
+        // throws, and the batch would then be missing from the progress that the result and the telemetry count.
+        await transaction.CommitAsync(CancellationToken.None).ConfigureAwait(false);
         if (AfterPruneBatch is { } after)
         {
             await after().ConfigureAwait(false);

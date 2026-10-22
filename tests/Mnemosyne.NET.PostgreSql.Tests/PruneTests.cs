@@ -254,7 +254,14 @@ public sealed class PruneTests(PgVectorFixture fixture) : IClassFixture<PgVector
     [Fact]
     public async Task APersistentConflictGivesUpAfterThreeRetries()
     {
+        // Each retry waits a backoff that grows with the attempt, so the test records the waits rather than sleeping.
         var store = await MigratedStoreAsync();
+        var delays = new List<TimeSpan>();
+        store.PruneRetryDelay = (delay, _) =>
+        {
+            delays.Add(delay);
+            return Task.CompletedTask;
+        };
         var calls = 0;
         store.BeforePruneBatchCommit = () =>
         {
@@ -269,6 +276,9 @@ public sealed class PruneTests(PgVectorFixture fixture) : IClassFixture<PgVector
         Assert.Equal(MnemosyneErrorCode.Conflict, result.Error.Code);
         Assert.Equal(4, calls);
         Assert.Equal((1L, 2L), await CountsAsync(fixture.DataSource, scope));
+        Assert.Equal(3, delays.Count);
+        Assert.All(delays.Select((delay, i) => (delay, attempt: i + 1)), d =>
+            Assert.InRange(d.delay.TotalMilliseconds, 25 * d.attempt, 75 * d.attempt));
     }
 
     [Fact]
@@ -278,6 +288,7 @@ public sealed class PruneTests(PgVectorFixture fixture) : IClassFixture<PgVector
         // progress the telemetry reads on the failure path counts them.
         var store = await MigratedStoreAsync();
         store.PruneBatchSizeOverride = 3;
+        store.PruneRetryDelay = (_, _) => Task.CompletedTask;
         var calls = 0;
         store.BeforePruneBatchCommit = () => ++calls > 1 ? throw Pg("40001") : Task.CompletedTask;
         var scope = PgVectorFixture.NewScope();
@@ -708,6 +719,7 @@ public sealed class PruneTests(PgVectorFixture fixture) : IClassFixture<PgVector
         // reads counts it.
         var store = await MigratedStoreAsync();
         store.PruneBatchSizeOverride = 2;
+        store.PruneRetryDelay = (_, _) => Task.CompletedTask;
         var calls = 0;
         store.BeforePruneBatchCommit = () => ++calls > 1 ? throw Pg("40001") : Task.CompletedTask;
         var scope = PgVectorFixture.NewScope();
