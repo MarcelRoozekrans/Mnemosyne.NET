@@ -10,10 +10,12 @@ namespace Mnemosyne.NET.PostgreSql.Tests;
 /// which link this file.
 /// </summary>
 /// <remarks>
-/// Listeners are global, so a test in another class that runs at the same time is heard too. The capture starts a
-/// parent activity in a new random trace, never one inherited from an ambient activity, which becomes <see cref="Activity.Current"/> for the rest of the test and flows into every call it
-/// awaits, and it keeps only what belongs to that trace: an activity by its <see cref="Activity.TraceId"/>, and a
-/// measurement by the trace of <see cref="Activity.Current"/> when it is recorded. A measurement callback runs
+/// Listeners are global, so a test in another class that runs at the same time is heard too. The capture starts its
+/// own parent activity in a new random trace, never in the trace of an ambient activity the test host may have set.
+/// That parent becomes <see cref="Activity.Current"/> for the rest of the test and flows into every call it awaits;
+/// disposing the capture restores the ambient activity. The capture keeps only what belongs to the parent's trace:
+/// an activity by its <see cref="Activity.TraceId"/>, and a measurement by the trace of
+/// <see cref="Activity.Current"/> when it is recorded. A measurement callback runs
 /// synchronously on the recording call, inside that call's execution context, so it sees the trace of the test that
 /// made the call, never another's.
 /// </remarks>
