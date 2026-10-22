@@ -258,6 +258,25 @@ public sealed class RememberTests(PgVectorFixture fixture) : IClassFixture<PgVec
         Assert.Equal("1.2", next.Version);
     }
 
+    [Fact(Timeout = 30_000)]
+    public async Task AParentCycleIsCorruptDataAndThrowsRatherThanLooping()
+    {
+        // The store never creates a cycle: a parent exists before its child, and parent_id only ever changes to NULL.
+        // Hand-written SQL can, and an unguarded walk up would recurse forever.
+        var store = await MigratedStoreAsync();
+        var scope = PgVectorFixture.NewScope();
+        var a = (await store.RememberAsync(Entries.Entry(scope, Entries.Graph("a")), Ct)).Value;
+        var b = (await store.RememberAsync(Entries.Entry(scope, Entries.Graph("b"), a.Id), Ct)).Value;
+        await Entries.ExecuteAsync(
+            fixture.DataSource, "UPDATE mnemosyne.reasonlets SET parent_id = $1 WHERE id = $2", b.Id.Value, a.Id.Value);
+
+        var thrown = await Assert.ThrowsAsync<InvalidOperationException>(
+            async () => await store.RememberAsync(Entries.Entry(scope, Entries.Graph("next"), b.Id), Ct));
+
+        Assert.Contains("cycle", thrown.Message, StringComparison.Ordinal);
+        Assert.Equal(2L, await CountAsync("SELECT count(*) FROM mnemosyne.reasonlets WHERE scope = $1", scope.Value));
+    }
+
     [Fact]
     public async Task ATopErasedWhileTheStoreWaitsForItsLockIsAConflict()
     {

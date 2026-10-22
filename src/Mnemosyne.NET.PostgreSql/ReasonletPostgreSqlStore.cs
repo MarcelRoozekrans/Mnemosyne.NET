@@ -174,8 +174,17 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
                 // The lineage is the top above the parent and the top's whole subtree, derived from parent_id within the
                 // scope. Locks go parent first, then top; when the parent is the top the second lock is a re-lock.
                 var scope = capture.Scope.Value;
-                // The walk starts at the parent this transaction holds, so it always yields a row.
-                var top = (await reasonlets.FindLineageTopAsync(scope, parent.Id, transaction, ct).ConfigureAwait(false))!.Value;
+                // The walk starts at the parent this transaction holds, so it always yields a row. The ! works around
+                // https://github.com/ZeroAlloc-Net/ZeroAlloc.ORM/issues/400; see FindLineageTopAsync.
+                var walk = (await reasonlets.FindLineageTopAsync(scope, parent.Id, transaction, ct).ConfigureAwait(false))!;
+                if (walk.IsCycle)
+                {
+                    // The store never links a Reasonlet to a descendant, so a cycle is corrupt data: a bug, not a result.
+                    throw new InvalidOperationException(
+                        $"The parent_id links above Reasonlet {parent.Id} form a cycle through {walk.Id}; the stored lineage is corrupt.");
+                }
+
+                var top = walk.Id;
 
                 // The top can vanish between finding and locking it only when a concurrent erase deleted it: the
                 // erase cut the parent link of the top's child, which this transaction does not hold, so counting
