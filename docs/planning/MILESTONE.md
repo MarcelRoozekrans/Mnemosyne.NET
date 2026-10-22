@@ -24,7 +24,7 @@ with getting-started docs and a sample. See the
 
 ## Phases
 1. Phase 1.1 — Repo scaffold, CI and release pipeline [complete]
-2. Phase 1.2 — Abstractions [active]
+2. Phase 1.2 — Abstractions [complete]
 3. Phase 1.3 — Graph JSON schema v1 [pending]
 4. Phase 1.4 — PostgreSQL + pgvector store [pending]
 5. Phase 1.5 — Audit, erasure and retention [pending]
