@@ -328,8 +328,8 @@ public sealed class EraseTests(PgVectorFixture fixture) : IClassFixture<PgVector
             await AppendAsync(store, scope, c2.Id, SubjectB);
 
             var results = await Task.WhenAll(
-                Task.Run(() => EraseRetryingConflictsAsync(store, new ReasonletErasure(scope, SubjectA)), Ct),
-                Task.Run(() => EraseRetryingConflictsAsync(store, new ReasonletErasure(scope, SubjectB)), Ct));
+                Task.Run(() => EraseAsync(store, new ReasonletErasure(scope, SubjectA)), Ct),
+                Task.Run(() => EraseAsync(store, new ReasonletErasure(scope, SubjectB)), Ct));
 
             Assert.Equal((4, 8), (results.Sum(x => x.Reasonlets), results.Sum(x => x.Executions)));
             Assert.Equal((0L, 0L, 0L), await CountsAsync(scope));
@@ -354,23 +354,18 @@ public sealed class EraseTests(PgVectorFixture fixture) : IClassFixture<PgVector
             }
 
             var results = await Task.WhenAll(
-                Task.Run(() => EraseRetryingConflictsAsync(store, new ReasonletErasure(scope, SubjectA)), Ct),
-                Task.Run(() => EraseRetryingConflictsAsync(store, new ReasonletErasure(scope, SubjectB)), Ct));
+                Task.Run(() => EraseAsync(store, new ReasonletErasure(scope, SubjectA)), Ct),
+                Task.Run(() => EraseAsync(store, new ReasonletErasure(scope, SubjectB)), Ct));
 
             Assert.Equal((2, 42), (results.Sum(x => x.Reasonlets), results.Sum(x => x.Executions)));
             Assert.Equal((0L, 0L, 0L), await CountsAsync(scope));
         }
     }
 
-    /// <summary>Erases, retrying once on a Conflict as a caller would; a second Conflict fails the test.</summary>
-    private static async Task<ReasonletErasureResult> EraseRetryingConflictsAsync(ReasonletPostgreSqlStore store, ReasonletErasure erasure)
+    /// <summary>Erases and asserts that it succeeded: overlapping erases lock in one order, so neither may conflict.</summary>
+    private static async Task<ReasonletErasureResult> EraseAsync(ReasonletPostgreSqlStore store, ReasonletErasure erasure)
     {
         var result = await store.EraseAsync(erasure, Ct);
-        if (result.IsFailure && result.Error.Code == MnemosyneErrorCode.Conflict)
-        {
-            result = await store.EraseAsync(erasure, Ct);
-        }
-
         Assert.True(result.IsSuccess, result.IsFailure ? result.Error.ToString() : null);
         return result.Value;
     }
