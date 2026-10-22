@@ -254,7 +254,9 @@ internal sealed partial class RetentionRepository(IAsyncDbConnection connection)
     /// the rows it finds idle, and a run batch locks only the runs it deletes. Only the Reasonlet batch's delete needs
     /// every run locked first, by <see cref="LockIdleExecutionsAsync"/>, so that it takes no execution lock while it
     /// holds metrics rows. The executions are found by a probe of the <c>(scope, reasonlet_id)</c> index per
-    /// Reasonlet, as in that method. The Reasonlet locks hold new runs off, so the count is exact for the batch.
+    /// Reasonlet, as in that method. The Reasonlet locks hold new runs off, so the count can only overstate: a
+    /// concurrent subject erase that keeps the Reasonlet, or a batch of old runs, can delete its runs without locking
+    /// it. That at worst sends the chunk to run batches it didn't need.
     /// </remarks>
     [Query("""
         SELECT count(*)::int
@@ -268,12 +270,14 @@ internal sealed partial class RetentionRepository(IAsyncDbConnection connection)
     public partial Task<int?> CountIdleExecutionsAsync(Guid[] ids, IAsyncDbTransaction transaction, CancellationToken ct);
 
     /// <summary>
-    /// Locks <c>FOR UPDATE</c>, in id order and until the transaction ends, every execution of the locked Reasonlets,
-    /// and answers how many it locked. The second lock step of a Reasonlet batch, after
+    /// Locks <c>FOR UPDATE</c>, in id order and until the transaction ends, every execution of the locked Reasonlets.
+    /// The second lock step of a Reasonlet batch, after
     /// <see cref="LockIdleReasonletsAsync"/> and before <see cref="LockIdleMetricsAsync"/>.
     /// </summary>
     /// <remarks>
-    /// The lock is what the Reasonlet batch's delete needs, not the count, which nothing reads. Executions before
+    /// The Reasonlet batch's delete removes these runs, and needs them locked here so that it takes no execution lock
+    /// while it holds metrics rows. The statement folds the rows into one count so the locked rows are not sent back;
+    /// it is a command, so the count is discarded. Executions before
     /// metrics, as an erase takes them: a subject erase locks runs of a Reasonlet it keeps and then
     /// that Reasonlet's metrics row, without locking the Reasonlet, so a prune that took the metrics row first and
     /// then deleted the runs would deadlock with it. The executions are found through their Reasonlet's scope, by a
@@ -281,7 +285,7 @@ internal sealed partial class RetentionRepository(IAsyncDbConnection connection)
     /// and are then locked by primary key, as in <see cref="LockAndDeleteSql"/>. Joined directly, PostgreSQL 17 hashed
     /// the batch and scanned the whole executions table in testing.
     /// </remarks>
-    [Query("""
+    [Command("""
         SELECT count(*)::int FROM (
             SELECT 1
             FROM mnemosyne.reasonlet_executions e
@@ -297,19 +301,20 @@ internal sealed partial class RetentionRepository(IAsyncDbConnection connection)
             FOR UPDATE OF e
         ) l
         """)]
-    public partial Task<int?> LockIdleExecutionsAsync(Guid[] ids, IAsyncDbTransaction transaction, CancellationToken ct);
+    public partial Task LockIdleExecutionsAsync(Guid[] ids, IAsyncDbTransaction transaction, CancellationToken ct);
 
     /// <summary>
     /// Locks <c>FOR UPDATE</c>, in id order and until the transaction ends, the metrics rows of the locked
-    /// Reasonlets, and answers how many it locked. The last lock step of a Reasonlet batch, the order an append and an
+    /// Reasonlets. The last lock step of a Reasonlet batch, the order an append and an
     /// erase reach a metrics row in: after the Reasonlet and after the executions.
     /// </summary>
     /// <remarks>
     /// The lock keeps the re-check's view of <c>last_executed_at</c> fixed until the delete: no append can move it,
     /// because the Reasonlet lock holds appends off, and no erase can subtract from it, because this lock holds the
-    /// erase off until the batch commits.
+    /// erase off until the batch commits. As in <see cref="LockIdleExecutionsAsync"/>, the rows are folded into a count
+    /// that the command discards.
     /// </remarks>
-    [Query("""
+    [Command("""
         SELECT count(*)::int FROM (
             SELECT 1 FROM mnemosyne.reasonlet_metrics m
             WHERE m.reasonlet_id = ANY(@ids)
@@ -317,7 +322,7 @@ internal sealed partial class RetentionRepository(IAsyncDbConnection connection)
             FOR UPDATE OF m
         ) l
         """)]
-    public partial Task<int?> LockIdleMetricsAsync(Guid[] ids, IAsyncDbTransaction transaction, CancellationToken ct);
+    public partial Task LockIdleMetricsAsync(Guid[] ids, IAsyncDbTransaction transaction, CancellationToken ct);
 
     /// <summary>
     /// The re-check: of the Reasonlets a batch has locked, the CTE <c>idle</c> holds those that are still idle against
