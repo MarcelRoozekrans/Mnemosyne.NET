@@ -75,7 +75,7 @@ public interface IReasonletStore
 
     /// <summary>Erases a scope's Reasonlets and executions, or only those of one subject.</summary>
     /// <remarks>
-    /// Error codes: <see cref="MnemosyneErrorCode.Validation"/> when an argument breaks an invariant, such as a <c>default</c> scope or ID,
+    /// Error codes: <see cref="MnemosyneErrorCode.Validation"/> when an argument breaks an invariant, such as a <c>default</c> scope or a blank subject,
     /// <see cref="MnemosyneErrorCode.Unavailable"/> when the backing store fails.
     /// </remarks>
     /// <param name="erasure">What to erase.</param>

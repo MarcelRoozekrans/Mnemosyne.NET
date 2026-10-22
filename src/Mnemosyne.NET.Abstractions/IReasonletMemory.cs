@@ -28,7 +28,7 @@ public interface IReasonletMemory
     /// <summary>Finds and ranks the Reasonlets that best answer a query.</summary>
     /// <remarks>
     /// The query's <see cref="ReasonletQuery.Provenance"/> identifies the run and subject the recall serves,
-    /// for audit and erasure by subject.
+    /// for audit and erasure by subject. Recall provenance is persisted with the phase 1.5 audit events, and subject erasure must then remove and count those too.
     /// Error codes: <see cref="MnemosyneErrorCode.Validation"/> when the query breaks an invariant,
     /// <see cref="MnemosyneErrorCode.Unavailable"/> when the backing store, the embedding generator, the intent extractor or the selector fails.
     /// </remarks>
