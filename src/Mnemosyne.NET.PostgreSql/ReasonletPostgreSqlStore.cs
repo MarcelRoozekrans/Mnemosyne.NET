@@ -590,25 +590,37 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
 
     /// <summary>
     /// Makes the HNSW scan keep going until it has <paramref name="limit"/> rows that pass the scope, status and
-    /// intent filters. Without it the index returns about <c>hnsw.ef_search</c> nearest rows of the whole table
-    /// and the filters run afterwards, so a scope with a small share of the rows gets fewer rows than the limit.
+    /// intent filters, and turns JIT compilation off. Without the iterative scan the index returns about
+    /// <c>hnsw.ef_search</c> nearest rows of the whole table and the filters run afterwards, so a scope with a small
+    /// share of the rows gets fewer rows than the limit.
     /// </summary>
     /// <remarks>
     /// <c>strict_order</c> rather than <c>relaxed_order</c>, so results stay sorted exactly by distance; HNSW recall
     /// is approximate either way. <c>hnsw.max_scan_tuples</c> stays at its default (20,000), which bounds the work of
     /// a very selective scope. <c>SET</c> takes no bind parameter, so <c>ef_search</c> is an integer that the limit
-    /// check already bounded, written with the invariant culture, as the dimension DDL is. <c>SET LOCAL</c> ends with
-    /// the transaction.
+    /// check already bounded, written with the invariant culture, as the dimension DDL is.
     /// </remarks>
-    private static async Task ApplyIterativeScanAsync(IAsyncDbConnection connection, IAsyncDbTransaction transaction, int limit, CancellationToken ct)
+    private static Task ApplySearchSettingsAsync(IAsyncDbConnection connection, IAsyncDbTransaction transaction, int limit, CancellationToken ct) =>
+        SetLocalAsync(
+            connection,
+            transaction,
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"SET LOCAL jit = off; SET LOCAL hnsw.iterative_scan = strict_order; SET LOCAL hnsw.ef_search = {Math.Max(limit, DefaultEfSearch)};"),
+            ct);
+
+    /// <summary>
+    /// Runs <c>SET LOCAL</c> statements, which end with the transaction. The store turns JIT off in its search and
+    /// erase transactions: their statements are short, yet a large table can push the planner's cost estimate past
+    /// <c>jit_above_cost</c>, and compiling then costs more than the statement saves.
+    /// </summary>
+    private static async Task SetLocalAsync(IAsyncDbConnection connection, IAsyncDbTransaction transaction, string settings, CancellationToken ct)
     {
         var command = connection.CreateCommand();
         await using (command.ConfigureAwait(false))
         {
             command.Transaction = transaction;
-            command.CommandText = string.Create(
-                CultureInfo.InvariantCulture,
-                $"SET LOCAL hnsw.iterative_scan = strict_order; SET LOCAL hnsw.ef_search = {Math.Max(limit, DefaultEfSearch)};");
+            command.CommandText = settings;
             await command.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
         }
     }
@@ -618,7 +630,7 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
     {
         await using var connection = (await _dataSource.OpenConnectionAsync(ct).ConfigureAwait(false)).AsAsync();
         await using var transaction = await connection.BeginTransactionAsync(IsolationLevel.ReadCommitted, ct).ConfigureAwait(false);
-        await ApplyIterativeScanAsync(connection, transaction, limit, ct).ConfigureAwait(false);
+        await ApplySearchSettingsAsync(connection, transaction, limit, ct).ConfigureAwait(false);
         var rows = await new ReasonletRepository(connection).SearchAsync(scope.Value, ToArray(embedding), intent, limit, transaction, ct).ConfigureAwait(false);
         await transaction.CommitAsync(ct).ConfigureAwait(false);
         var candidates = new List<ReasonletCandidate>(rows.Count);
@@ -666,6 +678,7 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
         var scope = erasure.Scope.Value;
         await using var connection = (await _dataSource.OpenConnectionAsync(ct).ConfigureAwait(false)).AsAsync();
         await using var transaction = await connection.BeginTransactionAsync(IsolationLevel.ReadCommitted, ct).ConfigureAwait(false);
+        await SetLocalAsync(connection, transaction, "SET LOCAL jit = off", ct).ConfigureAwait(false);
         var reasonlets = new ReasonletRepository(connection);
         var executions = new ExecutionRepository(connection);
 
