@@ -35,10 +35,10 @@ internal static class StoreTelemetry
     internal static readonly Meter Meter = new(MnemosyneTelemetry.MeterName);
 
     private static readonly Counter<long> Operations =
-        Meter.CreateCounter<long>("mnemosyne.operations", "{operation}", "Store operations, by operation and outcome.");
+        Meter.CreateCounter<long>("mnemosyne.operations", "{operation}", "Mnemosyne operations, by operation and outcome.");
 
     private static readonly Histogram<double> Duration =
-        Meter.CreateHistogram<double>("mnemosyne.operation.duration", "s", "How long store operations take, by operation.");
+        Meter.CreateHistogram<double>("mnemosyne.operation.duration", "s", "How long Mnemosyne operations take, by operation.");
 
     private static readonly Counter<long> Remembered =
         Meter.CreateCounter<long>("mnemosyne.reasonlets.remembered", "{capture}", "Successful remembers, by capture kind.");

@@ -1,6 +1,8 @@
 using System.Diagnostics;
+using System.Diagnostics.Metrics;
 using System.Globalization;
 using Mnemosyne.NET.Abstractions;
+using Mnemosyne.NET.PostgreSql;
 using Mnemosyne.NET.PostgreSql.Tests;
 using Mnemosyne.NET.Tests.Abstractions;
 using Xunit;
@@ -40,6 +42,29 @@ public sealed class RecallTelemetryTests
     {
         Assert.Equal(MnemosyneTelemetry.ActivitySourceName, RecallTelemetry.Source.Name);
         Assert.Equal(MnemosyneTelemetry.MeterName, RecallTelemetry.Meter.Name);
+    }
+
+    [Fact]
+    public void TheSharedInstrumentsAreDescribedTheSameInBothAssemblies()
+    {
+        // Both assemblies create these instruments under one meter name, so they aggregate as one and must match.
+        Assert.NotNull(RecallTelemetry.Meter);
+        Assert.NotNull(StoreTelemetry.Meter);
+        var published = new List<Instrument>();
+        using (var listener = new MeterListener())
+        {
+            listener.InstrumentPublished = (instrument, _) =>
+            {
+                if (instrument.Meter.Name == MnemosyneTelemetry.MeterName)
+                {
+                    published.Add(instrument);
+                }
+            };
+            listener.Start();
+        }
+
+        AssertShared(published, "mnemosyne.operations", "{operation}", "Mnemosyne operations, by operation and outcome.");
+        AssertShared(published, "mnemosyne.operation.duration", "s", "How long Mnemosyne operations take, by operation.");
     }
 
     [Fact]
@@ -351,6 +376,18 @@ public sealed class RecallTelemetryTests
     [InlineData((MnemosyneErrorCode)99, "99")]
     public void AnErrorCodeIsTaggedByItsName(MnemosyneErrorCode code, string name) =>
         Assert.Equal(name, RecallTelemetry.ErrorName(code));
+
+    private static void AssertShared(List<Instrument> published, string name, string unit, string description)
+    {
+        var instruments = published.Where(instrument => instrument.Name == name).ToList();
+        Assert.Contains(instruments, instrument => instrument.Meter == RecallTelemetry.Meter);
+        Assert.Contains(instruments, instrument => instrument.Meter == StoreTelemetry.Meter);
+        Assert.All(instruments, instrument =>
+        {
+            Assert.Equal(unit, instrument.Unit);
+            Assert.Equal(description, instrument.Description);
+        });
+    }
 
     private static IEnumerable<string?> Flatten(IEnumerable<KeyValuePair<string, object?>> tags) =>
         tags.SelectMany(tag => new[] { tag.Key, Convert.ToString(tag.Value, CultureInfo.InvariantCulture) });
