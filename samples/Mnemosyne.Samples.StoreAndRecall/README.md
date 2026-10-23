@@ -26,7 +26,7 @@ The sample migrates the `mnemosyne` schema with 256 dimensions, so give it a dat
    - "refund a partial order", a close match with a different question: 5 out of 10;
    - a new version of "refund an order": the same question, a different graph, `ParentId` set to the original, and one successful run.
 3. Recalls "How do I refund an order?" with `RecallAsync` and prints the top 3.
-4. Checks that the new version ranks first and the original second, and exits 1 if not. CI runs the sample, so this is tested.
+4. Checks the full order (new version, original, close match) and the totals shown below, and exits 1 if not. CI runs the sample, so this is tested.
 5. Erases the scope with `EraseAsync`.
 
 The output:

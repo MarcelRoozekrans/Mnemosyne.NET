@@ -17,7 +17,7 @@ sidebar_position: 3
    - **"refund a partial order"**, a close match for the question it will recall, but with 5 successes in 10 runs;
    - **a new version of "refund an order"**: the same question with an improved graph, which adds a refund-window check and a customer email, remembered with `ParentId` set to the original, and one successful run.
 3. Recalls "How do I refund an order?" and prints the top three matches with their score breakdown.
-4. Checks that the new version ranks first and the original second, and exits with code 1 if not.
+4. Checks the full order (new version, original, close match) and the totals shown below, and exits with code 1 if not.
 5. Erases the scope, so a run leaves nothing behind.
 
 ### Run it
