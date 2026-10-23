@@ -157,7 +157,7 @@ public sealed class MinosReasonletEvaluatorTests
 
     // ---- Errors ----
 
-    // The mapping the design fixes: the judge being unable to judge is Unavailable, a bug is Validation.
+    // The mapping the design fixes: the judge being unable to judge is Unavailable, only InvalidQuestions, a bug, is Validation.
     private static readonly Dictionary<DecisionErrorKind, MnemosyneErrorCode> ExpectedCodes = new()
     {
         [DecisionErrorKind.Unauthorized] = MnemosyneErrorCode.Unavailable,
@@ -171,7 +171,7 @@ public sealed class MinosReasonletEvaluatorTests
         [DecisionErrorKind.InvalidResponse] = MnemosyneErrorCode.Unavailable,
         [DecisionErrorKind.Unsupported] = MnemosyneErrorCode.Unavailable,
         [DecisionErrorKind.InvalidQuestions] = MnemosyneErrorCode.Validation,
-        [DecisionErrorKind.Disposed] = MnemosyneErrorCode.Validation,
+        [DecisionErrorKind.Disposed] = MnemosyneErrorCode.Unavailable,
         [DecisionErrorKind.Refused] = MnemosyneErrorCode.Unavailable,
     };
 
@@ -183,7 +183,7 @@ public sealed class MinosReasonletEvaluatorTests
         // A new kind in a later Minos fails here, so its mapping is a decision and not an accident.
         Assert.Equal(13, Enum.GetValues<DecisionErrorKind>().Length);
         Assert.Equal(Enum.GetValues<DecisionErrorKind>().Order(), ExpectedCodes.Keys.Order());
-        Assert.Equal(2, ExpectedCodes.Values.Count(c => c == MnemosyneErrorCode.Validation));
+        Assert.Equal(1, ExpectedCodes.Values.Count(c => c == MnemosyneErrorCode.Validation));
     }
 
     [Theory]
@@ -194,6 +194,22 @@ public sealed class MinosReasonletEvaluatorTests
 
         Assert.True(result.IsFailure);
         Assert.Equal(new MnemosyneError(ExpectedCodes[kind], "The Minos judge could not judge the run.", $"minos: {kind}"), result.Error);
+    }
+
+    [Theory]
+    [InlineData(1.2)]
+    [InlineData(-0.01)]
+    [InlineData(double.NaN)]
+    [InlineData(double.PositiveInfinity)]
+    public async Task AProbabilityOutsideTheUnitIntervalIsAnInvalidResponse(double probability)
+    {
+        // QuestionAnswer.Noul rejects these, but Minos does not range-check what it reads off the wire, so the fake builds the answer unchecked.
+        var result = await Evaluator(FakeDecisionClient.AnsweringUnchecked(probability)).EvaluateAsync(Request(), CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(
+            new MnemosyneError(MnemosyneErrorCode.Unavailable, "The Minos judge could not judge the run.", "minos: InvalidResponse"),
+            result.Error);
     }
 
     [Fact]

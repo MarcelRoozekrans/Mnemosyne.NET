@@ -18,9 +18,10 @@ namespace Mnemosyne.NET.Minos;
 /// </para>
 /// <para>
 /// A failed call is <see cref="MnemosyneErrorCode.Unavailable"/> when the judge could not judge, and
-/// <see cref="MnemosyneErrorCode.Validation"/> for <see cref="DecisionErrorKind.InvalidQuestions"/> and
-/// <see cref="DecisionErrorKind.Disposed"/>, which are bugs. The error's detail names only the kind, never Minos's message,
-/// which could quote the request. Exceptions and cancellation propagate.
+/// <see cref="MnemosyneErrorCode.Validation"/> for <see cref="DecisionErrorKind.InvalidQuestions"/>, which is a bug in
+/// Mnemosyne's own question set. A probability outside [0, 1] or NaN is a response the provider got wrong, so it is
+/// <see cref="MnemosyneErrorCode.Unavailable"/> with the detail <c>minos: InvalidResponse</c>. The error's detail names only
+/// the kind, never Minos's message, which could quote the request. Exceptions and cancellation propagate.
 /// </para>
 /// </remarks>
 public sealed class MinosReasonletEvaluator : IReasonletEvaluator
@@ -65,7 +66,13 @@ public sealed class MinosReasonletEvaluator : IReasonletEvaluator
             return Result<ReasonletEvaluation, MnemosyneError>.Failure(ToError(result.Error.Kind));
         }
 
+        // Minos does not range-check a probability read off the wire, and this is the trust boundary.
         var probability = result.Value.Resolves.Probability;
+        if (!(probability >= 0 && probability <= 1))
+        {
+            return Result<ReasonletEvaluation, MnemosyneError>.Failure(ToError(DecisionErrorKind.InvalidResponse));
+        }
+
         return Result<ReasonletEvaluation, MnemosyneError>.Success(
             new ReasonletEvaluation(probability >= _options.SuccessThreshold, probability, _options.EvaluatorName));
     }
@@ -73,7 +80,7 @@ public sealed class MinosReasonletEvaluator : IReasonletEvaluator
     /// <summary>Maps a Minos failure to a fixed error whose detail names only the kind.</summary>
     private static MnemosyneError ToError(DecisionErrorKind kind)
     {
-        var code = kind is DecisionErrorKind.InvalidQuestions or DecisionErrorKind.Disposed
+        var code = kind is DecisionErrorKind.InvalidQuestions
             ? MnemosyneErrorCode.Validation
             : MnemosyneErrorCode.Unavailable;
         return new MnemosyneError(code, FailureMessage, $"minos: {kind}");

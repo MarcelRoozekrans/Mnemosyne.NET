@@ -96,9 +96,11 @@ Set the result as `SuccessThreshold`. A higher threshold keeps doubtful runs fro
 
 ## When the judge fails
 
-A failed Minos call never throws. The evaluator returns a `MnemosyneError` with the fixed message "The Minos judge could not judge the run." and a detail that is only `minos: <Kind>`, such as `minos: RateLimited`. Minos's own message text is never kept, because it could quote the request.
+A Minos error result never throws. The evaluator returns a `MnemosyneError` with the fixed message "The Minos judge could not judge the run." and a detail that is only `minos: <Kind>`, such as `minos: RateLimited`. Minos's own message text is never kept, because it could quote the request.
 
-Exceptions and cancellation propagate as for any evaluator, and the facade's `EvaluationTimeout` still applies.
+An exception from the client reaches the facade, which treats it as the judge being down and keeps the agent's verdict. The caller's own cancellation propagates. The facade's `EvaluationTimeout` still applies.
+
+A response whose probability is not a number between 0 and 1 is not trusted either: Minos doesn't range-check what it reads off the wire, so the evaluator returns `Unavailable` with the detail `minos: InvalidResponse`, the same as for an unreadable response.
 
 All 13 `DecisionErrorKind` values map as follows:
 
@@ -116,9 +118,11 @@ All 13 `DecisionErrorKind` values map as follows:
 | `Unsupported` | The configured provider can't do this | `Unavailable` | Stores the run with the agent's verdict |
 | `Refused` | The model refused to answer | `Unavailable` | Stores the run with the agent's verdict |
 | `InvalidQuestions` | The question set breaks Minos's rules | `Validation` | Throws `InvalidOperationException` |
-| `Disposed` | The client was disposed during the call | `Validation` | Throws `InvalidOperationException` |
+| `Disposed` | The client was disposed while the call was in flight, a shutdown race | `Unavailable` | Stores the run with the agent's verdict |
 
-Eleven kinds mean the judge could not judge, so a run is never lost: it is stored with the agent's own verdict, and the receipt's `Source` is `Agent`. `InvalidQuestions` and `Disposed` are bugs in how the host wired things, so they surface as an exception rather than hiding behind a fallback.
+Twelve kinds mean the judge could not judge, so a run is never lost: it is stored with the agent's own verdict, and the receipt's `Source` is `Agent`. `InvalidQuestions` is a bug in Mnemosyne's own question set, not in the host's wiring, so it surfaces as an exception rather than hiding behind a fallback.
+
+`Unauthorized`, `Unsupported` and `Validation` don't heal on their own. A bad key or provider setup turns every run into "judge down", and runs keep the agent's verdict. Watch `mnemosyne.evaluations` and the `mnemosyne.evaluate` activity for a steady stream of `error.type = Unavailable`. See [Telemetry](telemetry.md#the-evaluate-activity).
 
 For the transient kinds, a client with the standard pipeline has already retried before one reaches Mnemosyne.
 

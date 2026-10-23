@@ -54,12 +54,14 @@ The question and the answer leave the process: they go to the decision-model pro
 
 ## Failures
 
-A failed Minos call never throws. It returns a `MnemosyneError` with the fixed message "The Minos judge could not judge the run." and a detail that names only the kind, such as `minos: RateLimited`, never Minos's message text.
+A Minos error result never throws. It returns a `MnemosyneError` with the fixed message "The Minos judge could not judge the run." and a detail that names only the kind, such as `minos: RateLimited`, never Minos's message text.
 
-- `InvalidQuestions` and `Disposed` are bugs, and map to `Validation`.
+- `InvalidQuestions` is a bug in Mnemosyne's own question set, and maps to `Validation`.
 - Every other kind means the judge could not judge, and maps to `Unavailable`. The facade then keeps the agent's own verdict.
 
-Exceptions and cancellation propagate.
+A probability outside [0, 1], or NaN, is treated as an invalid response: `Unavailable` with the detail `minos: InvalidResponse`.
+
+An exception from the client reaches the facade, which treats it as the judge being down and keeps the agent's verdict. The caller's own cancellation propagates.
 
 ## Documentation
 
