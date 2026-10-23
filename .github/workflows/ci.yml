@@ -254,6 +254,18 @@ jobs:
           MNEMOSYNE_AOT_PG: Host=localhost;Port=5432;Username=postgres;Password=postgres;Database=postgres
         run: tests/Mnemosyne.NET.AotSmoke/bin/Release/net10.0/linux-x64/publish/Mnemosyne.NET.AotSmoke
 
+      # The store-and-recall sample checks the ranking the docs describe and exits 1 when it differs. It gets a
+      # database of its own: the smoke above migrated the postgres database with 3 dimensions, the sample uses 256.
+      - name: Create the sample's database
+        env:
+          PGPASSWORD: postgres
+        run: psql -h localhost -U postgres -c 'CREATE DATABASE mnemosyne_sample'
+
+      - name: Run the store-and-recall sample
+        env:
+          MNEMOSYNE_SAMPLE_PG: Host=localhost;Port=5432;Username=postgres;Password=postgres;Database=mnemosyne_sample
+        run: dotnet run --project samples/Mnemosyne.Samples.StoreAndRecall -c Release
+
   # The real push to nuget.org. Two ways in: a published release (the automatic path), or a
   # manual dispatch with publish_to_nuget set, for re-running a push that died partway.
   # Both run the full matrix and pack-validate on that commit first, and both refuse a prerelease.
