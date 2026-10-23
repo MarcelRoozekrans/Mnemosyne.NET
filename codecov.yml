@@ -1,0 +1,14 @@
+# Coverage is a merge gate: both checks block a PR that drops below 100%. Written down explicitly
+# rather than left to Codecov's base-branch default, so the rule survives a dip on main.
+coverage:
+  status:
+    project:
+      default:
+        target: 100%
+        threshold: 0%
+    patch:
+      default:
+        target: 100%
+        threshold: 0%
+comment:
+  layout: "condensed_header, diff, files"

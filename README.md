@@ -2,6 +2,7 @@
 
 [![NuGet](https://img.shields.io/nuget/v/Mnemosyne.NET.svg?logo=nuget&label=Mnemosyne.NET)](https://www.nuget.org/packages/Mnemosyne.NET)
 [![CI](https://img.shields.io/github/actions/workflow/status/MarcelRoozekrans/Mnemosyne.NET/ci.yml?branch=main&logo=github&label=build)](https://github.com/MarcelRoozekrans/Mnemosyne.NET/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/MarcelRoozekrans/Mnemosyne.NET/graph/badge.svg)](https://codecov.io/gh/MarcelRoozekrans/Mnemosyne.NET)
 [![Docs](https://img.shields.io/github/actions/workflow/status/MarcelRoozekrans/Mnemosyne.NET/docs.yml?branch=main&logo=readthedocs&label=docs)](https://marcelroozekrans.github.io/Mnemosyne.NET/)
 [![License](https://img.shields.io/github/license/MarcelRoozekrans/Mnemosyne.NET)](LICENSE)
 
