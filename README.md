@@ -2,10 +2,13 @@
 
 [![NuGet](https://img.shields.io/nuget/v/Mnemosyne.NET.svg?logo=nuget&label=Mnemosyne.NET)](https://www.nuget.org/packages/Mnemosyne.NET)
 [![CI](https://img.shields.io/github/actions/workflow/status/MarcelRoozekrans/Mnemosyne.NET/ci.yml?branch=main&logo=github&label=build)](https://github.com/MarcelRoozekrans/Mnemosyne.NET/actions/workflows/ci.yml)
+[![Docs](https://img.shields.io/github/actions/workflow/status/MarcelRoozekrans/Mnemosyne.NET/docs.yml?branch=main&logo=readthedocs&label=docs)](https://marcelroozekrans.github.io/Mnemosyne.NET/)
 [![License](https://img.shields.io/github/license/MarcelRoozekrans/Mnemosyne.NET)](LICENSE)
 
 Procedural memory for .NET agents: store, find and reuse the problem-solving
 procedures that worked, as **Reasonlets**.
+
+Documentation: <https://marcelroozekrans.github.io/Mnemosyne.NET/>
 
 Part of the same family as [Minos.NET](https://github.com/MarcelRoozekrans/Minos.NET)
 (decisions), [Rag.NET](https://github.com/MarcelRoozekrans/Rag.NET) (knowledge),

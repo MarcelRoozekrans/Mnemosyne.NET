@@ -22,3 +22,8 @@ artifacts/
 
 # Screenshots and page snapshots the Playwright MCP server writes into the working directory.
 .playwright-mcp/
+
+# Docusaurus
+node_modules/
+build/
+.docusaurus/
