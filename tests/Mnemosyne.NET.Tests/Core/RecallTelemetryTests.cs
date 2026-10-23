@@ -202,6 +202,42 @@ public sealed class RecallTelemetryTests
     }
 
     [Fact]
+    public async Task AGeneratorTimeoutIsOutcomeUnavailable()
+    {
+        // A cancellation exception while the caller's token is not cancelled is a dependency timeout, not the caller's.
+        _generator.Respond = () => throw new TaskCanceledException("timed out");
+        using var capture = new TelemetryCapture();
+
+        var result = await Memory().RecallAsync(TestData.Query(), Ct);
+
+        Assert.Equal(MnemosyneErrorCode.Unavailable, result.Error.Code);
+        var activity = Single(capture);
+        Assert.Equal("Unavailable", activity.GetTagItem("error.type"));
+        Assert.Equal(ActivityStatusCode.Error, activity.Status);
+        Assert.Empty(activity.Events);
+        AssertOperation(capture, "Unavailable");
+    }
+
+    [Fact]
+    public async Task AnExtractorUnavailableIsOutcomeUnavailable()
+    {
+        var extractor = new FakeIntentExtractor
+        {
+            Respond = () => Result<ReasonletIntent, MnemosyneError>.Failure(new(MnemosyneErrorCode.Unavailable, "down")),
+        };
+        using var capture = new TelemetryCapture();
+
+        var result = await Memory(extractor).RecallAsync(TestData.Query(), Ct);
+
+        Assert.Equal(MnemosyneErrorCode.Unavailable, result.Error.Code);
+        var activity = Single(capture);
+        Assert.Equal("Unavailable", activity.GetTagItem("error.type"));
+        Assert.Equal(ActivityStatusCode.Error, activity.Status);
+        Assert.Empty(activity.Events);
+        AssertOperation(capture, "Unavailable");
+    }
+
+    [Fact]
     public async Task AThrownCancellationIsAnException()
     {
         using var cts = new CancellationTokenSource();

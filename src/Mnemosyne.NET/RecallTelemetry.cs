@@ -19,7 +19,9 @@ namespace Mnemosyne.NET;
 /// No signal carries user data: no question, intent, scope, subject or tag text, and no error or exception message.
 /// Ids, versions and scores may appear. With no listener attached an activity is never created, and every tag is set
 /// through a null-conditional call, so nothing is formatted or boxed for it; the instruments take their tags as a
-/// <see cref="TagList"/>, which lives on the stack.
+/// <see cref="TagList"/>, which lives on the stack. The cost is not zero, though: the caller still allocates the body's
+/// closure on every recall, as the store's <c>RunAsync</c> does, and the operation count and duration are recorded
+/// whether or not a meter listener is attached.
 /// </para>
 /// </remarks>
 internal static class RecallTelemetry

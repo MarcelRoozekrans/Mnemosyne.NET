@@ -117,8 +117,12 @@ public sealed class ReasonletMemory : IReasonletMemory
     /// and times itself under operation <c>recall</c>, on the <see cref="MnemosyneTelemetry"/> names. No signal carries
     /// the question, intent, scope or any error or exception message.
     /// </para>
+    /// <para>
+    /// Every exception, a null <paramref name="query"/> included, is reported through the returned task rather than
+    /// thrown synchronously, so that the recall's telemetry records it; it surfaces when the task is awaited.
+    /// </para>
     /// </remarks>
-    /// <exception cref="ArgumentNullException"><paramref name="query"/> is null.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="query"/> is null. Reported through the returned task.</exception>
     /// <exception cref="InvalidOperationException">The intent extractor answered with an invalid intent or an error code other than Unavailable, or the store returned an invalid candidate.</exception>
     public ValueTask<Result<IReadOnlyList<ReasonletMatch>, MnemosyneError>> RecallAsync(ReasonletQuery query, CancellationToken ct) =>
         RecallTelemetry.RunAsync(activity => RecallOperationAsync(query, activity, ct));
