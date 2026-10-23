@@ -72,6 +72,10 @@ public class ContractShapeTests
         Assert.Empty(constructors[0].GetParameters());
     }
 
+    [Fact]
+    public void ReasonletQueryHasNoProvenance() =>
+        Assert.Null(typeof(ReasonletQuery).GetProperty("Provenance"));
+
     [Theory]
     [InlineData(typeof(IReasonletMemory))]
     [InlineData(typeof(IReasonletStore))]

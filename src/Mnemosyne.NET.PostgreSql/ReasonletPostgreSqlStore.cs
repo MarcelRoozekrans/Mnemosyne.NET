@@ -684,7 +684,15 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
         var candidates = new List<ReasonletCandidate>(rows.Count);
         foreach (var row in rows)
         {
-            candidates.Add(new ReasonletCandidate(ToDefinition(row.ToReasonletRow()), row.Similarity, new ReasonletMetrics(row.Runs, row.Successes, row.LastSuccessAt)));
+            // The parent's counter row has NOT NULL runs, so a null run count means there is no row.
+            var parent = row.ParentRuns is { } parentRuns
+                ? new ReasonletMetrics(parentRuns, row.ParentSuccesses!.Value, row.ParentLastSuccessAt, row.ParentLastExecutedAt!.Value)
+                : (ReasonletMetrics?)null;
+            candidates.Add(new ReasonletCandidate(
+                ToDefinition(row.ToReasonletRow()),
+                row.Similarity,
+                new ReasonletMetrics(row.Runs, row.Successes, row.LastSuccessAt, row.LastExecutedAt),
+                parent));
         }
 
         return candidates;

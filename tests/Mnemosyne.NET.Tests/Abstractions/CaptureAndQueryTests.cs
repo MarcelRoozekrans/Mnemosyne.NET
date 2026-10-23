@@ -90,7 +90,7 @@ public class CaptureAndQueryTests
 
     [Fact]
     public void Query_TopDefaultsToThree() =>
-        Assert.Equal(3, new ReasonletQuery { Scope = new ReasonletScope("s"), Question = "q", Provenance = TestData.Provenance() }.Top);
+        Assert.Equal(3, new ReasonletQuery { Scope = new ReasonletScope("s"), Question = "q" }.Top);
 
     [Fact]
     public void Query_BlankQuestion_Fails() =>
@@ -107,17 +107,19 @@ public class CaptureAndQueryTests
     [Fact]
     public void Query_Valid_Passes() => Assert.True(TestData.Query().Validate().IsSuccess);
 
-    [Fact]
-    public void Query_NullProvenance_ReportsProvenance() =>
-        AssertInvalid((TestData.Query() with { Provenance = null! }).Validate(), "Provenance");
+    [Theory]
+    [InlineData(-0.1)]
+    [InlineData(1.1)]
+    [InlineData(double.NaN)]
+    public void Query_MinSimilarityOutsideTheUnitInterval_Fails(double value) =>
+        AssertInvalid((TestData.Query() with { MinSimilarity = value }).Validate(), "MinSimilarity");
 
-    [Fact]
-    public void Query_BlankProvenanceSource_ReportsNestedPath() =>
-        AssertInvalid((TestData.Query() with { Provenance = new ReasonletProvenance { Source = " " } }).Validate(), "Provenance.Source");
-
-    [Fact]
-    public void Query_ProvenanceIsCheckedAfterQuestion() =>
-        AssertInvalid((TestData.Query() with { Question = "", Provenance = null! }).Validate(), "Question");
+    [Theory]
+    [InlineData(null)]
+    [InlineData(0.0)]
+    [InlineData(1.0)]
+    public void Query_MinSimilarityAbsentOrOnTheBoundary_Passes(double? value) =>
+        Assert.True((TestData.Query() with { MinSimilarity = value }).Validate().IsSuccess);
 
     [Fact]
     public void Erasure_BlankSubject_Fails() =>

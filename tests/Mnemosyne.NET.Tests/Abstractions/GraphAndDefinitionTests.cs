@@ -76,6 +76,14 @@ public class GraphAndDefinitionTests
         AssertInvalid((TestData.Definition() with { Provenance = TestData.Provenance() with { Source = "" } }).Validate(), "Provenance.Source");
 
     [Fact]
+    public void Candidate_InvalidParentMetrics_ReportsNestedPath() =>
+        AssertInvalid(new ReasonletCandidate(TestData.Definition(), 0.5, default, new ReasonletMetrics(1, 2, null, default)).Validate(), "ParentMetrics.Successes");
+
+    [Fact]
+    public void Candidate_ValidParentMetrics_Passes() =>
+        Assert.True(new ReasonletCandidate(TestData.Definition(), 0.5, default, new ReasonletMetrics(2, 1, null, default)).Validate().IsSuccess);
+
+    [Fact]
     public void Candidate_Valid_Passes() =>
         Assert.True(new ReasonletCandidate(TestData.Definition(), 0.5, default).Validate().IsSuccess);
 
@@ -89,7 +97,7 @@ public class GraphAndDefinitionTests
 
     [Fact]
     public void Candidate_BadMetrics_ReportsNestedPath() =>
-        AssertInvalid(new ReasonletCandidate(TestData.Definition(), 0.5, new ReasonletMetrics(-1, 0, null)).Validate(), "Metrics.Runs");
+        AssertInvalid(new ReasonletCandidate(TestData.Definition(), 0.5, new ReasonletMetrics(-1, 0, null, default)).Validate(), "Metrics.Runs");
 
     [Fact]
     public void Match_Valid_Passes() =>

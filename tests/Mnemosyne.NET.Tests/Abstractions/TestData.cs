@@ -31,7 +31,6 @@ internal static class TestData
     {
         Scope = new ReasonletScope("scope"),
         Question = "question",
-        Provenance = Provenance(),
     };
 
     public static ReasonletCapture Capture() => new()

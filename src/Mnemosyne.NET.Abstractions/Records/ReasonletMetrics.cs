@@ -6,7 +6,8 @@ namespace Mnemosyne.NET.Abstractions;
 /// <param name="Runs">Total number of runs. Must be at least 0.</param>
 /// <param name="Successes">Number of successful runs. Between 0 and <paramref name="Runs"/>.</param>
 /// <param name="LastSuccessAt">When the last successful run happened, if any.</param>
-public readonly record struct ReasonletMetrics(int Runs, int Successes, DateTimeOffset? LastSuccessAt)
+/// <param name="LastExecutedAt">When the latest run happened. For a Reasonlet that has no run left, the time it was stored.</param>
+public readonly record struct ReasonletMetrics(int Runs, int Successes, DateTimeOffset? LastSuccessAt, DateTimeOffset LastExecutedAt)
 {
     /// <summary>Validates the metrics. The default value is valid.</summary>
     /// <returns>Success, or a validation failure with a path relative to this record.</returns>
