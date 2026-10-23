@@ -48,7 +48,8 @@ public sealed class ReasonletSelector : IReasonletSelector
         var scored = new List<ReasonletMatch>(candidates.Count);
         foreach (var candidate in candidates)
         {
-            if (candidate.Similarity < cutOff)
+            // Negated so that a NaN similarity, which compares false either way, is dropped too.
+            if (!(candidate.Similarity >= cutOff))
             {
                 continue;
             }

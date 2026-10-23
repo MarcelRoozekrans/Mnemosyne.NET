@@ -89,6 +89,14 @@ public sealed class ReasonletSelectorTests
     }
 
     [Fact]
+    public async Task ANaNSimilarityIsDropped()
+    {
+        var kept = Candidate(0.9);
+        var matches = await Rank(Selector(), TestData.Query() with { MinSimilarity = 0.0 }, Candidate(double.NaN), kept);
+        Assert.Equal([kept.Reasonlet.Id], matches.Select(m => m.Reasonlet.Id));
+    }
+
+    [Fact]
     public async Task NoCandidatesGivesAnEmptySuccess() =>
         Assert.Empty(await Rank(Selector(), TestData.Query()));
 
