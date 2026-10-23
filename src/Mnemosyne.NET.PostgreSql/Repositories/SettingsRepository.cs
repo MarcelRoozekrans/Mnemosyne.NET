@@ -23,6 +23,13 @@ internal sealed partial class SettingsRepository(IAsyncDbConnection connection)
     [Query("SELECT value::int FROM mnemosyne.settings WHERE key = 'dimensions'")]
     public partial Task<int?> GetDimensionsAsync(CancellationToken ct);
 
+    /// <summary>
+    /// The schema version the migrations recorded, or null when none did: migration 0002 records 2, and a database
+    /// that only 0001 reached has none.
+    /// </summary>
+    [Query("SELECT value::int FROM mnemosyne.settings WHERE key = 'schema_version'")]
+    public partial Task<int?> GetSchemaVersionAsync(CancellationToken ct);
+
     /// <summary>Reads every recorded setting as one row; a setting that was never recorded reads as null.</summary>
     [Query("""
         SELECT (SELECT value::int FROM mnemosyne.settings WHERE key = 'dimensions'),

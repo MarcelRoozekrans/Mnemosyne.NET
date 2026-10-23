@@ -30,6 +30,12 @@ if (migrated.IsFailure)
 }
 ```
 
+## Upgrading
+
+A new release can bring a schema migration, which `MigrateAsync` applies. Until it has run, the new store answers `Unavailable` with "schema not migrated: call MigrateAsync" rather than failing on a missing column.
+
+**Stop every instance of the old release before you migrate.** The old release does not know the new schema. Migration 0002, which stores each run's verdict, renames `success` to `agent_success` and makes it `NOT NULL`, so an old instance that is still running fails loudly on its next run record instead of writing a run without its verdict inputs. Each migration file applies in one transaction, whole or not at all; 0002 rewrites every row of `mnemosyne.reasonlet_executions` and holds that table locked while it does.
+
 This package depends on `Mnemosyne.NET.Abstractions` only, so it does not bring in recall. To recall and rank through `IReasonletMemory`, add the core `Mnemosyne.NET` package as well.
 
 ## Documentation

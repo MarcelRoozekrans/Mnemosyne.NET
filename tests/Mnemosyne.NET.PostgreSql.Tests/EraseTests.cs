@@ -241,8 +241,8 @@ public sealed class EraseTests(PgVectorFixture fixture) : IClassFixture<PgVector
         await using var transaction = await append.BeginTransactionAsync(Ct);
         await RunAsync(
             append,
-            "INSERT INTO mnemosyne.reasonlet_executions (id, reasonlet_id, scope, executed_at, success, duration_ticks, source, subject_id) "
-            + $"VALUES (gen_random_uuid(), '{k.Id.Value}', '{scope.Value}', now(), true, 0, 'test', '{SubjectB}')");
+            "INSERT INTO mnemosyne.reasonlet_executions (id, reasonlet_id, scope, executed_at, agent_success, success, duration_ticks, source, subject_id) "
+            + $"VALUES (gen_random_uuid(), '{k.Id.Value}', '{scope.Value}', now(), true, true, 0, 'test', '{SubjectB}')");
         await RunAsync(append, $"UPDATE mnemosyne.reasonlet_metrics SET runs = runs + 1, successes = successes + 1 WHERE reasonlet_id = '{k.Id.Value}'");
 
         var erase = store.EraseAsync(new ReasonletErasure(scope, SubjectA), Ct).AsTask();

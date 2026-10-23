@@ -57,6 +57,9 @@ public interface IReasonletMemory
 
     /// <summary>Attaches feedback to a recorded execution.</summary>
     /// <remarks>
+    /// Feedback replaces the execution's earlier scores. When <see cref="ReasonletFeedback.Worked"/> is present it becomes the
+    /// run's verdict, overriding the evaluator's and the agent's. Feedback with <c>Worked</c> null keeps an earlier verdict,
+    /// so a verdict can be changed, by recording the other value, but not retracted.
     /// Error codes: <see cref="MnemosyneErrorCode.Validation"/> when an argument breaks an invariant,
     /// <see cref="MnemosyneErrorCode.NotFound"/> when the execution does not exist in the scope (including one that exists only in another scope),
     /// <see cref="MnemosyneErrorCode.Unavailable"/> when the backing store fails.

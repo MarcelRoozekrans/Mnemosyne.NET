@@ -493,13 +493,26 @@ public sealed class RememberTests(PgVectorFixture fixture) : IClassFixture<PgVec
     }
 
     [Fact]
-    public async Task AValidEvaluationIsAccepted()
+    public async Task AnEvaluationIsStoredWithTheFirstRunAndItsVerdictCounts()
     {
         var store = await MigratedStoreAsync();
 
+        // The agent said it worked and the judge said it did not: the judge's verdict counts.
         var result = await store.RememberAsync(Entries.Entry(PgVectorFixture.NewScope()) with { Evaluation = new ReasonletEvaluation(false, 0.1, "judge") }, Ct);
 
         Assert.True(result.IsSuccess);
+        Assert.Equal(
+            "t|f|0.1|judge|f",
+            await Entries.ScalarAsync<string>(
+                fixture.DataSource,
+                "SELECT concat_ws('|', agent_success, evaluated_success, evaluation_score, evaluator, success) FROM mnemosyne.reasonlet_executions WHERE id = $1",
+                result.Value.Execution.Value));
+        Assert.Equal(
+            "1|0|-",
+            await Entries.ScalarAsync<string>(
+                fixture.DataSource,
+                "SELECT concat_ws('|', runs, successes, coalesce(last_success_at::text, '-')) FROM mnemosyne.reasonlet_metrics WHERE reasonlet_id = $1",
+                result.Value.Id.Value));
     }
 
     [Fact]

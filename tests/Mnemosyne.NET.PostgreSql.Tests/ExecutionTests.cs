@@ -53,15 +53,23 @@ public sealed class ExecutionTests(PgVectorFixture fixture) : IClassFixture<PgVe
     }
 
     [Fact]
-    public async Task AValidEvaluationIsAcceptedAndTheAgentsSuccessIsStored()
+    public async Task AnEvaluationIsStoredWithTheRunAndItsVerdictCounts()
     {
         var (store, scope, receipt) = await RememberedAsync();
 
         var result = await store.AppendExecutionAsync(scope, receipt.Id, Outcome, Entries.Provenance(), new ReasonletEvaluation(true, 0.9, "judge"), Ct);
 
-        // The verdict is not stored yet, so the agent's own outcome, a failure, still counts.
+        // The agent said it failed and the judge said it worked: the judge's verdict is the effective success.
         Assert.True(result.IsSuccess);
-        Assert.False(await Entries.ScalarAsync<bool>(fixture.DataSource, "SELECT success FROM mnemosyne.reasonlet_executions WHERE id = $1", result.Value.Value));
+        Assert.Equal(
+            "f|t|0.9|judge|t|-",
+            await Entries.ScalarAsync<string>(
+                fixture.DataSource,
+                "SELECT concat_ws('|', agent_success, evaluated_success, evaluation_score, evaluator, success, coalesce(feedback_worked::text, '-')) "
+                + "FROM mnemosyne.reasonlet_executions WHERE id = $1",
+                result.Value.Value));
+        Assert.Equal((2, 2), await MetricsAsync(receipt.Id));
+        await AssertMetricsMatchTheExecutionsAsync(scope);
     }
 
     [Fact]
@@ -284,22 +292,43 @@ public sealed class ExecutionTests(PgVectorFixture fixture) : IClassFixture<PgVe
     }
 
     [Fact]
-    public async Task FeedbackThatWaitsForAnEraseOfItsExecutionIsAConflict()
+    public async Task FeedbackThatWaitsForAnEraseOfItsExecutionIsNotFound()
     {
-        // The upsert reads the execution, then its foreign-key check waits for the erase's lock on it and finds it
-        // gone: 23503, a lost race with the erase.
+        // The feedback reads the execution's Reasonlet, locks it, then waits for the erase's lock on the execution.
+        // Its lock is a statement of its own, so once the erase commits it finds the execution gone: the same answer
+        // as for an execution that never existed.
         var (store, scope, receipt) = await RememberedAsync();
         await using var erase = await fixture.DataSource.OpenConnectionAsync(Ct);
         await using var transaction = await erase.BeginTransactionAsync(Ct);
         await RunAsync(erase, $"DELETE FROM mnemosyne.reasonlet_executions WHERE id = '{receipt.Execution.Value}'");
 
-        var feedback = store.AppendFeedbackAsync(scope, receipt.Execution, new ReasonletFeedback(0.5, 0.5, 0.5), Ct).AsTask();
+        var feedback = store.AppendFeedbackAsync(scope, receipt.Execution, new ReasonletFeedback(0.5, 0.5, 0.5, false), Ct).AsTask();
         await WaitForLockWaitAsync(erase);
         await transaction.CommitAsync(Ct);
         var result = await feedback;
 
-        Assert.Equal(MnemosyneErrorCode.Conflict, result.Error.Code);
-        Assert.Contains("23503", result.Error.Detail, StringComparison.Ordinal);
+        Assert.Equal(MnemosyneErrorCode.NotFound, result.Error.Code);
+        Assert.Equal(0L, await CountAsync("SELECT count(*) FROM mnemosyne.reasonlet_feedback WHERE scope = $1", scope.Value));
+        Assert.Equal((1, 1), await MetricsAsync(receipt.Id));
+    }
+
+    [Fact]
+    public async Task FeedbackThatWaitsForAnEraseOfItsReasonletIsNotFound()
+    {
+        // The feedback reads the execution's Reasonlet, then waits for the erase's lock on that Reasonlet, holding
+        // nothing, and finds it gone.
+        var (store, scope, receipt) = await RememberedAsync();
+        await using var erase = await fixture.DataSource.OpenConnectionAsync(Ct);
+        await using var transaction = await erase.BeginTransactionAsync(Ct);
+        await RunAsync(erase, $"DELETE FROM mnemosyne.reasonlets WHERE id = '{receipt.Id.Value}'");
+
+        var feedback = store.AppendFeedbackAsync(scope, receipt.Execution, new ReasonletFeedback(0.5, 0.5, 0.5, false), Ct).AsTask();
+        await WaitForLockWaitAsync(erase);
+        await transaction.CommitAsync(Ct);
+        var result = await feedback;
+
+        Assert.Equal(MnemosyneErrorCode.NotFound, result.Error.Code);
+        Assert.Equal(0L, await CountAsync("SELECT count(*) FROM mnemosyne.reasonlet_executions WHERE scope = $1", scope.Value));
     }
 
     private static ReasonletProvenance Subject(string subject) => new() { Source = "test", SubjectId = subject };

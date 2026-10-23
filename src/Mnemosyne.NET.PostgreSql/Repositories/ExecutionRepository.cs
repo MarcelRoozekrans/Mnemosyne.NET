@@ -15,12 +15,19 @@ internal sealed partial class ExecutionRepository(IAsyncDbConnection connection)
     /// Answers the rows written: 0 when the Reasonlet is not in the scope.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// The Reasonlet is locked <c>FOR KEY SHARE</c> before the metrics row, so the statement takes its locks in the
     /// order an erase does: Reasonlet, then metrics. Left to the foreign-key check, the Reasonlet's lock would come at
     /// the end of the statement, after the metrics row, and an append could deadlock with an erase of its Reasonlet.
     /// The increment is one atomic <c>UPDATE</c> of the row, so concurrent executions never lose a count, and
     /// <c>greatest</c>, which ignores nulls, keeps the latest execution and the latest success whatever order they
     /// commit in.
+    /// </para>
+    /// <para>
+    /// The run stores the agent's flag and the evaluator's verdict, when there is one, and its effective success,
+    /// the evaluator's verdict before the agent's: a new run has no feedback yet. The metrics count the effective
+    /// success. The table's CHECKs refuse an evaluation given only in part.
+    /// </para>
     /// </remarks>
     private const string InsertSql = """
         WITH r AS (
@@ -29,8 +36,10 @@ internal sealed partial class ExecutionRepository(IAsyncDbConnection connection)
             FOR KEY SHARE
         ), e AS (
             INSERT INTO mnemosyne.reasonlet_executions
-                (id, reasonlet_id, scope, executed_at, success, duration_ticks, score, source, run_id, subject_id, tags)
-            SELECT @id, r.id, r.scope, now(), @success, @durationTicks, @score, @source, @runId, @subjectId, @tags
+                (id, reasonlet_id, scope, executed_at, agent_success, evaluated_success, evaluation_score, evaluator, success,
+                 duration_ticks, score, source, run_id, subject_id, tags)
+            SELECT @id, r.id, r.scope, now(), @agentSuccess, @evaluatedSuccess, @evaluationScore, @evaluator,
+                   coalesce(@evaluatedSuccess, @agentSuccess), @durationTicks, @score, @source, @runId, @subjectId, @tags
             FROM r
             RETURNING reasonlet_id, scope, success, executed_at
         )
@@ -53,7 +62,10 @@ internal sealed partial class ExecutionRepository(IAsyncDbConnection connection)
         Guid id,
         Guid reasonletId,
         string scope,
-        bool success,
+        bool agentSuccess,
+        bool? evaluatedSuccess,
+        double? evaluationScore,
+        string? evaluator,
         long durationTicks,
         double? score,
         string source,
@@ -73,7 +85,10 @@ internal sealed partial class ExecutionRepository(IAsyncDbConnection connection)
         Guid id,
         Guid reasonletId,
         string scope,
-        bool success,
+        bool agentSuccess,
+        bool? evaluatedSuccess,
+        double? evaluationScore,
+        string? evaluator,
         long durationTicks,
         double? score,
         string source,
@@ -82,26 +97,140 @@ internal sealed partial class ExecutionRepository(IAsyncDbConnection connection)
         [Json] string? tags,
         CancellationToken ct);
 
-    /// <summary>Records feedback on an execution in the scope, replacing earlier feedback, and answers the rows written: 0 when it is not in the scope.</summary>
-    [Command("""
-        INSERT INTO mnemosyne.reasonlet_feedback
-            (execution_id, scope, utility, correctness, reusability, recorded_at)
-        SELECT e.id, e.scope, @utility, @correctness, @reusability, now()
-        FROM mnemosyne.reasonlet_executions e
-        WHERE e.id = @executionId AND e.scope = @scope
-        ON CONFLICT (execution_id) DO UPDATE
-            SET utility = EXCLUDED.utility,
-                correctness = EXCLUDED.correctness,
-                reusability = EXCLUDED.reusability,
-                recorded_at = EXCLUDED.recorded_at
+    /// <summary>
+    /// Reads the Reasonlet of an execution in the scope, without locking anything: the first step of feedback, which
+    /// knows only the execution. Answers null when the execution is not in the scope.
+    /// </summary>
+    [Query("SELECT reasonlet_id FROM mnemosyne.reasonlet_executions WHERE id = @executionId AND scope = @scope")]
+    public partial Task<Guid?> GetReasonletOfAsync(Guid executionId, string scope, IAsyncDbTransaction transaction, CancellationToken ct);
+
+    /// <summary>
+    /// Locks the Reasonlet in the scope <c>FOR KEY SHARE</c> until the transaction ends, the second step of feedback,
+    /// and answers how many rows it locked: 0 when the Reasonlet is gone, deleted by an erase or a prune that this
+    /// statement waited for.
+    /// </summary>
+    /// <remarks>
+    /// The lock an append takes on its Reasonlet. It lets appends, remembers and other feedback through, and conflicts
+    /// only with the <c>FOR UPDATE</c> of an erase or a prune batch, which delete the Reasonlet. Feedback holds
+    /// nothing yet when it waits here.
+    /// </remarks>
+    [Query("""
+        SELECT count(*)::int FROM (
+            SELECT 1 FROM mnemosyne.reasonlets
+            WHERE id = @reasonletId AND scope = @scope
+            FOR KEY SHARE
+        ) l
         """)]
-    public partial Task<int> UpsertFeedbackAsync(
+    public partial Task<int?> LockReasonletForFeedbackAsync(Guid reasonletId, string scope, IAsyncDbTransaction transaction, CancellationToken ct);
+
+    /// <summary>
+    /// Locks the execution in the scope <c>FOR UPDATE</c> until the transaction ends, the third step of feedback, and
+    /// answers its effective success: null when it is gone, deleted by an erase or a prune that this statement waited
+    /// for.
+    /// </summary>
+    /// <remarks>
+    /// A statement of its own, so it re-checks the execution after any wait: under READ COMMITTED a locking read that
+    /// waited for a delete finds no row. The success it answers cannot change until commit, because every writer of
+    /// the row, feedback itself, locks it first.
+    /// </remarks>
+    [Query("""
+        SELECT success FROM mnemosyne.reasonlet_executions
+        WHERE id = @executionId AND scope = @scope
+        FOR UPDATE
+        """)]
+    public partial Task<bool?> LockExecutionForFeedbackAsync(Guid executionId, string scope, IAsyncDbTransaction transaction, CancellationToken ct);
+
+    /// <summary>
+    /// Locks the Reasonlet's metrics row <c>FOR UPDATE</c> until the transaction ends, the fourth step of feedback.
+    /// The rows are folded into a count that the command discards.
+    /// </summary>
+    /// <remarks>
+    /// A statement of its own, before the counters are adjusted, so the statement that recomputes
+    /// <c>last_success_at</c> takes its snapshot with the row held and sees every append that committed before.
+    /// </remarks>
+    [Command("""
+        SELECT count(*)::int FROM (
+            SELECT 1 FROM mnemosyne.reasonlet_metrics
+            WHERE reasonlet_id = @reasonletId
+            FOR UPDATE
+        ) l
+        """)]
+    public partial Task LockMetricsForFeedbackAsync(Guid reasonletId, IAsyncDbTransaction transaction, CancellationToken ct);
+
+    /// <summary>
+    /// Records feedback on an execution that this transaction holds, replacing earlier feedback, and applies its
+    /// verdict, in one statement. Answers the execution's effective success afterwards.
+    /// </summary>
+    /// <remarks>
+    /// A null <paramref name="worked"/> keeps the stored human verdict, so a verdict can be changed but not retracted.
+    /// The effective success is recomputed from the stored inputs, the human's verdict before the evaluator's before
+    /// the agent's, which the table's CHECK also enforces. The new feedback row's foreign-key check locks the
+    /// execution <c>FOR KEY SHARE</c>, which this transaction already holds <c>FOR UPDATE</c>.
+    /// </remarks>
+    [Query("""
+        WITH feedback AS (
+            INSERT INTO mnemosyne.reasonlet_feedback
+                (execution_id, scope, utility, correctness, reusability, recorded_at)
+            VALUES (@executionId, @scope, @utility, @correctness, @reusability, now())
+            ON CONFLICT (execution_id) DO UPDATE
+                SET utility = EXCLUDED.utility,
+                    correctness = EXCLUDED.correctness,
+                    reusability = EXCLUDED.reusability,
+                    recorded_at = EXCLUDED.recorded_at
+        ), verdict AS (
+            UPDATE mnemosyne.reasonlet_executions
+            SET feedback_worked = coalesce(@worked, feedback_worked),
+                success = coalesce(@worked, feedback_worked, evaluated_success, agent_success)
+            WHERE id = @executionId AND scope = @scope
+            RETURNING success
+        )
+        SELECT success FROM verdict
+        """)]
+    public partial Task<bool?> RecordFeedbackAsync(
         Guid executionId,
         string scope,
         double utility,
         double correctness,
         double reusability,
+        bool? worked,
+        IAsyncDbTransaction transaction,
         CancellationToken ct);
+
+    /// <summary>
+    /// Counts a success that feedback raised from a failure: one more success, and <c>last_success_at</c> moved to
+    /// the run's time when that is later. <c>greatest</c> ignores a null.
+    /// </summary>
+    [Command("""
+        UPDATE mnemosyne.reasonlet_metrics
+        SET successes = successes + 1,
+            last_success_at = greatest(last_success_at,
+                (SELECT e.executed_at FROM mnemosyne.reasonlet_executions e WHERE e.id = @executionId))
+        WHERE reasonlet_id = @reasonletId
+        """)]
+    public partial Task RaiseSuccessAsync(Guid executionId, Guid reasonletId, IAsyncDbTransaction transaction, CancellationToken ct);
+
+    /// <summary>
+    /// Uncounts a success that feedback turned into a failure: one success fewer, and, when the run's time is at or
+    /// after <c>last_success_at</c>, so that the lost success held it, <c>last_success_at</c> recomputed as the
+    /// latest remaining effective success of the Reasonlet, or null when none remains.
+    /// </summary>
+    /// <remarks>
+    /// Run it after <see cref="RecordFeedbackAsync"/>, in a later statement, so the run reads as a failure here and is
+    /// not its own latest success. Retention leaves pruned runs in the counters, so <c>successes</c> can stay above
+    /// zero while <c>last_success_at</c> becomes null: the time of a pruned success is no longer known. That is what an
+    /// erase does too.
+    /// </remarks>
+    [Command("""
+        UPDATE mnemosyne.reasonlet_metrics m
+        SET successes = m.successes - 1,
+            last_success_at = CASE
+                WHEN (SELECT e.executed_at FROM mnemosyne.reasonlet_executions e WHERE e.id = @executionId) >= m.last_success_at
+                THEN (SELECT max(e.executed_at) FROM mnemosyne.reasonlet_executions e
+                      WHERE e.scope = m.scope AND e.reasonlet_id = m.reasonlet_id AND e.success)
+                ELSE m.last_success_at END
+        WHERE m.reasonlet_id = @reasonletId
+        """)]
+    public partial Task LoseSuccessAsync(Guid executionId, Guid reasonletId, IAsyncDbTransaction transaction, CancellationToken ct);
 
     /// <summary>
     /// Locks <c>FOR UPDATE</c>, in id order, every execution of <paramref name="doomedIds"/> in the scope, whoever ran
