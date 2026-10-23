@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text;
 using Microsoft.Extensions.AI;
 using Mnemosyne.NET.Abstractions;
@@ -111,12 +112,23 @@ public sealed class ReasonletMemory : IReasonletMemory
     /// <see cref="MnemosyneOptions.MinIntentConfidence"/>, else none. The store is asked for
     /// <see cref="MnemosyneOptions.CandidatePool"/> candidates, raised to <see cref="ReasonletQuery.Top"/> when that is
     /// larger, and the selector ranks them. A store or selector error is returned unchanged.
+    /// <para>
+    /// Each recall emits a <c>mnemosyne.recall</c> activity, with the store's own activities nested in it, and counts
+    /// and times itself under operation <c>recall</c>, on the <see cref="MnemosyneTelemetry"/> names. No signal carries
+    /// the question, intent, scope or any error or exception message.
+    /// </para>
     /// </remarks>
     /// <exception cref="ArgumentNullException"><paramref name="query"/> is null.</exception>
     /// <exception cref="InvalidOperationException">The intent extractor answered with an invalid intent or an error code other than Unavailable, or the store returned an invalid candidate.</exception>
-    public async ValueTask<Result<IReadOnlyList<ReasonletMatch>, MnemosyneError>> RecallAsync(ReasonletQuery query, CancellationToken ct)
+    public ValueTask<Result<IReadOnlyList<ReasonletMatch>, MnemosyneError>> RecallAsync(ReasonletQuery query, CancellationToken ct) =>
+        RecallTelemetry.RunAsync(activity => RecallOperationAsync(query, activity, ct));
+
+    /// <summary>The recall itself, run inside its activity, which it tags as it goes.</summary>
+    private async ValueTask<Result<IReadOnlyList<ReasonletMatch>, MnemosyneError>> RecallOperationAsync(
+        ReasonletQuery query, Activity? activity, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(query);
+        RecallTelemetry.Query(activity, query);
         var valid = query.Validate();
         if (valid.IsFailure)
         {
@@ -129,6 +141,7 @@ public sealed class ReasonletMemory : IReasonletMemory
             return intent.Error;
         }
 
+        RecallTelemetry.IntentFiltered(activity, intent.Value is not null);
         var embedding = await EmbedAsync(query.Question, ct).ConfigureAwait(false);
         if (embedding.IsFailure)
         {
@@ -142,6 +155,7 @@ public sealed class ReasonletMemory : IReasonletMemory
             return candidates.Error;
         }
 
+        RecallTelemetry.Candidates(activity, candidates.Value.Count);
         EnsureValid(candidates.Value);
         return await _selector.RankAsync(query, candidates.Value, ct).ConfigureAwait(false);
     }
