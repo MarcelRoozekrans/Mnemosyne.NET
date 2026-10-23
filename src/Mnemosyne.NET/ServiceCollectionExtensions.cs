@@ -18,6 +18,8 @@ public static class ServiceCollectionExtensions
     /// <see cref="IEmbeddingGenerator{TInput, TEmbedding}"/> of <see cref="string"/> to <see cref="Embedding{T}"/> of
     /// <see cref="float"/>. An <see cref="IIntentExtractor"/> and an <see cref="IReasonletEvaluator"/> are
     /// optional and used when registered. Without an evaluator, the agent's own outcome counts for every run.
+    /// The facade is a singleton that captures what it resolves, so register the store, the generator, the extractor and
+    /// the evaluator as singletons. A scoped registration fails scope validation when the facade is resolved.
     /// </remarks>
     /// <param name="services">The service collection.</param>
     /// <param name="options">

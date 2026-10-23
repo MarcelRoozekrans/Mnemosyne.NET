@@ -198,6 +198,16 @@ public sealed class ServiceCollectionTests
     }
 
     [Fact]
+    public void AScopedEvaluatorFailsUnderScopeValidation()
+    {
+        var services = Services();
+        services.AddScoped<IReasonletEvaluator, FakeEvaluator>();
+        using var provider = services.AddMnemosyne().BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
+
+        Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<IReasonletMemory>());
+    }
+
+    [Fact]
     public void InvalidOptionsThrowAtRegistration()
     {
         var error = Assert.Throws<ArgumentException>(

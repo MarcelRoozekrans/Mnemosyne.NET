@@ -168,12 +168,15 @@ internal sealed class FakeEvaluator : IReasonletEvaluator
 
     public List<ReasonletEvaluationRequest> Requests { get; } = [];
 
+    public List<CancellationToken> Tokens { get; } = [];
+
     public Func<Result<ReasonletEvaluation, MnemosyneError>> Respond { get; set; } =
         () => Result<ReasonletEvaluation, MnemosyneError>.Success(Verdict);
 
     public ValueTask<Result<ReasonletEvaluation, MnemosyneError>> EvaluateAsync(ReasonletEvaluationRequest request, CancellationToken ct)
     {
         Requests.Add(request);
+        Tokens.Add(ct);
         return ValueTask.FromResult(Respond());
     }
 }

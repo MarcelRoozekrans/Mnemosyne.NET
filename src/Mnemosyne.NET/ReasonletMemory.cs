@@ -72,6 +72,11 @@ public sealed class ReasonletMemory : IReasonletMemory
     /// own <see cref="ReasonletOutcome.Success"/> counts.
     /// </param>
     /// <param name="options">The facade settings. Must be valid.</param>
+    /// <remarks>
+    /// The facade keeps every dependency for its whole life, and <c>AddMnemosyne</c> registers it as a singleton, so the
+    /// extractor and the evaluator, like the store and the generator, must be singletons too. A scoped registration fails
+    /// scope validation when the facade is resolved.
+    /// </remarks>
     /// <exception cref="ArgumentNullException">A required argument is null.</exception>
     /// <exception cref="ArgumentException">The options are invalid.</exception>
     public ReasonletMemory(

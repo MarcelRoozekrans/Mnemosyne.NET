@@ -1033,6 +1033,68 @@ public sealed class ReasonletMemoryTests
 
     [Theory]
     [MemberData(nameof(Paths))]
+    public async Task TheCallersTokenReachesTheJudge(string path)
+    {
+        using var cts = new CancellationTokenSource();
+        var evaluator = new FakeEvaluator();
+
+        var succeeded = await JudgeThroughAsync(path, evaluator, cts.Token);
+
+        Assert.True(succeeded);
+        Assert.Equal(cts.Token, Assert.Single(evaluator.Tokens));
+    }
+
+    /// <summary>Every text a store argument carries, field by field, so a leak nested in a graph or a provenance shows.</summary>
+    private static IEnumerable<string?> Texts(ReasonletScope scope, ReasonletProvenance provenance, ReasonletEvaluation? evaluation)
+    {
+        yield return scope.Value;
+        yield return provenance.Source;
+        yield return provenance.RunId;
+        yield return provenance.SubjectId;
+        foreach (var (key, value) in provenance.Tags ?? new Dictionary<string, string>())
+        {
+            yield return key;
+            yield return value;
+        }
+
+        yield return evaluation?.Evaluator;
+    }
+
+    private static IEnumerable<string?> Texts(ReasonletStoreEntry entry)
+    {
+        var capture = entry.Capture;
+        foreach (var text in Texts(capture.Scope, capture.Provenance, entry.Evaluation))
+        {
+            yield return text;
+        }
+
+        yield return capture.Question;
+        yield return capture.Name;
+        yield return capture.Intent;
+        yield return capture.Answer;
+        yield return entry.Name;
+        yield return entry.Intent;
+        foreach (var node in capture.Graph.Nodes)
+        {
+            yield return node.Id;
+            yield return node.Type;
+            yield return node.Name;
+            yield return node.Tool;
+        }
+
+        foreach (var edge in capture.Graph.Edges)
+        {
+            yield return edge.From;
+            yield return edge.To;
+            yield return edge.Condition;
+        }
+
+        // The canonical JSON covers the graph's properties, which the fields above do not.
+        yield return ReasonletGraphJson.Serialize(capture.Graph);
+    }
+
+    [Theory]
+    [MemberData(nameof(Paths))]
     public async Task TheAnswerNeverReachesAnyStoreArgument(string path)
     {
         var evaluator = new FakeEvaluator();
@@ -1041,8 +1103,20 @@ public sealed class ReasonletMemoryTests
 
         Assert.True(succeeded);
         Assert.Equal(AnswerSentinel, Assert.Single(evaluator.Requests).Answer);
-        var stored = path == "record" ? _store.Executed!.Value.ToString() : _store.Remembered!.ToString();
-        Assert.DoesNotContain(AnswerSentinel, stored, StringComparison.Ordinal);
-        Assert.DoesNotContain(AnswerSentinel, _store.Got?.ToString() ?? string.Empty, StringComparison.Ordinal);
+        IEnumerable<string?> texts;
+        if (path == "record")
+        {
+            var (scope, _, _, provenance, evaluation, _) = _store.Executed!.Value;
+            Assert.Equal(FakeEvaluator.Verdict, evaluation);
+            texts = Texts(scope, provenance, evaluation).Append(_store.Got!.Value.Scope.Value);
+        }
+        else
+        {
+            Assert.Null(_store.Remembered!.Capture.Answer);
+            Assert.Equal(FakeEvaluator.Verdict, _store.Remembered!.Evaluation);
+            texts = Texts(_store.Remembered!);
+        }
+
+        Assert.All(texts, text => Assert.DoesNotContain(AnswerSentinel, text ?? string.Empty, StringComparison.Ordinal));
     }
 }
