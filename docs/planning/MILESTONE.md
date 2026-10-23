@@ -29,7 +29,7 @@ with getting-started docs and a sample. See the
 4. Phase 1.4 — PostgreSQL + pgvector store [complete]
 5. Phase 1.5 — Telemetry and retention [complete]
 6. Phase 1.6 — Selector and ranking [complete]
-7. Phase 1.7 — Docsite skeleton and first sample [pending]
+7. Phase 1.7 — Docsite skeleton and first sample [active]
 
 ## Audit History
 | Date | Verdict | Gaps |

@@ -53,7 +53,7 @@ Design: [roadmap design](../superpowers/specs/2026-10-21-roadmap-design.md), bui
 **HelpWanted:** no
 **Plan:** _to be written_
 
-### Phase 1.7: Docsite skeleton and first sample [status: pending]
+### Phase 1.7: Docsite skeleton and first sample [status: active]
 **Goal:** Docusaurus docsite deployed from CI, getting-started docs, and a store-and-recall sample.
 **Surface:** Docs
 **HelpWanted:** no
