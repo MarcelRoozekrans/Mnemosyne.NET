@@ -1,5 +1,6 @@
 using Microsoft.Extensions.AI;
 using Mnemosyne.NET.Abstractions;
+using Mnemosyne.NET.Tests.Abstractions;
 using ZeroAlloc.Results;
 
 namespace Mnemosyne.NET.Tests.Core;
@@ -76,8 +77,17 @@ internal sealed class FakeStore : IReasonletStore
         return ValueTask.FromResult(EraseResult);
     }
 
-    public ValueTask<Result<ReasonletDefinition, MnemosyneError>> GetAsync(ReasonletScope scope, ReasonletId id, CancellationToken ct) =>
-        throw new NotSupportedException();
+    public (ReasonletScope Scope, ReasonletId Id, CancellationToken Ct)? Got { get; private set; }
+
+    public Result<ReasonletDefinition, MnemosyneError> GetResult { get; set; } =
+        Result<ReasonletDefinition, MnemosyneError>.Success(TestData.Definition());
+
+    public ValueTask<Result<ReasonletDefinition, MnemosyneError>> GetAsync(ReasonletScope scope, ReasonletId id, CancellationToken ct)
+    {
+        Calls++;
+        Got = (scope, id, ct);
+        return ValueTask.FromResult(GetResult);
+    }
 
     public ValueTask<Result<ReasonletPruneResult, MnemosyneError>> PruneAsync(ReasonletRetention retention, CancellationToken ct) =>
         throw new NotSupportedException();
@@ -147,6 +157,23 @@ internal sealed class FakeIntentExtractor : IIntentExtractor
     public ValueTask<Result<ReasonletIntent, MnemosyneError>> ExtractAsync(string question, CancellationToken ct)
     {
         Questions.Add(question);
+        return ValueTask.FromResult(Respond());
+    }
+}
+
+/// <summary>An evaluator that records its requests and answers with a configurable response.</summary>
+internal sealed class FakeEvaluator : IReasonletEvaluator
+{
+    public static readonly ReasonletEvaluation Verdict = new(true, 0.75, "fake-judge");
+
+    public List<ReasonletEvaluationRequest> Requests { get; } = [];
+
+    public Func<Result<ReasonletEvaluation, MnemosyneError>> Respond { get; set; } =
+        () => Result<ReasonletEvaluation, MnemosyneError>.Success(Verdict);
+
+    public ValueTask<Result<ReasonletEvaluation, MnemosyneError>> EvaluateAsync(ReasonletEvaluationRequest request, CancellationToken ct)
+    {
+        Requests.Add(request);
         return ValueTask.FromResult(Respond());
     }
 }

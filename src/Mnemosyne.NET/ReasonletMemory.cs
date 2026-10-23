@@ -10,8 +10,8 @@ namespace Mnemosyne.NET;
 
 /// <summary>
 /// The default <see cref="IReasonletMemory"/>. It resolves intents and names, embeds questions with the host's
-/// embedding generator, and delegates storage to an <see cref="IReasonletStore"/> and ranking to an
-/// <see cref="IReasonletSelector"/>.
+/// embedding generator, judges runs with an optional <see cref="IReasonletEvaluator"/>, and delegates storage to an
+/// <see cref="IReasonletStore"/> and ranking to an <see cref="IReasonletSelector"/>.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -28,6 +28,13 @@ namespace Mnemosyne.NET;
 /// stored; recall instead searches every intent. No error carries an exception's message or the extractor's own text,
 /// which can quote the question: the detail names the exception type, or the reason an embedding is unusable.
 /// </para>
+/// <para>
+/// The evaluator follows the same rules, except that a judge that is down never fails the call: the run is stored
+/// unjudged, and the agent's own outcome counts. A judge that throws, times out or answers Unavailable is down. Any other
+/// error code from it, or an invalid evaluation, throws <see cref="InvalidOperationException"/>, whose message names only
+/// the code or the failing path. The run's answer reaches the evaluator and nothing else: it is never passed to the
+/// store, nor placed in an error or an exception message.
+/// </para>
 /// </remarks>
 public sealed class ReasonletMemory : IReasonletMemory
 {
@@ -38,6 +45,8 @@ public sealed class ReasonletMemory : IReasonletMemory
     internal const int MaxDefaultNameLength = 200;
 
     private const string ExtractorFailed = "The intent extractor failed.";
+
+    private const string EvaluatorFailed = "The evaluator failed.";
 
     private const string UnusableEmbedding = "The embedding generator returned an embedding the store cannot use.";
 
@@ -50,6 +59,7 @@ public sealed class ReasonletMemory : IReasonletMemory
     private readonly IReasonletSelector _selector;
     private readonly IEmbeddingGenerator<string, Embedding<float>> _embeddings;
     private readonly IIntentExtractor? _extractor;
+    private readonly IReasonletEvaluator? _evaluator;
     private readonly MnemosyneOptions _options;
 
     /// <summary>Initializes the facade.</summary>
@@ -57,6 +67,10 @@ public sealed class ReasonletMemory : IReasonletMemory
     /// <param name="selector">The selector that ranks recall candidates.</param>
     /// <param name="embeddings">The generator that embeds questions. It must be the one that made the stored embeddings.</param>
     /// <param name="extractor">The optional intent extractor. Without one, recall searches every intent and remember stores <c>unspecified</c>.</param>
+    /// <param name="evaluator">
+    /// The optional evaluator. With one, each run recorded or remembered with an answer is judged; without one, the agent's
+    /// own <see cref="ReasonletOutcome.Success"/> counts.
+    /// </param>
     /// <param name="options">The facade settings. Must be valid.</param>
     /// <exception cref="ArgumentNullException">A required argument is null.</exception>
     /// <exception cref="ArgumentException">The options are invalid.</exception>
@@ -65,6 +79,7 @@ public sealed class ReasonletMemory : IReasonletMemory
         IReasonletSelector selector,
         IEmbeddingGenerator<string, Embedding<float>> embeddings,
         IIntentExtractor? extractor,
+        IReasonletEvaluator? evaluator,
         MnemosyneOptions options)
     {
         ArgumentNullException.ThrowIfNull(store);
@@ -81,6 +96,7 @@ public sealed class ReasonletMemory : IReasonletMemory
         _selector = selector;
         _embeddings = embeddings;
         _extractor = extractor;
+        _evaluator = evaluator;
         _options = options;
     }
 
@@ -90,9 +106,15 @@ public sealed class ReasonletMemory : IReasonletMemory
     /// capture's, else the first non-blank line of the question, trimmed and cut to 200 code points. The stored capture
     /// carries the same resolved intent and name. An extractor that is down answers <see cref="MnemosyneErrorCode.Unavailable"/>
     /// rather than storing a guessed intent. An embedding the store cannot use answers Unavailable, as it does at recall.
+    /// With an evaluator registered and an <see cref="ReasonletCapture.Answer"/> given, the run is judged after the intent
+    /// and name are resolved and before the question is embedded, and the entry carries the verdict but never the answer. A
+    /// judge that is down leaves the run unjudged rather than failing the remember.
     /// </remarks>
     /// <exception cref="ArgumentNullException"><paramref name="capture"/> is null.</exception>
-    /// <exception cref="InvalidOperationException">The intent extractor answered with an invalid intent or an error code other than Unavailable.</exception>
+    /// <exception cref="InvalidOperationException">
+    /// The intent extractor answered with an invalid intent or an error code other than Unavailable, or the evaluator
+    /// answered with an invalid evaluation or an error code other than Unavailable.
+    /// </exception>
     public async ValueTask<Result<ReasonletReceipt, MnemosyneError>> RememberAsync(ReasonletCapture capture, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(capture);
@@ -109,6 +131,23 @@ public sealed class ReasonletMemory : IReasonletMemory
         }
 
         var name = capture.Name ?? DefaultName(capture.Question);
+        ReasonletEvaluation? evaluation = null;
+        if (_evaluator is not null && capture.Answer is { } answer)
+        {
+            evaluation = await JudgeAsync(
+                _evaluator,
+                new ReasonletEvaluationRequest
+                {
+                    Graph = capture.Graph,
+                    Name = name,
+                    Intent = intent.Value,
+                    Question = capture.Question,
+                    Answer = answer,
+                    Outcome = capture.Outcome,
+                },
+                ct).ConfigureAwait(false);
+        }
+
         var embedding = await EmbedAsync(capture.Question, ct).ConfigureAwait(false);
         if (embedding.IsFailure)
         {
@@ -116,7 +155,8 @@ public sealed class ReasonletMemory : IReasonletMemory
         }
 
         // The answer is for an evaluator alone and is never stored, so it is stripped here, as the entry requires.
-        var entry = new ReasonletStoreEntry(capture with { Intent = intent.Value, Name = name, Answer = null }, intent.Value, name, embedding.Value);
+        var entry = new ReasonletStoreEntry(
+            capture with { Intent = intent.Value, Name = name, Answer = null }, intent.Value, name, embedding.Value, evaluation);
         return await _store.RememberAsync(entry, ct).ConfigureAwait(false);
     }
 
@@ -180,15 +220,61 @@ public sealed class ReasonletMemory : IReasonletMemory
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// With an evaluator registered and both <see cref="ReasonletRun.Question"/> and <see cref="ReasonletRun.Answer"/>
+    /// given, the facade reads the Reasonlet from the store for its graph, name and intent, judges the run, and passes the
+    /// verdict to the store. A Reasonlet that does not exist answers <see cref="MnemosyneErrorCode.NotFound"/> before the
+    /// judge is called, and any other read error is returned unchanged. Otherwise the run is stored unjudged and the
+    /// agent's own outcome counts. A judge that is down stores the run unjudged too, rather than failing the call.
+    /// </remarks>
     /// <exception cref="ArgumentNullException"><paramref name="run"/> is null.</exception>
+    /// <exception cref="InvalidOperationException">
+    /// The evaluator answered with an invalid evaluation or an error code other than Unavailable, or the store returned an
+    /// invalid Reasonlet.
+    /// </exception>
     public ValueTask<Result<ExecutionId, MnemosyneError>> RecordExecutionAsync(ReasonletRun run, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(run);
         var valid = run.Validate();
-        return valid.IsFailure
-            ? ValueTask.FromResult(Result<ExecutionId, MnemosyneError>.Failure(valid.Error))
-            // No evaluator is called yet, so every run is unjudged and the agent's own outcome counts.
+        if (valid.IsFailure)
+        {
+            return ValueTask.FromResult(Result<ExecutionId, MnemosyneError>.Failure(valid.Error));
+        }
+
+        // A valid run has both texts or neither, so the answer alone decides whether there is something to judge.
+        return _evaluator is not null && run.Answer is not null
+            ? RecordJudgedAsync(_evaluator, run, ct)
             : _store.AppendExecutionAsync(run.Scope, run.Id, run.Outcome, run.Provenance, evaluation: null, ct);
+    }
+
+    /// <summary>Reads the run's Reasonlet, judges the run against it, and appends the run with the verdict.</summary>
+    private async ValueTask<Result<ExecutionId, MnemosyneError>> RecordJudgedAsync(
+        IReasonletEvaluator evaluator, ReasonletRun run, CancellationToken ct)
+    {
+        var definition = await _store.GetAsync(run.Scope, run.Id, ct).ConfigureAwait(false);
+        if (definition.IsFailure)
+        {
+            return definition.Error;
+        }
+
+        if (Check.Nested(definition.Value.Validate(), "reasonlet") is { IsFailure: true } invalid)
+        {
+            throw new InvalidOperationException($"The store returned an invalid Reasonlet: {invalid.Error.Message}");
+        }
+
+        var evaluation = await JudgeAsync(
+            evaluator,
+            new ReasonletEvaluationRequest
+            {
+                Graph = definition.Value.Graph,
+                Name = definition.Value.Name,
+                Intent = definition.Value.Intent,
+                Question = run.Question!,
+                Answer = run.Answer!,
+                Outcome = run.Outcome,
+            },
+            ct).ConfigureAwait(false);
+        return await _store.AppendExecutionAsync(run.Scope, run.Id, run.Outcome, run.Provenance, evaluation, ct).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
@@ -309,6 +395,56 @@ public sealed class ReasonletMemory : IReasonletMemory
         }
 
         return extracted;
+    }
+
+    /// <summary>
+    /// Judges a run and returns the verdict, or null when the judge is down: a broken judge must not lose the run or fail
+    /// the agent's call, so the agent's own outcome counts instead.
+    /// </summary>
+    private static async ValueTask<ReasonletEvaluation?> JudgeAsync(
+        IReasonletEvaluator evaluator, ReasonletEvaluationRequest request, CancellationToken ct)
+    {
+        var evaluated = await EvaluateAsync(evaluator, request, ct).ConfigureAwait(false);
+        return evaluated.IsSuccess ? evaluated.Value : null;
+    }
+
+    /// <summary>
+    /// Calls the evaluator. It fails only with Unavailable, when the judge is down, with the detail naming an exception's
+    /// type. An error code other than Unavailable or an invalid evaluation is an adapter bug and throws, and the caller's
+    /// own cancellation propagates.
+    /// </summary>
+    private static async ValueTask<Result<ReasonletEvaluation, MnemosyneError>> EvaluateAsync(
+        IReasonletEvaluator evaluator, ReasonletEvaluationRequest request, CancellationToken ct)
+    {
+        Result<ReasonletEvaluation, MnemosyneError> evaluated;
+        try
+        {
+            evaluated = await evaluator.EvaluateAsync(request, ct).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (!IsCallerCancellation(ex, ct))
+        {
+            return DependencyFailed(EvaluatorFailed, ex);
+        }
+
+        if (evaluated.IsFailure)
+        {
+            // The evaluator's own text can quote the question or the answer, so only its code is kept. The request is
+            // valid, so any code but Unavailable is an adapter bug.
+            if (evaluated.Error.Code != MnemosyneErrorCode.Unavailable)
+            {
+                throw new InvalidOperationException(
+                    $"The evaluator failed with {evaluated.Error.Code}; an evaluator given a valid request may only fail with {nameof(MnemosyneErrorCode.Unavailable)}.");
+            }
+
+            return new MnemosyneError(MnemosyneErrorCode.Unavailable, EvaluatorFailed);
+        }
+
+        if (evaluated.Value.Validate() is { IsFailure: true } invalid)
+        {
+            throw new InvalidOperationException($"The evaluator returned an invalid evaluation: {invalid.Error.Message}");
+        }
+
+        return evaluated;
     }
 
     private async ValueTask<Result<ReadOnlyMemory<float>, MnemosyneError>> EmbedAsync(string text, CancellationToken ct)

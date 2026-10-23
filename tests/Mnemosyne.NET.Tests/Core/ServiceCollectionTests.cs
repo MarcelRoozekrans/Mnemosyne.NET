@@ -108,6 +108,43 @@ public sealed class ServiceCollectionTests
         Assert.Null(_store.Searched!.Value.Intent);
     }
 
+    private static ReasonletRun JudgeableRun() => new()
+    {
+        Scope = new ReasonletScope("scope"),
+        Id = ReasonletId.New(),
+        Outcome = new ReasonletOutcome(false, TimeSpan.FromSeconds(1), 0.5),
+        Provenance = TestData.Provenance(),
+        Question = "question",
+        Answer = "answer",
+    };
+
+    [Fact]
+    public async Task ARegisteredEvaluatorIsUsed()
+    {
+        var evaluator = new FakeEvaluator();
+        var services = Services();
+        services.AddSingleton<IReasonletEvaluator>(evaluator);
+        using var provider = services.AddMnemosyne().BuildServiceProvider();
+
+        var result = await provider.GetRequiredService<IReasonletMemory>().RecordExecutionAsync(JudgeableRun(), CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Single(evaluator.Requests);
+        Assert.Equal(FakeEvaluator.Verdict, _store.Executed!.Value.Evaluation);
+    }
+
+    [Fact]
+    public async Task AMissingEvaluatorLeavesRunsUnjudged()
+    {
+        using var provider = Services().AddMnemosyne().BuildServiceProvider();
+
+        var result = await provider.GetRequiredService<IReasonletMemory>().RecordExecutionAsync(JudgeableRun(), CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Null(_store.Got);
+        Assert.Null(_store.Executed!.Value.Evaluation);
+    }
+
     [Fact]
     public async Task RegisteringTwiceGivesTheSelectorAndTheFacadeTheSameOptions()
     {

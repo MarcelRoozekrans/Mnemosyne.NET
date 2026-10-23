@@ -14,8 +14,10 @@ public sealed class ReasonletMemoryTests
     private readonly FakeSelector _selector = new();
     private readonly FakeEmbeddingGenerator _generator = new();
 
-    private ReasonletMemory Memory(IIntentExtractor? extractor = null, MnemosyneOptions? options = null) =>
-        new(_store, _selector, _generator, extractor, options ?? new MnemosyneOptions());
+    private const string AnswerSentinel = "answer sentinel 7f3a";
+
+    private ReasonletMemory Memory(IIntentExtractor? extractor = null, MnemosyneOptions? options = null, IReasonletEvaluator? evaluator = null) =>
+        new(_store, _selector, _generator, extractor, evaluator, options ?? new MnemosyneOptions());
 
     private static ReasonletCandidate Candidate(double similarity = 0.9) =>
         new(TestData.Definition(), similarity, new ReasonletMetrics(0, 0, null, DateTimeOffset.UnixEpoch));
@@ -46,10 +48,10 @@ public sealed class ReasonletMemoryTests
     public void NullRequiredArgumentsAreRefused()
     {
         var options = new MnemosyneOptions();
-        Assert.Throws<ArgumentNullException>("store", () => new ReasonletMemory(null!, _selector, _generator, null, options));
-        Assert.Throws<ArgumentNullException>("selector", () => new ReasonletMemory(_store, null!, _generator, null, options));
-        Assert.Throws<ArgumentNullException>("embeddings", () => new ReasonletMemory(_store, _selector, null!, null, options));
-        Assert.Throws<ArgumentNullException>("options", () => new ReasonletMemory(_store, _selector, _generator, null, null!));
+        Assert.Throws<ArgumentNullException>("store", () => new ReasonletMemory(null!, _selector, _generator, null, null, options));
+        Assert.Throws<ArgumentNullException>("selector", () => new ReasonletMemory(_store, null!, _generator, null, null, options));
+        Assert.Throws<ArgumentNullException>("embeddings", () => new ReasonletMemory(_store, _selector, null!, null, null, options));
+        Assert.Throws<ArgumentNullException>("options", () => new ReasonletMemory(_store, _selector, _generator, null, null, null!));
     }
 
     [Fact]
@@ -696,6 +698,7 @@ public sealed class ReasonletMemoryTests
         Assert.True(result.IsSuccess);
         Assert.Null(_store.Executed!.Value.Evaluation);
         Assert.Equal(run.Outcome, _store.Executed!.Value.Outcome);
+        Assert.Null(_store.Got);
     }
 
     [Fact]
@@ -796,4 +799,250 @@ public sealed class ReasonletMemoryTests
     [Fact]
     public async Task ANullErasureIsRefused() =>
         await Assert.ThrowsAsync<ArgumentNullException>("erasure", async () => await Memory().EraseAsync(null!, CancellationToken.None));
+
+    // ---- Judging ----
+
+    private static MnemosyneError JudgeError(MnemosyneErrorCode code) => new(code, $"judge said: {AnswerSentinel}", $"detail: {AnswerSentinel}");
+
+    public static TheoryData<string> Paths() => ["record", "remember"];
+
+    /// <summary>Records a run, or remembers a capture, with the answer sentinel, and returns whether the call succeeded.</summary>
+    private async Task<bool> JudgeThroughAsync(string path, IReasonletEvaluator evaluator, CancellationToken ct)
+    {
+        var memory = Memory(evaluator: evaluator);
+        return path == "record"
+            ? (await memory.RecordExecutionAsync(Run() with { Question = "question", Answer = AnswerSentinel }, ct)).IsSuccess
+            : (await memory.RememberAsync(TestData.Capture() with { Answer = AnswerSentinel }, ct)).IsSuccess;
+    }
+
+    private bool Stored(string path) => path == "record" ? _store.Executed is not null : _store.Remembered is not null;
+
+    private ReasonletEvaluation? StoredEvaluation(string path) => path == "record" ? _store.Executed!.Value.Evaluation : _store.Remembered!.Evaluation;
+
+    [Fact]
+    public async Task AJudgedRunReachesTheStoreWithTheEvaluation()
+    {
+        using var cts = new CancellationTokenSource();
+        var evaluator = new FakeEvaluator();
+        var definition = TestData.Definition();
+        _store.GetResult = definition;
+        var run = Run() with { Question = "how?", Answer = AnswerSentinel };
+
+        var result = await Memory(evaluator: evaluator).RecordExecutionAsync(run, cts.Token);
+
+        Assert.Equal(_store.ExecutionResult.Value, result.Value);
+        Assert.Equal((run.Scope, run.Id, cts.Token), _store.Got);
+        var request = Assert.Single(evaluator.Requests);
+        Assert.Same(definition.Graph, request.Graph);
+        Assert.Equal(definition.Name, request.Name);
+        Assert.Equal(definition.Intent, request.Intent);
+        Assert.Equal("how?", request.Question);
+        Assert.Equal(AnswerSentinel, request.Answer);
+        Assert.Equal(run.Outcome, request.Outcome);
+        Assert.Equal((run.Scope, run.Id, run.Outcome, run.Provenance, (ReasonletEvaluation?)FakeEvaluator.Verdict, cts.Token), _store.Executed);
+    }
+
+    [Fact]
+    public async Task ARunWithoutAnAnswerIsNotJudged()
+    {
+        var evaluator = new FakeEvaluator();
+
+        var result = await Memory(evaluator: evaluator).RecordExecutionAsync(Run(), CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Empty(evaluator.Requests);
+        Assert.Null(_store.Got);
+        Assert.Null(_store.Executed!.Value.Evaluation);
+    }
+
+    [Theory]
+    [InlineData(MnemosyneErrorCode.NotFound)]
+    [InlineData(MnemosyneErrorCode.Unavailable)]
+    public async Task AStoreReadErrorIsReturnedBeforeTheJudgeIsCalled(MnemosyneErrorCode code)
+    {
+        var evaluator = new FakeEvaluator();
+        var error = new MnemosyneError(code, "store said no");
+        _store.GetResult = error;
+
+        var result = await Memory(evaluator: evaluator).RecordExecutionAsync(Run() with { Question = "question", Answer = AnswerSentinel }, CancellationToken.None);
+
+        Assert.Equal(error, result.Error);
+        Assert.Empty(evaluator.Requests);
+        Assert.Null(_store.Executed);
+    }
+
+    [Fact]
+    public async Task AnInvalidReasonletFromTheStoreThrowsBeforeTheJudgeIsCalled()
+    {
+        var evaluator = new FakeEvaluator();
+        _store.GetResult = TestData.Definition() with { Name = " " };
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await Memory(evaluator: evaluator).RecordExecutionAsync(Run() with { Question = "question", Answer = AnswerSentinel }, CancellationToken.None));
+
+        Assert.Equal("The store returned an invalid Reasonlet: reasonlet.Name: must not be blank", error.Message);
+        Assert.Empty(evaluator.Requests);
+        Assert.Null(_store.Executed);
+    }
+
+    [Fact]
+    public async Task RememberJudgesAfterResolvingTheIntentAndNameAndBeforeEmbedding()
+    {
+        var extractor = FakeIntentExtractor.Answering("extracted", 0.1);
+        int? embeddingsAtJudging = null;
+        var evaluator = new FakeEvaluator();
+        evaluator.Respond = () =>
+        {
+            embeddingsAtJudging = _generator.Calls;
+            return FakeEvaluator.Verdict;
+        };
+        var capture = TestData.Capture() with { Question = "first line\nsecond line", Answer = AnswerSentinel };
+
+        var result = await Memory(extractor, evaluator: evaluator).RememberAsync(capture, CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(0, embeddingsAtJudging);
+        Assert.Equal(1, _generator.Calls);
+        var request = Assert.Single(evaluator.Requests);
+        Assert.Same(capture.Graph, request.Graph);
+        Assert.Equal("first line", request.Name);
+        Assert.Equal("extracted", request.Intent);
+        Assert.Equal(capture.Question, request.Question);
+        Assert.Equal(AnswerSentinel, request.Answer);
+        Assert.Equal(capture.Outcome, request.Outcome);
+        Assert.Equal(FakeEvaluator.Verdict, _store.Remembered!.Evaluation);
+        Assert.Null(_store.Remembered!.Capture.Answer);
+    }
+
+    [Fact]
+    public async Task RememberWithoutAnAnswerIsNotJudged()
+    {
+        var evaluator = new FakeEvaluator();
+
+        var result = await Memory(evaluator: evaluator).RememberAsync(TestData.Capture(), CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Empty(evaluator.Requests);
+        Assert.Null(_store.Remembered!.Evaluation);
+    }
+
+    [Fact]
+    public async Task RememberThatFailsBeforeJudgingNeverCallsTheJudge()
+    {
+        var evaluator = new FakeEvaluator();
+        var extractor = new FakeIntentExtractor { Respond = () => Result<ReasonletIntent, MnemosyneError>.Failure(Unavailable()) };
+
+        var result = await Memory(extractor, evaluator: evaluator).RememberAsync(TestData.Capture() with { Answer = AnswerSentinel }, CancellationToken.None);
+
+        Assert.Equal(MnemosyneErrorCode.Unavailable, result.Error.Code);
+        Assert.Empty(evaluator.Requests);
+    }
+
+    public static TheoryData<string, string> JudgeOutages() => new()
+    {
+        { "record", "unavailable" },
+        { "record", "timeout" },
+        { "record", "exception" },
+        { "remember", "unavailable" },
+        { "remember", "timeout" },
+        { "remember", "exception" },
+    };
+
+    [Theory]
+    [MemberData(nameof(JudgeOutages))]
+    public async Task AJudgeOutageStoresTheRunUnjudged(string path, string outage)
+    {
+        var evaluator = new FakeEvaluator
+        {
+            Respond = outage switch
+            {
+                "unavailable" => () => Result<ReasonletEvaluation, MnemosyneError>.Failure(JudgeError(MnemosyneErrorCode.Unavailable)),
+                "timeout" => () => throw new TaskCanceledException(AnswerSentinel),
+                _ => () => throw new HttpRequestException(AnswerSentinel),
+            },
+        };
+
+        var succeeded = await JudgeThroughAsync(path, evaluator, CancellationToken.None);
+
+        Assert.True(succeeded);
+        Assert.Single(evaluator.Requests);
+        Assert.Null(StoredEvaluation(path));
+    }
+
+    [Theory]
+    [MemberData(nameof(Paths))]
+    public async Task JudgeCancellationPropagatesWhenTheTokenIsCancelled(string path)
+    {
+        using var cts = new CancellationTokenSource();
+        var evaluator = new FakeEvaluator();
+        evaluator.Respond = () =>
+        {
+            cts.Cancel();
+            throw new OperationCanceledException(cts.Token);
+        };
+
+        await Assert.ThrowsAsync<OperationCanceledException>(async () => await JudgeThroughAsync(path, evaluator, cts.Token));
+
+        Assert.False(Stored(path));
+    }
+
+    public static TheoryData<string, MnemosyneErrorCode> OtherJudgeErrors() => new()
+    {
+        { "record", MnemosyneErrorCode.Validation },
+        { "record", MnemosyneErrorCode.NotFound },
+        { "record", MnemosyneErrorCode.Conflict },
+        { "remember", MnemosyneErrorCode.Validation },
+        { "remember", MnemosyneErrorCode.NotFound },
+        { "remember", MnemosyneErrorCode.Conflict },
+    };
+
+    [Theory]
+    [MemberData(nameof(OtherJudgeErrors))]
+    public async Task AnyOtherJudgeErrorThrowsNamingOnlyTheCode(string path, MnemosyneErrorCode code)
+    {
+        var evaluator = new FakeEvaluator { Respond = () => Result<ReasonletEvaluation, MnemosyneError>.Failure(JudgeError(code)) };
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(async () => await JudgeThroughAsync(path, evaluator, CancellationToken.None));
+
+        Assert.Equal(
+            $"The evaluator failed with {code}; an evaluator given a valid request may only fail with Unavailable.",
+            error.Message);
+        Assert.False(Stored(path));
+    }
+
+    public static TheoryData<string, ReasonletEvaluation, string> InvalidEvaluations() => new()
+    {
+        { "record", new ReasonletEvaluation(true, 1.5, "judge"), "Score: must be a finite number between 0 and 1" },
+        { "record", new ReasonletEvaluation(true, double.NaN, "judge"), "Score: must be a finite number between 0 and 1" },
+        { "record", default, "Evaluator: must not be blank" },
+        { "remember", new ReasonletEvaluation(false, 0.5, " "), "Evaluator: must not be blank" },
+        { "remember", new ReasonletEvaluation(false, 0.5, new string('j', 101)), "Evaluator: must not be longer than 100 code points" },
+    };
+
+    [Theory]
+    [MemberData(nameof(InvalidEvaluations))]
+    public async Task AnInvalidEvaluationThrowsNamingOnlyThePath(string path, ReasonletEvaluation evaluation, string reason)
+    {
+        var evaluator = new FakeEvaluator { Respond = () => evaluation };
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(async () => await JudgeThroughAsync(path, evaluator, CancellationToken.None));
+
+        Assert.Equal($"The evaluator returned an invalid evaluation: {reason}", error.Message);
+        Assert.False(Stored(path));
+    }
+
+    [Theory]
+    [MemberData(nameof(Paths))]
+    public async Task TheAnswerNeverReachesAnyStoreArgument(string path)
+    {
+        var evaluator = new FakeEvaluator();
+
+        var succeeded = await JudgeThroughAsync(path, evaluator, CancellationToken.None);
+
+        Assert.True(succeeded);
+        Assert.Equal(AnswerSentinel, Assert.Single(evaluator.Requests).Answer);
+        var stored = path == "record" ? _store.Executed!.Value.ToString() : _store.Remembered!.ToString();
+        Assert.DoesNotContain(AnswerSentinel, stored, StringComparison.Ordinal);
+        Assert.DoesNotContain(AnswerSentinel, _store.Got?.ToString() ?? string.Empty, StringComparison.Ordinal);
+    }
 }

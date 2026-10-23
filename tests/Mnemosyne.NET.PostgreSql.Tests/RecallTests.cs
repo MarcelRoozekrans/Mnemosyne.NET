@@ -195,7 +195,7 @@ public sealed class RecallTests(PgVectorFixture fixture) : IClassFixture<PgVecto
         var store = fixture.CreateStore();
         Assert.True((await store.MigrateAsync(Ct)).IsSuccess);
         var options = new MnemosyneOptions();
-        var memory = new ReasonletMemory(store, new ReasonletSelector(options.Ranking, TimeProvider.System), embeddings, null, options);
+        var memory = new ReasonletMemory(store, new ReasonletSelector(options.Ranking, TimeProvider.System), embeddings, null, null, options);
         return (memory, PgVectorFixture.NewScope());
     }
 

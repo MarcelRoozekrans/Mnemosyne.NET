@@ -32,7 +32,7 @@ public sealed class RecallTelemetryTests
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     private ReasonletMemory Memory(IIntentExtractor? extractor = null, IReasonletStore? store = null) =>
-        new(store ?? _store, _selector, _generator, extractor, new MnemosyneOptions());
+        new(store ?? _store, _selector, _generator, extractor, null, new MnemosyneOptions());
 
     private static ReasonletCandidate Candidate(double similarity = 0.9) =>
         new(TestData.Definition(), similarity, new ReasonletMetrics(0, 0, null, DateTimeOffset.UnixEpoch));

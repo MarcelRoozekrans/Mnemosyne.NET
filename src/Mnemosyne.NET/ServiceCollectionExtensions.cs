@@ -16,7 +16,8 @@ public static class ServiceCollectionExtensions
     /// <remarks>
     /// The host registers an <see cref="IReasonletStore"/>, for example with <c>AddMnemosynePostgreSql</c>, and an
     /// <see cref="IEmbeddingGenerator{TInput, TEmbedding}"/> of <see cref="string"/> to <see cref="Embedding{T}"/> of
-    /// <see cref="float"/>. An <see cref="IIntentExtractor"/> is optional and used when registered.
+    /// <see cref="float"/>. An <see cref="IIntentExtractor"/> and an <see cref="IReasonletEvaluator"/> are
+    /// optional and used when registered. Without an evaluator, the agent's own outcome counts for every run.
     /// </remarks>
     /// <param name="services">The service collection.</param>
     /// <param name="options">
@@ -47,6 +48,7 @@ public static class ServiceCollectionExtensions
             provider.GetRequiredService<IReasonletSelector>(),
             provider.GetRequiredService<IEmbeddingGenerator<string, Embedding<float>>>(),
             provider.GetService<IIntentExtractor>(),
+            provider.GetService<IReasonletEvaluator>(),
             provider.GetRequiredService<MnemosyneOptions>()));
         return services;
     }
