@@ -37,4 +37,6 @@ ALTER TABLE mnemosyne.reasonlet_executions
         CHECK ((evaluated_success IS NULL) = (evaluator IS NULL) AND (evaluated_success IS NULL) = (evaluation_score IS NULL));
 
 -- EnsureMigratedAsync reads it, so a binary that needs this schema answers Unavailable on a database without it.
-INSERT INTO mnemosyne.settings (key, value) VALUES ('schema_version', '2');
+-- Idempotent on its own, so a later migration can record its version the same way.
+INSERT INTO mnemosyne.settings (key, value) VALUES ('schema_version', '2')
+ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;

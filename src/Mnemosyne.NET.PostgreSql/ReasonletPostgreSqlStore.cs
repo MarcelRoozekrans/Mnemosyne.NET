@@ -603,7 +603,7 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
         var reasonletId = await executions.GetReasonletOfAsync(id, scope.Value, transaction, ct).ConfigureAwait(false);
         if (reasonletId is not { } reasonlet
             || await executions.LockReasonletForFeedbackAsync(reasonlet, scope.Value, transaction, ct).ConfigureAwait(false) == 0
-            || await executions.LockExecutionForFeedbackAsync(id, scope.Value, transaction, ct).ConfigureAwait(false) is not { } before)
+            || await executions.LockExecutionForFeedbackAsync(id, scope.Value, reasonlet, transaction, ct).ConfigureAwait(false) is not { } before)
         {
             return new MnemosyneError(MnemosyneErrorCode.NotFound, "The execution does not exist in the scope.");
         }

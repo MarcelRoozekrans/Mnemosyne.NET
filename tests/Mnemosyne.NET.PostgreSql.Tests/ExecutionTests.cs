@@ -331,6 +331,26 @@ public sealed class ExecutionTests(PgVectorFixture fixture) : IClassFixture<PgVe
         Assert.Equal(0L, await CountAsync("SELECT count(*) FROM mnemosyne.reasonlet_executions WHERE scope = $1", scope.Value));
     }
 
+    [Fact]
+    public async Task FeedbackOnARunMovedToAnotherReasonletWhileItWaitsIsNotFound()
+    {
+        // Only hand-written SQL can move a run, but the feedback checks rather than assumes that the run still belongs
+        // to the Reasonlet it locked, so it never adjusts another Reasonlet's counters under the wrong locks.
+        var (store, scope, receipt) = await RememberedAsync();
+        var other = (await store.RememberAsync(Entries.Entry(scope, Entries.Graph("other")), Ct)).Value;
+        await using var mover = await fixture.DataSource.OpenConnectionAsync(Ct);
+        await using var transaction = await mover.BeginTransactionAsync(Ct);
+        await RunAsync(mover, $"UPDATE mnemosyne.reasonlet_executions SET reasonlet_id = '{other.Id.Value}' WHERE id = '{receipt.Execution.Value}'");
+
+        var feedback = store.AppendFeedbackAsync(scope, receipt.Execution, new ReasonletFeedback(0.5, 0.5, 0.5, false), Ct).AsTask();
+        await WaitForLockWaitAsync(mover);
+        await transaction.CommitAsync(Ct);
+        var result = await feedback;
+
+        Assert.Equal(MnemosyneErrorCode.NotFound, result.Error.Code);
+        Assert.Equal(0L, await CountAsync("SELECT count(*) FROM mnemosyne.reasonlet_feedback WHERE scope = $1", scope.Value));
+    }
+
     private static ReasonletProvenance Subject(string subject) => new() { Source = "test", SubjectId = subject };
 
     private async Task<(int Runs, int Successes)> MetricsAsync(ReasonletId id) => (

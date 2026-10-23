@@ -368,7 +368,8 @@ public sealed class MigrationTests(PgVectorFixture fixture) : IClassFixture<PgVe
     public async Task APhase17DatabaseIsNotMigratedUntilMigrateAsyncUpgradesItKeepingItsRunsAndCounters()
     {
         // A database at the 1.7 schema: 0001 alone, the dimension and HNSW index the 1.7 MigrateAsync applied, and runs
-        // written in the 1.7 shape, with feedback that has no verdict.
+        // written in the 1.7 shape, with feedback that has no verdict. It also carries a schema_version row below 2,
+        // which 0002 must overwrite rather than fail on.
         var dataSource = await fixture.CreateEmptyDatabaseAsync();
         await using (var connection = (await dataSource.OpenConnectionAsync(Ct)).AsAsync())
         {
@@ -383,7 +384,7 @@ public sealed class MigrationTests(PgVectorFixture fixture) : IClassFixture<PgVe
             """
             ALTER TABLE mnemosyne.reasonlets ALTER COLUMN embedding TYPE vector(3);
             CREATE INDEX reasonlets_embedding_hnsw ON mnemosyne.reasonlets USING hnsw (embedding vector_cosine_ops) WITH (m = 16, ef_construction = 64);
-            INSERT INTO mnemosyne.settings (key, value) VALUES ('dimensions', '3'), ('hnsw_m', '16'), ('hnsw_ef_construction', '64');
+            INSERT INTO mnemosyne.settings (key, value) VALUES ('dimensions', '3'), ('hnsw_m', '16'), ('hnsw_ef_construction', '64'), ('schema_version', '1');
             """);
         await Entries.ExecuteAsync(
             dataSource,

@@ -131,14 +131,17 @@ internal sealed partial class ExecutionRepository(IAsyncDbConnection connection)
     /// <remarks>
     /// A statement of its own, so it re-checks the execution after any wait: under READ COMMITTED a locking read that
     /// waited for a delete finds no row. The success it answers cannot change until commit, because every writer of
-    /// the row, feedback itself, locks it first.
+    /// the row, feedback itself, locks it first. It also checks that the execution still belongs to the Reasonlet the
+    /// feedback locked, rather than assuming <c>reasonlet_id</c> never changes, so the locks it holds are always the
+    /// run's own Reasonlet and metrics row.
     /// </remarks>
     [Query("""
         SELECT success FROM mnemosyne.reasonlet_executions
-        WHERE id = @executionId AND scope = @scope
+        WHERE id = @executionId AND scope = @scope AND reasonlet_id = @reasonletId
         FOR UPDATE
         """)]
-    public partial Task<bool?> LockExecutionForFeedbackAsync(Guid executionId, string scope, IAsyncDbTransaction transaction, CancellationToken ct);
+    public partial Task<bool?> LockExecutionForFeedbackAsync(
+        Guid executionId, string scope, Guid reasonletId, IAsyncDbTransaction transaction, CancellationToken ct);
 
     /// <summary>
     /// Locks the Reasonlet's metrics row <c>FOR UPDATE</c> until the transaction ends, the fourth step of feedback.
