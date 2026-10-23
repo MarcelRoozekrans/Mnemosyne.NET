@@ -25,5 +25,5 @@ artifacts/
 
 # Docusaurus
 node_modules/
-build/
-.docusaurus/
+/build/
+/.docusaurus/
