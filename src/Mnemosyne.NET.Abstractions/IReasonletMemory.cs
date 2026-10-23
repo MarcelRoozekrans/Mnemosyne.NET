@@ -24,7 +24,11 @@ public interface IReasonletMemory
     /// </remarks>
     /// <param name="capture">The capture to store.</param>
     /// <param name="ct">The cancellation token.</param>
-    /// <returns>The receipt describing what the capture produced.</returns>
+    /// <returns>
+    /// The receipt describing what the capture produced, with the verdict source and effective success of the run it
+    /// recorded: <see cref="ReasonletVerdictSource.Evaluator"/> when an evaluator judged the capture's
+    /// <see cref="ReasonletCapture.Answer"/>, else <see cref="ReasonletVerdictSource.Agent"/>.
+    /// </returns>
     ValueTask<Result<ReasonletReceipt, MnemosyneError>> RememberAsync(ReasonletCapture capture, CancellationToken ct);
 
     /// <summary>Finds and ranks the Reasonlets that best answer a query.</summary>
@@ -42,22 +46,29 @@ public interface IReasonletMemory
     /// <returns>The ranked matches, best first.</returns>
     ValueTask<Result<IReadOnlyList<ReasonletMatch>, MnemosyneError>> RecallAsync(ReasonletQuery query, CancellationToken ct);
 
-    /// <summary>Records one execution of an existing Reasonlet.</summary>
+    /// <summary>Records one run of an existing Reasonlet.</summary>
     /// <remarks>
-    /// Error codes: <see cref="MnemosyneErrorCode.Validation"/> when an argument breaks an invariant,
+    /// The run's <see cref="ReasonletRun.Answer"/>, when given with its question, is for an evaluator to judge, and is never
+    /// stored. Without an evaluator, the agent's own <see cref="ReasonletOutcome.Success"/> counts. An answer that is blank
+    /// or longer than 32,000 code points is not judged either: the run is stored with the agent's verdict.
+    /// Error codes: <see cref="MnemosyneErrorCode.Validation"/> when the run breaks an invariant,
     /// <see cref="MnemosyneErrorCode.NotFound"/> when the Reasonlet does not exist in the scope (including one that exists only in another scope),
     /// <see cref="MnemosyneErrorCode.Unavailable"/> when the backing store fails.
     /// </remarks>
-    /// <param name="scope">The scope the Reasonlet lives in.</param>
-    /// <param name="id">The Reasonlet that was executed.</param>
-    /// <param name="outcome">The outcome of the execution.</param>
-    /// <param name="provenance">Where the execution came from.</param>
+    /// <param name="run">The run to record.</param>
     /// <param name="ct">The cancellation token.</param>
-    /// <returns>The identifier of the recorded execution.</returns>
-    ValueTask<Result<ExecutionId, MnemosyneError>> RecordExecutionAsync(ReasonletScope scope, ReasonletId id, ReasonletOutcome outcome, ReasonletProvenance provenance, CancellationToken ct);
+    /// <returns>
+    /// The receipt of the recorded run: its execution identifier, and which verdict counted when it was stored, with that
+    /// verdict's success. The source is <see cref="ReasonletVerdictSource.Evaluator"/> or <see cref="ReasonletVerdictSource.Agent"/>,
+    /// never <see cref="ReasonletVerdictSource.Feedback"/>, because feedback comes later.
+    /// </returns>
+    ValueTask<Result<ReasonletRunReceipt, MnemosyneError>> RecordExecutionAsync(ReasonletRun run, CancellationToken ct);
 
     /// <summary>Attaches feedback to a recorded execution.</summary>
     /// <remarks>
+    /// Feedback replaces the execution's earlier scores. When <see cref="ReasonletFeedback.Worked"/> is present it becomes the
+    /// run's verdict, overriding the evaluator's and the agent's. Feedback with <c>Worked</c> null keeps an earlier verdict,
+    /// so a verdict can be changed, by recording the other value, but not retracted.
     /// Error codes: <see cref="MnemosyneErrorCode.Validation"/> when an argument breaks an invariant,
     /// <see cref="MnemosyneErrorCode.NotFound"/> when the execution does not exist in the scope (including one that exists only in another scope),
     /// <see cref="MnemosyneErrorCode.Unavailable"/> when the backing store fails.

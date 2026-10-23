@@ -50,7 +50,13 @@ success rate = (successes + 5 × prior) / (runs + 5)
 
 The 5 is the prior weight: the prior counts as five extra runs. For a procedure with no parent, the prior is a neutral 0.5. So a brand-new procedure with one successful run scores (1 + 2.5) / 6 = 0.583, not 1. After 20 successes out of 20 it scores 22.5 / 25 = 0.900, and the prior matters less and less as runs accumulate.
 
-Runs are counted from outcomes: every remember records one run with the capture's outcome, and every `RecordExecutionAsync` records another. Feedback attached to a run is stored, but ranking doesn't use it.
+Every remember records one run, and every `RecordExecutionAsync` records another. Whether a run counts as a success depends on its effective verdict, the first of these that exists:
+
+1. **A human's verdict**, `ReasonletFeedback.Worked`, recorded with `RecordFeedbackAsync`.
+2. **An evaluator's verdict**, when an `IReasonletEvaluator` is registered and the run was recorded with its answer.
+3. **The agent's own verdict**, `ReasonletOutcome.Success`.
+
+Feedback that changes a run's verdict moves the success count with it. Feedback with `Worked` null keeps an earlier verdict, so a verdict can be changed but not withdrawn. Feedback's three scores are stored, but ranking doesn't use them.
 
 ### A new version inherits upward only
 
@@ -143,17 +149,24 @@ The two cases that throw are bugs in an adapter, not runtime conditions. The ext
 
 Remember fails the same way for an invalid capture, for an embedding problem and for an extractor bug. Unlike recall, it has no fallback when the intent extractor is needed and is down: it answers `Unavailable`, so a guessed intent is never stored. Store errors, `Validation` included, come back from both unchanged.
 
+Remember and `RecordExecutionAsync` call the evaluator, when one is registered and the run carries an answer. A judge that is down doesn't fail either call: the run is stored with the agent's own verdict. A judge that takes longer than `MnemosyneOptions.EvaluationTimeout`, 30 seconds by default, is down: the facade cancels the token it passed the judge and stops waiting, even for a judge that ignores the token. Your cancellation token stops the wait the same way. Any other error code from the judge, or an invalid verdict, is a bug in the adapter, and `InvalidOperationException` is thrown.
+
+An answer that is blank or longer than 32,000 Unicode code points is not judged. It is the agent's own output, so it doesn't fail the call either: the run is stored with the agent's verdict. Remember embeds the question before it calls the judge, so a remember that fails on the embedding never pays for a judge call.
+
+Both calls return the verdict that counted when the run was stored. `RecordExecutionAsync` returns a `ReasonletRunReceipt`, and the receipt from remember carries the same two fields for the run it records: `Source` is `Evaluator` when the judge answered and `Agent` otherwise, and `Success` is that verdict. It is never `Feedback`, because feedback comes later.
+
 No error from the facade's own dependencies quotes the question or an exception's message, because either could hold user data:
 
 - **The embedding generator.** If it throws or times out, the error's detail names only the exception type. If it returns no embedding, there is no detail. If its embedding is unusable, the error's message is fixed and the detail gives only the reason: `length`, with both lengths for a wrong one, `non-finite` or `norm`.
 - **The intent extractor at recall.** A failure is not surfaced at all, because recall searches without an intent filter instead.
 - **The intent extractor at remember.** If it throws or times out, the remember answers `Unavailable` and the detail names only the exception type. If it answers `Unavailable` itself, the remember answers `Unavailable` with no detail, so none of the extractor's own text is passed on.
+- **The evaluator.** A judge that is down is not surfaced, because the run is stored with the agent's verdict. The exception for a judge's bug names only its error code, or the field that failed validation and why. The run's answer never appears in an error.
 
 A store error is different: its detail can carry the database's error message, a SQLSTATE code and the server's message text. That text doesn't include row values unless the host turns on Npgsql's `IncludeErrorDetail` connection setting.
 
 ## Settings
 
-The ranking settings live in `ReasonletRankingOptions`, set through `MnemosyneOptions.Ranking`. The pool and the intent threshold are on `MnemosyneOptions` itself.
+The ranking settings live in `ReasonletRankingOptions`, set through `MnemosyneOptions.Ranking`. The pool, the intent threshold and the judge's timeout are on `MnemosyneOptions` itself.
 
 ```csharp
 services.AddMnemosyne(new MnemosyneOptions
@@ -173,6 +186,7 @@ services.AddMnemosyne(new MnemosyneOptions
 | `Ranking.FreshnessHalfLife` | 30 days | positive |
 | `CandidatePool` | 20 | 1 to 200 |
 | `MinIntentConfidence` | 0.7 | 0 to 1 |
+| `EvaluationTimeout` | 30 seconds | positive and at most about 49.7 days, or `Timeout.InfiniteTimeSpan` for none |
 
 The three weights must add up to 1, within 1e-9. `AddMnemosyne` checks the options when you register them and throws `ArgumentException` for an invalid value.
 

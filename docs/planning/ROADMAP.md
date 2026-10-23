@@ -10,7 +10,7 @@ Design: [roadmap design](../superpowers/specs/2026-10-21-roadmap-design.md), bui
 - [x] A procedure can be stored with intent, embedding, execution and feedback, scoped and with provenance
 - [x] For a new question, the selector returns ranked candidates with a score breakdown, filtered by scope
 - [x] Telemetry for capture, recall and erasure, erasure by scope or subject, and retention work against PostgreSQL + pgvector
-- [ ] CI is green, including the Native AOT gate and integration tests against pgvector
+- [x] CI is green, including the Native AOT gate and integration tests against pgvector
 - [ ] A preview is on NuGet via release-please, and the docsite is live with getting-started docs and a sample
 
 ### Phase 1.1: Repo scaffold, CI and release pipeline [status: complete]
@@ -53,13 +53,13 @@ Design: [roadmap design](../superpowers/specs/2026-10-21-roadmap-design.md), bui
 **HelpWanted:** no
 **Plan:** _to be written_
 
-### Phase 1.7: Docsite skeleton and first sample [status: active]
+### Phase 1.7: Docsite skeleton and first sample [status: complete]
 **Goal:** Docusaurus docsite deployed from CI, getting-started docs, and a store-and-recall sample.
 **Surface:** Docs
 **HelpWanted:** no
 **Plan:** _to be written_
 
-## Milestone 2: Evaluation [status: pending]
+## Milestone 2: Evaluation [status: active]
 **Goal:** Answer "did it work?" without the caller hand-filling feedback, so the success-rate term in ranking is real (handover phase 3).
 **Definition of Done:**
 - [ ] Runs are scored by a pluggable evaluator, with explicit feedback overriding it
@@ -67,7 +67,7 @@ Design: [roadmap design](../superpowers/specs/2026-10-21-roadmap-design.md), bui
 - [ ] Success rate in ranking comes from evaluated executions
 - [ ] Docs and a sample cover evaluation
 
-### Phase 2.1: Evaluator contract and feedback API [status: pending]
+### Phase 2.1: Evaluator contract and feedback API [status: active]
 **Goal:** `IReasonletEvaluator` and an explicit feedback API that takes precedence over automatic scoring.
 **Surface:** Backend
 **HelpWanted:** no

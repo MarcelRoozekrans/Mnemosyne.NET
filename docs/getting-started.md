@@ -95,9 +95,9 @@ Three registrations make up Mnemosyne:
 - the default `IReasonletSelector`, built from `MnemosyneOptions.Ranking`, unless you registered your own;
 - `TimeProvider.System`, unless you registered your own clock.
 
-It doesn't register a store or an embedding generator. If the container lacks an `IReasonletStore` or an `IEmbeddingGenerator<string, Embedding<float>>`, the first resolve of `IReasonletMemory` throws `InvalidOperationException`. An `IIntentExtractor` is optional: register one and the facade uses it.
+It doesn't register a store or an embedding generator. If the container lacks an `IReasonletStore` or an `IEmbeddingGenerator<string, Embedding<float>>`, the first resolve of `IReasonletMemory` throws `InvalidOperationException`. An `IIntentExtractor` and an `IReasonletEvaluator` are optional: register one and the facade uses it.
 
-**Register everything the facade uses as a singleton:** the store, the embedding generator, the intent extractor and any selector of your own. The facade resolves them once, for the life of the container. A scoped registration fails under scope validation, which ASP.NET Core turns on in Development, and a transient one is captured for good anyway.
+**Register everything the facade uses as a singleton:** the store, the embedding generator, the intent extractor, the evaluator and any selector of your own. The facade resolves them once, for the life of the container. A scoped registration fails under scope validation, which ASP.NET Core turns on in Development, and a transient one is captured for good anyway.
 
 Both registrations take their options as an object, not a configure delegate, because the members are init-only, and `Dimensions` is `required`. Both check the options when you register: `AddMnemosyne` throws `ArgumentException` for an invalid value, and `AddMnemosynePostgreSql` throws `ArgumentOutOfRangeException`. [PostgreSQL store](guides/postgresql.md#options) and [Ranking](concepts/ranking.md#settings) list the options.
 
@@ -197,13 +197,19 @@ if (recalled.Value is [var best, ..])
 {
     // The agent runs best.Reasonlet.Graph in its own way, then reports the outcome.
     var outcome = new ReasonletOutcome(Success: true, Duration: TimeSpan.FromSeconds(3), Score: null);
-    var recorded = await memory.RecordExecutionAsync(scope, best.Reasonlet.Id, outcome, provenance, ct);
+    var run = new ReasonletRun { Scope = scope, Id = best.Reasonlet.Id, Outcome = outcome, Provenance = provenance };
+    var recorded = await memory.RecordExecutionAsync(run, ct);
     if (recorded.IsFailure)
     {
         throw new InvalidOperationException($"{recorded.Error.Code}: {recorded.Error.Message}");
     }
+
+    // No evaluator is registered, so the agent's own verdict counts: Source is Agent.
+    Console.WriteLine($"Recorded run {recorded.Value.Execution}: {recorded.Value.Source} says {recorded.Value.Success}");
 }
 ```
+
+The outcome is the agent's own view of the run. The result is a receipt: the run's execution id, which feedback needs, and the verdict that counted, its `Source` and `Success`. To have an `IReasonletEvaluator` judge the run instead, register one and set the run's `Question` and `Answer`. The answer goes to the evaluator and is never stored. A judge that is down or times out, or an answer that is blank or longer than 32,000 code points, doesn't fail the call: the agent's verdict counts, and the receipt's `Source` is `Agent`. When a person later says whether the run worked, record it with `RecordFeedbackAsync` and `Worked`, which overrides both.
 
 If the agent changed the procedure and the new one worked better, remember it with `ParentId` set to the recalled Reasonlet's id instead. That stores a new version, which [Versions and lineage](concepts/versions.md) describes.
 
@@ -213,7 +219,7 @@ If the agent changed the procedure and the new one worked better, remember it wi
 dotnet run
 ```
 
-The output shows the stored Reasonlet, then the match with its score. Its similarity depends on the model. Its success rate is 0.583, from one successful run smoothed toward a neutral 0.5, and its freshness is close to 1 because it ran moments ago.
+The output shows the stored Reasonlet, then the match with its score, then the recorded run with the verdict that counted, `Agent` here. Its similarity depends on the model. Its success rate is 0.583, from one successful run smoothed toward a neutral 0.5, and its freshness is close to 1 because it ran moments ago.
 
 Run it a second time and the remember stores another Reasonlet, so recall returns two matches: without a `ParentId`, every capture is a new one.
 

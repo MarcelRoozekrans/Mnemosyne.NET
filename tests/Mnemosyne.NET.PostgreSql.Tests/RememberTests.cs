@@ -295,7 +295,7 @@ public sealed class RememberTests(PgVectorFixture fixture) : IClassFixture<PgVec
 
         var remember = store.RememberAsync(Entries.Entry(scope, Entries.Graph("next"), p.Id), Ct).AsTask();
         await WaitForLockWaitAsync(holder);
-        var append = store.AppendExecutionAsync(scope, p.Id, new ReasonletOutcome(true, TimeSpan.Zero, null), Entries.Provenance(), Ct).AsTask();
+        var append = store.AppendExecutionAsync(scope, p.Id, new ReasonletOutcome(true, TimeSpan.Zero, null), Entries.Provenance(), null, Ct).AsTask();
         var appended = await Task.WhenAny(append, Task.Delay(TimeSpan.FromSeconds(10), Ct));
         var rememberWaited = !remember.IsCompleted;
         await transaction.CommitAsync(Ct);
@@ -462,6 +462,85 @@ public sealed class RememberTests(PgVectorFixture fixture) : IClassFixture<PgVec
 
         Assert.Equal(MnemosyneErrorCode.Validation, result.Error.Code);
         Assert.Equal("Intent: must not be blank", result.Error.Message);
+    }
+
+    [Fact]
+    public async Task AnEntryWhoseCaptureCarriesAnAnswerIsAValidationErrorAndStoresNothing()
+    {
+        var store = await MigratedStoreAsync();
+        var scope = PgVectorFixture.NewScope();
+        var entry = Entries.Entry(scope);
+        entry = entry with { Capture = entry.Capture with { Answer = "the answer" } };
+
+        var result = await store.RememberAsync(entry, Ct);
+
+        Assert.Equal(MnemosyneErrorCode.Validation, result.Error.Code);
+        Assert.Equal("Capture.Answer: must be null; an answer is never stored", result.Error.Message);
+        Assert.Equal(0L, await CountAsync("SELECT count(*) FROM mnemosyne.reasonlets WHERE scope = $1", scope.Value));
+    }
+
+    [Fact]
+    public async Task AnInvalidEvaluationIsAValidationErrorAndStoresNothing()
+    {
+        var store = await MigratedStoreAsync();
+        var scope = PgVectorFixture.NewScope();
+
+        var result = await store.RememberAsync(Entries.Entry(scope) with { Evaluation = new ReasonletEvaluation(true, 1.5, "judge") }, Ct);
+
+        Assert.Equal(MnemosyneErrorCode.Validation, result.Error.Code);
+        Assert.Equal("Evaluation.Score: must be a finite number between 0 and 1", result.Error.Message);
+        Assert.Equal(0L, await CountAsync("SELECT count(*) FROM mnemosyne.reasonlets WHERE scope = $1", scope.Value));
+    }
+
+    [Fact]
+    public async Task AnEvaluationIsStoredWithTheFirstRunAndItsVerdictCounts()
+    {
+        var store = await MigratedStoreAsync();
+
+        // The agent said it worked and the judge said it did not: the judge's verdict counts.
+        var result = await store.RememberAsync(Entries.Entry(PgVectorFixture.NewScope()) with { Evaluation = new ReasonletEvaluation(false, 0.1, "judge") }, Ct);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal((ReasonletVerdictSource.Evaluator, false), (result.Value.Source, result.Value.Success));
+        Assert.Equal(
+            "t|f|0.1|judge|f",
+            await Entries.ScalarAsync<string>(
+                fixture.DataSource,
+                "SELECT concat_ws('|', agent_success, evaluated_success, evaluation_score, evaluator, success) FROM mnemosyne.reasonlet_executions WHERE id = $1",
+                result.Value.Execution.Value));
+        Assert.Equal(
+            "1|0|-",
+            await Entries.ScalarAsync<string>(
+                fixture.DataSource,
+                "SELECT concat_ws('|', runs, successes, coalesce(last_success_at::text, '-')) FROM mnemosyne.reasonlet_metrics WHERE reasonlet_id = $1",
+                result.Value.Id.Value));
+    }
+
+    [Fact]
+    public async Task EveryKindOfCaptureReturnsTheVerdictOfTheRunItRecords()
+    {
+        var store = await MigratedStoreAsync();
+        var scope = PgVectorFixture.NewScope();
+        var failed = new ReasonletOutcome(false, TimeSpan.Zero, null);
+
+        var created = (await store.RememberAsync(Entries.Entry(scope, outcome: failed), Ct)).Value;
+        var executed = (await store.RememberAsync(
+            Entries.Entry(scope, parentId: created.Id, outcome: failed) with { Evaluation = new ReasonletEvaluation(true, 0.8, "judge") }, Ct)).Value;
+        var versioned = (await store.RememberAsync(
+            Entries.Entry(scope, Entries.Graph("b"), created.Id) with { Evaluation = new ReasonletEvaluation(false, 0.2, "judge") }, Ct)).Value;
+        var unjudgedVersion = (await store.RememberAsync(Entries.Entry(scope, Entries.Graph("c"), created.Id), Ct)).Value;
+
+        Assert.Equal((ReasonletCaptureKind.NewReasonlet, ReasonletVerdictSource.Agent, false), (created.Kind, created.Source, created.Success));
+        Assert.Equal((ReasonletCaptureKind.ExecutionOnly, ReasonletVerdictSource.Evaluator, true), (executed.Kind, executed.Source, executed.Success));
+        Assert.Equal((ReasonletCaptureKind.NewVersion, ReasonletVerdictSource.Evaluator, false), (versioned.Kind, versioned.Source, versioned.Success));
+        Assert.Equal((ReasonletCaptureKind.NewVersion, ReasonletVerdictSource.Agent, true), (unjudgedVersion.Kind, unjudgedVersion.Source, unjudgedVersion.Success));
+        foreach (var receipt in new[] { created, executed, versioned, unjudgedVersion })
+        {
+            // The receipt's success is the stored effective success of the run it names.
+            Assert.Equal(
+                receipt.Success,
+                await Entries.ScalarAsync<bool>(fixture.DataSource, "SELECT success FROM mnemosyne.reasonlet_executions WHERE id = $1", receipt.Execution.Value));
+        }
     }
 
     [Fact]

@@ -22,7 +22,10 @@ public interface IReasonletStore
     /// </remarks>
     /// <param name="entry">The entry to store.</param>
     /// <param name="ct">The cancellation token.</param>
-    /// <returns>The receipt describing what was stored.</returns>
+    /// <returns>
+    /// The receipt describing what was stored, with the verdict source and effective success of the run it recorded, derived
+    /// as <see cref="AppendExecutionAsync"/> derives them, from <see cref="ReasonletStoreEntry.Evaluation"/>.
+    /// </returns>
     ValueTask<Result<ReasonletReceipt, MnemosyneError>> RememberAsync(ReasonletStoreEntry entry, CancellationToken ct);
 
     /// <summary>Gets a Reasonlet definition.</summary>
@@ -37,9 +40,13 @@ public interface IReasonletStore
     /// <returns>The definition.</returns>
     ValueTask<Result<ReasonletDefinition, MnemosyneError>> GetAsync(ReasonletScope scope, ReasonletId id, CancellationToken ct);
 
-    /// <summary>Appends an execution to a Reasonlet.</summary>
+    /// <summary>Appends an execution to a Reasonlet, with the evaluator's verdict on it when there is one.</summary>
     /// <remarks>
+    /// The store derives the run's verdict itself, so every store applies one rule: the effective success is a human's
+    /// <see cref="ReasonletFeedback.Worked"/> verdict, else the evaluator's <see cref="ReasonletEvaluation.Success"/>, else
+    /// the agent's <see cref="ReasonletOutcome.Success"/>, and the success counters count the effective success.
     /// Error codes: <see cref="MnemosyneErrorCode.Validation"/> when an argument breaks an invariant, such as a <c>default</c> scope or ID,
+    /// or an evaluation that fails <see cref="ReasonletEvaluation.Validate"/>,
     /// <see cref="MnemosyneErrorCode.NotFound"/> when the Reasonlet does not exist in the scope (including one that exists only in another scope),
     /// <see cref="MnemosyneErrorCode.Unavailable"/> when the backing store fails.
     /// </remarks>
@@ -47,12 +54,21 @@ public interface IReasonletStore
     /// <param name="id">The Reasonlet that was executed.</param>
     /// <param name="outcome">The outcome of the execution.</param>
     /// <param name="provenance">Where the execution came from.</param>
+    /// <param name="evaluation">The evaluator's verdict on the run, or null when no evaluator judged it.</param>
     /// <param name="ct">The cancellation token.</param>
-    /// <returns>The identifier of the appended execution.</returns>
-    ValueTask<Result<ExecutionId, MnemosyneError>> AppendExecutionAsync(ReasonletScope scope, ReasonletId id, ReasonletOutcome outcome, ReasonletProvenance provenance, CancellationToken ct);
+    /// <returns>
+    /// The receipt of the appended run: its execution identifier, the verdict source the store derived,
+    /// <see cref="ReasonletVerdictSource.Evaluator"/> when <paramref name="evaluation"/> is given and
+    /// <see cref="ReasonletVerdictSource.Agent"/> otherwise, and that verdict's success.
+    /// </returns>
+    ValueTask<Result<ReasonletRunReceipt, MnemosyneError>> AppendExecutionAsync(ReasonletScope scope, ReasonletId id, ReasonletOutcome outcome, ReasonletProvenance provenance, ReasonletEvaluation? evaluation, CancellationToken ct);
 
     /// <summary>Appends feedback to an execution.</summary>
     /// <remarks>
+    /// Feedback replaces the execution's earlier scores. When <see cref="ReasonletFeedback.Worked"/> is present it becomes the
+    /// run's verdict, overriding the evaluator's and the agent's, and the success counters follow the effective success.
+    /// Feedback with <c>Worked</c> null keeps an earlier verdict, so a verdict can be changed, by recording the other value,
+    /// but not retracted.
     /// Error codes: <see cref="MnemosyneErrorCode.Validation"/> when an argument breaks an invariant, such as a <c>default</c> scope or ID,
     /// <see cref="MnemosyneErrorCode.NotFound"/> when the execution does not exist in the scope (including one that exists only in another scope),
     /// <see cref="MnemosyneErrorCode.Unavailable"/> when the backing store fails.

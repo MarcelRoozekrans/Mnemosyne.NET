@@ -28,6 +28,9 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
     private const int DefaultEfSearch = 40;
     private const string MigrationResourcePrefix = "Mnemosyne.NET.PostgreSql.Migrations.";
 
+    /// <summary>The schema version this store needs, which the newest migration records in <c>mnemosyne.settings</c>.</summary>
+    private const int SchemaVersion = 2;
+
     /// <summary>The most rows one prune transaction deletes, so no batch holds its locks for long.</summary>
     internal const int PruneBatchSize = 1000;
 
@@ -240,9 +243,10 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
 
             if (string.Equals(parent.ContentHash, hash, StringComparison.Ordinal))
             {
-                var execution = await InsertExecutionAsync(executions, parent.Id, capture, transaction, ct).ConfigureAwait(false);
+                var execution = await InsertExecutionAsync(executions, parent.Id, capture, entry.Evaluation, transaction, ct).ConfigureAwait(false);
+                var (source, success) = Verdict(capture.Outcome, entry.Evaluation);
                 receipt = new ReasonletReceipt(
-                    new ReasonletId(parent.Id), parent.Version, execution, ReasonletCaptureKind.ExecutionOnly, (ReasonletStatus)parent.Status);
+                    new ReasonletId(parent.Id), parent.Version, execution, ReasonletCaptureKind.ExecutionOnly, (ReasonletStatus)parent.Status, source, success);
             }
             else
             {
@@ -344,13 +348,29 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
             ToArray(entry.Embedding),
             transaction,
             ct).ConfigureAwait(false);
-        var execution = await InsertExecutionAsync(executions, id.Value, capture, transaction, ct).ConfigureAwait(false);
-        return new ReasonletReceipt(id, version, execution, kind, ReasonletStatus.Active);
+        var execution = await InsertExecutionAsync(executions, id.Value, capture, entry.Evaluation, transaction, ct).ConfigureAwait(false);
+        var (source, success) = Verdict(capture.Outcome, entry.Evaluation);
+        return new ReasonletReceipt(id, version, execution, kind, ReasonletStatus.Active, source, success);
     }
 
-    /// <summary>Inserts the capture's execution of a Reasonlet this transaction holds or has just inserted, and counts it in the Reasonlet's metrics.</summary>
+    /// <summary>
+    /// Derives a new run's verdict source and effective success, the rule the schema's check enforces on the row: a new
+    /// run has no feedback yet, so the evaluator's verdict counts when there is one, and the agent's otherwise.
+    /// </summary>
+    internal static (ReasonletVerdictSource Source, bool Success) Verdict(ReasonletOutcome outcome, ReasonletEvaluation? evaluation) =>
+        evaluation is { } verdict ? (ReasonletVerdictSource.Evaluator, verdict.Success) : (ReasonletVerdictSource.Agent, outcome.Success);
+
+    /// <summary>
+    /// Inserts the capture's execution of a Reasonlet this transaction holds or has just inserted, with the evaluator's
+    /// verdict on it when there is one, and counts its effective success in the Reasonlet's metrics.
+    /// </summary>
     private static async Task<ExecutionId> InsertExecutionAsync(
-        ExecutionRepository executions, Guid reasonletId, ReasonletCapture capture, IAsyncDbTransaction transaction, CancellationToken ct)
+        ExecutionRepository executions,
+        Guid reasonletId,
+        ReasonletCapture capture,
+        ReasonletEvaluation? evaluation,
+        IAsyncDbTransaction transaction,
+        CancellationToken ct)
     {
         var id = ExecutionId.New();
         var outcome = capture.Outcome;
@@ -360,6 +380,9 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
             reasonletId,
             capture.Scope.Value,
             outcome.Success,
+            evaluation?.Success,
+            evaluation?.Score,
+            evaluation?.Evaluator,
             outcome.Duration.Ticks,
             outcome.Score,
             provenance.Source,
@@ -443,15 +466,23 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
     /// Reasonlet's metrics row, so it waits for any transaction that holds that row until commit: an execution-only
     /// remember of the same Reasonlet, another append to it, or an erase that is recounting it as a kept Reasonlet.
     /// It also waits for an erase that holds the Reasonlet itself, and a Reasonlet that erase deletes answers
-    /// <see cref="MnemosyneErrorCode.NotFound"/>.
+    /// <see cref="MnemosyneErrorCode.NotFound"/>. The run stores the agent's flag, and the evaluator's success, score
+    /// and name when <paramref name="evaluation"/> is given; its effective success is the evaluator's verdict when
+    /// there is one and the agent's otherwise, and the metrics count that. The <c>mnemosyne.execution.append</c> activity
+    /// carries <c>mnemosyne.verdict_source</c>: <c>evaluator</c> when <paramref name="evaluation"/> is given, else <c>agent</c>.
+    /// The receipt carries the same source and that verdict's success.
     /// </remarks>
     /// <exception cref="ArgumentNullException"><paramref name="provenance"/> is null.</exception>
-    public ValueTask<Result<ExecutionId, MnemosyneError>> AppendExecutionAsync(
-        ReasonletScope scope, ReasonletId id, ReasonletOutcome outcome, ReasonletProvenance provenance, CancellationToken ct) =>
-        StoreTelemetry.RunAsync("execution.append", _ => AppendExecutionOperationAsync(scope, id, outcome, provenance, ct));
+    public ValueTask<Result<ReasonletRunReceipt, MnemosyneError>> AppendExecutionAsync(
+        ReasonletScope scope, ReasonletId id, ReasonletOutcome outcome, ReasonletProvenance provenance, ReasonletEvaluation? evaluation, CancellationToken ct) =>
+        StoreTelemetry.RunAsync("execution.append", activity =>
+        {
+            StoreTelemetry.VerdictSource(activity, Verdict(outcome, evaluation).Source);
+            return AppendExecutionOperationAsync(scope, id, outcome, provenance, evaluation, ct);
+        });
 
-    private async ValueTask<Result<ExecutionId, MnemosyneError>> AppendExecutionOperationAsync(
-        ReasonletScope scope, ReasonletId id, ReasonletOutcome outcome, ReasonletProvenance provenance, CancellationToken ct)
+    private async ValueTask<Result<ReasonletRunReceipt, MnemosyneError>> AppendExecutionOperationAsync(
+        ReasonletScope scope, ReasonletId id, ReasonletOutcome outcome, ReasonletProvenance provenance, ReasonletEvaluation? evaluation, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(provenance);
         var migrated = await EnsureMigratedAsync(ct).ConfigureAwait(false);
@@ -460,17 +491,21 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
             return migrated.Error;
         }
 
-        var invalid = ValidateScope(scope) ?? ValidateId(id) ?? ValidateNested(outcome.Validate(), nameof(outcome)) ?? ValidateNested(provenance.Validate(), nameof(provenance));
+        var invalid = ValidateScope(scope)
+            ?? ValidateId(id)
+            ?? ValidateNested(outcome.Validate(), nameof(outcome))
+            ?? ValidateNested(provenance.Validate(), nameof(provenance))
+            ?? (evaluation is { } verdict ? ValidateNested(verdict.Validate(), nameof(evaluation)) : null);
         if (invalid is { } error)
         {
             return error;
         }
 
-        return await GuardAsync(AppendExecutionCoreAsync(scope, id, outcome, provenance, ct)).ConfigureAwait(false);
+        return await GuardAsync(AppendExecutionCoreAsync(scope, id, outcome, provenance, evaluation, ct)).ConfigureAwait(false);
     }
 
-    private async Task<Result<ExecutionId, MnemosyneError>> AppendExecutionCoreAsync(
-        ReasonletScope scope, ReasonletId id, ReasonletOutcome outcome, ReasonletProvenance provenance, CancellationToken ct)
+    private async Task<Result<ReasonletRunReceipt, MnemosyneError>> AppendExecutionCoreAsync(
+        ReasonletScope scope, ReasonletId id, ReasonletOutcome outcome, ReasonletProvenance provenance, ReasonletEvaluation? evaluation, CancellationToken ct)
     {
         var executionId = ExecutionId.New();
         await using var connection = (await _dataSource.OpenConnectionAsync(ct).ConfigureAwait(false)).AsAsync();
@@ -479,6 +514,9 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
             id.Value,
             scope.Value,
             outcome.Success,
+            evaluation?.Success,
+            evaluation?.Score,
+            evaluation?.Evaluator,
             outcome.Duration.Ticks,
             outcome.Score,
             provenance.Source,
@@ -491,22 +529,64 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
             return new MnemosyneError(MnemosyneErrorCode.NotFound, "The Reasonlet does not exist in the scope.");
         }
 
-        return executionId;
+        var (source, success) = Verdict(outcome, evaluation);
+        return new ReasonletRunReceipt(executionId, source, success);
     }
 
     /// <inheritdoc />
     /// <remarks>
-    /// One scoped upsert keyed on the execution, so feedback recorded again replaces the earlier feedback. An
-    /// execution that is missing or in another scope answers <see cref="MnemosyneErrorCode.NotFound"/>. An execution
-    /// that a concurrent erase deletes while the upsert waits for it answers <see cref="MnemosyneErrorCode.Conflict"/>:
-    /// the foreign-key check finds the execution gone.
+    /// <para>
+    /// Feedback replaces the run's earlier scores. A <see cref="ReasonletFeedback.Worked"/> verdict becomes the run's
+    /// verdict and overrides the evaluator's and the agent's; feedback with <c>Worked</c> null keeps the stored verdict,
+    /// so a verdict can be changed, by recording the other value, but not retracted. When the run's effective success
+    /// flips, the Reasonlet's counters follow in the same transaction: <c>successes</c> moves by one, a raised success
+    /// moves <c>last_success_at</c> forward to the run's time when that is later, and a lost success that held
+    /// <c>last_success_at</c> recomputes it from the remaining successes, or clears it when none remains. Pruned runs
+    /// stay in <c>successes</c>, so <c>last_success_at</c> can be null while <c>successes</c> is above zero. Recorded feedback
+    /// that gives a <c>Worked</c> verdict tags its <c>mnemosyne.feedback.append</c> activity with
+    /// <c>mnemosyne.verdict_source</c> <c>feedback</c>, whether or not it flips the effective success, so a human override
+    /// that agrees with the judge shows too; feedback with <c>Worked</c> null, or that fails, is not tagged.
+    /// </para>
+    /// <para>
+    /// One READ COMMITTED transaction of separate statements, so each step sees what committed while an earlier one
+    /// waited. It reads the execution's Reasonlet, then locks the Reasonlet <c>FOR KEY SHARE</c>, then the execution
+    /// <c>FOR UPDATE</c>, then the Reasonlet's metrics row <c>FOR UPDATE</c>, and only then writes the feedback, the
+    /// verdict and the counters. An execution that is missing or in another scope answers
+    /// <see cref="MnemosyneErrorCode.NotFound"/>, and so does one that a concurrent erase or prune deletes, with its
+    /// Reasonlet or alone, while the feedback waits for it.
+    /// </para>
+    /// <para>
+    /// Every writer takes its locks in the order Reasonlets, then executions, then metrics rows, and feedback takes one
+    /// of each, in that order, so it cannot close a cycle of waits:
+    /// </para>
+    /// <list type="bullet">
+    /// <item><description>
+    /// While it waits for the Reasonlet it holds nothing. Its <c>FOR KEY SHARE</c> conflicts only with the
+    /// <c>FOR UPDATE</c> of an erase or a prune batch, which delete the Reasonlet; appends, remembers and other feedback
+    /// pass it.
+    /// </description></item>
+    /// <item><description>
+    /// While it waits for the execution it holds only that key-share lock. The execution's holder is other feedback on
+    /// the same run, which holds the same lock; an erase, which locked its Reasonlets first and so does not hold this
+    /// one, and takes metrics rows only after all its executions; or a prune batch of old runs, which holds only
+    /// executions. A prune batch of Reasonlets locks its Reasonlets <c>SKIP LOCKED</c>, so it never holds one that
+    /// feedback holds, nor its executions.
+    /// </description></item>
+    /// <item><description>
+    /// While it waits for the metrics row it holds the Reasonlet and the execution. The row's holder is an append, an
+    /// execution-only remember or other feedback, each of which takes the row last and then waits for no other lock;
+    /// or a subject erase, which takes metrics rows only once it holds every execution it removes, so it never needs
+    /// this one: had it needed it, it would have waited for the feedback before it reached the metrics row. A prune
+    /// batch of Reasonlets cannot hold the row, because it skipped the Reasonlet the feedback holds.
+    /// </description></item>
+    /// </list>
     /// </remarks>
     public ValueTask<UnitResult<MnemosyneError>> AppendFeedbackAsync(
         ReasonletScope scope, ExecutionId execution, ReasonletFeedback feedback, CancellationToken ct) =>
-        StoreTelemetry.RunAsync("feedback.append", _ => AppendFeedbackOperationAsync(scope, execution, feedback, ct));
+        StoreTelemetry.RunAsync("feedback.append", activity => AppendFeedbackOperationAsync(scope, execution, feedback, activity, ct));
 
     private async ValueTask<UnitResult<MnemosyneError>> AppendFeedbackOperationAsync(
-        ReasonletScope scope, ExecutionId execution, ReasonletFeedback feedback, CancellationToken ct)
+        ReasonletScope scope, ExecutionId execution, ReasonletFeedback feedback, Activity? activity, CancellationToken ct)
     {
         var migrated = await EnsureMigratedAsync(ct).ConfigureAwait(false);
         if (migrated.IsFailure)
@@ -527,20 +607,49 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
         }
 
         var recorded = await GuardAsync(AppendFeedbackCoreAsync(scope, execution, feedback, ct)).ConfigureAwait(false);
-        return recorded.IsFailure ? recorded.Error : UnitResult<MnemosyneError>.Success();
+        if (recorded.IsFailure)
+        {
+            return recorded.Error;
+        }
+
+        if (feedback.Worked is not null)
+        {
+            StoreTelemetry.VerdictSource(activity, ReasonletVerdictSource.Feedback);
+        }
+
+        return UnitResult<MnemosyneError>.Success();
     }
 
     private async Task<Result<bool, MnemosyneError>> AppendFeedbackCoreAsync(
         ReasonletScope scope, ExecutionId execution, ReasonletFeedback feedback, CancellationToken ct)
     {
         await using var connection = (await _dataSource.OpenConnectionAsync(ct).ConfigureAwait(false)).AsAsync();
-        var written = await new ExecutionRepository(connection).UpsertFeedbackAsync(
-            execution.Value, scope.Value, feedback.Utility, feedback.Correctness, feedback.Reusability, ct).ConfigureAwait(false);
-        if (written == 0)
+
+        // Named rather than left to a default: each statement must see what committed while the one before it waited.
+        await using var transaction = await connection.BeginTransactionAsync(IsolationLevel.ReadCommitted, ct).ConfigureAwait(false);
+        var executions = new ExecutionRepository(connection);
+        var id = execution.Value;
+        var reasonletId = await executions.GetReasonletOfAsync(id, scope.Value, transaction, ct).ConfigureAwait(false);
+        if (reasonletId is not { } reasonlet
+            || await executions.LockReasonletForFeedbackAsync(reasonlet, scope.Value, transaction, ct).ConfigureAwait(false) == 0
+            || await executions.LockExecutionForFeedbackAsync(id, scope.Value, reasonlet, transaction, ct).ConfigureAwait(false) is not { } before)
         {
             return new MnemosyneError(MnemosyneErrorCode.NotFound, "The execution does not exist in the scope.");
         }
 
+        await executions.LockMetricsForFeedbackAsync(reasonlet, transaction, ct).ConfigureAwait(false);
+
+        // The execution is held, so the statement updates its row and answers the new effective success.
+        var after = (await executions.RecordFeedbackAsync(
+            id, scope.Value, feedback.Utility, feedback.Correctness, feedback.Reusability, feedback.Worked, transaction, ct).ConfigureAwait(false))!.Value;
+        if (after != before)
+        {
+            await (after
+                ? executions.RaiseSuccessAsync(id, reasonlet, transaction, ct)
+                : executions.LoseSuccessAsync(id, reasonlet, transaction, ct)).ConfigureAwait(false);
+        }
+
+        await transaction.CommitAsync(ct).ConfigureAwait(false);
         return true;
     }
 
@@ -715,7 +824,9 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
     /// remembered while it runs is not erased by it. The Reasonlets are locked deepest first, the order a remember's
     /// path locks take, so an erase waits behind a remember rather than deadlocking with it. Then come the executions
     /// it removes, then the metrics rows it subtracts from, so two overlapping erases take their rows in one order and
-    /// complete. A concurrent prune never waits for a Reasonlet lock, so it cannot deadlock with an erase. A deadlock
+    /// complete. Feedback takes the same order, its run's Reasonlet <c>FOR KEY SHARE</c>, the run, then the metrics
+    /// row, so an erase and feedback on the same runs both complete, and the erase subtracts each removed run's
+    /// effective success, the verdict that counted for it. A concurrent prune never waits for a Reasonlet lock, so it cannot deadlock with an erase. A deadlock
     /// that still happens answers <see cref="MnemosyneErrorCode.Conflict"/>: with a remember that raced the lock walk,
     /// with a hand-written transaction, or with another erase when a third erase cut a lineage between the moment one
     /// of them read its depths and the moment it took its locks, so that the two order the rows they share by
@@ -793,8 +904,11 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
     /// The prune reads the database's clock once and measures each window back from it, so a long prune has a fixed
     /// target and ends. Executions recorded before <c>now - </c><see cref="ReasonletRetention.ExecutionsOlderThan"/> are
     /// deleted, with their feedback, in batches of at most 1,000, each its own READ COMMITTED transaction, until a
-    /// batch deletes nothing; the Reasonlets' counters keep them, because a pruned run still happened. A batch locks
-    /// its executions in id order, as an erase does, and takes no metrics lock, so it never waits for an append.
+    /// batch deletes nothing; the Reasonlets' counters keep them, with the verdict that counted for each, because a
+    /// pruned run still happened. A batch locks its executions in id order, as an erase does, and takes no metrics
+    /// lock, so it never waits for an append. It can wait for feedback that holds one of its runs, but that feedback
+    /// waits, if at all, only for a metrics row, which the batch never holds, so the batch then deletes the run with
+    /// the feedback's verdict counted.
     /// </para>
     /// <para>
     /// Then Reasonlets that are idle against <c>now - </c><see cref="ReasonletRetention.ReasonletsUnusedFor"/> are
@@ -959,9 +1073,10 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
     /// <see cref="MnemosyneErrorCode.NotFound"/>.
     /// </description></item>
     /// <item><description>
-    /// Feedback takes <c>FOR KEY SHARE</c> on its execution only when it inserts a new feedback row, which the batch
-    /// cannot see; replacing feedback holds the existing row and waits for nothing. So feedback can wait for the batch
-    /// at an execution, but the batch waits for no lock that feedback holds while it waits.
+    /// Feedback holds its Reasonlet <c>FOR KEY SHARE</c> from its first lock, before its execution and metrics row, so
+    /// a batch that comes later skips the Reasonlet and never locks that execution or metrics row. Feedback that comes
+    /// later waits at the Reasonlet the batch holds, holding nothing, and then answers
+    /// <see cref="MnemosyneErrorCode.NotFound"/>.
     /// </description></item>
     /// <item><description>
     /// A remember waits only for Reasonlets, and holds Reasonlets on its path and the rows it inserts. The batch skips
@@ -1173,9 +1288,11 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
     }
 
     /// <summary>
-    /// Succeeds once the schema is migrated with this store's dimension, and caches that. Answers
-    /// <see cref="MnemosyneErrorCode.Unavailable"/> before <see cref="MigrateAsync"/> has run, and
-    /// <see cref="MnemosyneErrorCode.Validation"/> when the recorded dimension differs from the configured one.
+    /// Succeeds once the schema is migrated to <see cref="SchemaVersion"/> with this store's dimension, and caches
+    /// that. Answers <see cref="MnemosyneErrorCode.Unavailable"/> before <see cref="MigrateAsync"/> has run, and on a
+    /// database that an older release migrated, which needs <see cref="MigrateAsync"/> again: a statement would
+    /// otherwise fail on a missing column. Answers <see cref="MnemosyneErrorCode.Validation"/> when the recorded
+    /// dimension differs from the configured one.
     /// </summary>
     internal async ValueTask<UnitResult<MnemosyneError>> EnsureMigratedAsync(CancellationToken ct)
     {
@@ -1204,7 +1321,7 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
         var recorded = await settings.SettingsTableExistsAsync(ct).ConfigureAwait(false)
             ? await settings.GetDimensionsAsync(ct).ConfigureAwait(false)
             : null;
-        if (recorded is not { } dimensions)
+        if (recorded is not { } dimensions || await settings.GetSchemaVersionAsync(ct).ConfigureAwait(false) is not >= SchemaVersion)
         {
             return new MnemosyneError(MnemosyneErrorCode.Unavailable, "schema not migrated: call MigrateAsync");
         }

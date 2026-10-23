@@ -84,6 +84,14 @@ Call `MigrateAsync` once at startup. The store never migrates on its own, and ev
 - **It builds the index once.** The first run builds the HNSW index with `HnswM` and `HnswEfConstruction` and records them. A later run with different values fails with a `Validation` error naming both, because the options only apply when the index is built. To change them, rebuild the index yourself.
 - **The schema is fixed.** All tables live in the `mnemosyne` schema, which isn't configurable, and every statement names it in full.
 
+### Upgrading
+
+A new release can bring a new migration, which `MigrateAsync` applies. Until it has run, the new release's store answers `Unavailable`, with "schema not migrated: call MigrateAsync", rather than failing on a missing column.
+
+**Stop every instance of the old release before you migrate.** An old release doesn't know the new schema. Migration `0002_evaluation`, which stores each run's verdict, renames the runs' `success` column to `agent_success` and adds the evaluator's verdict, the human's verdict and the effective success. An old instance still running once it has applied fails loudly on its next run record, rather than writing a run without its verdict.
+
+Each migration applies in one transaction, whole or not at all. `0002_evaluation` rewrites every row of `mnemosyne.reasonlet_executions` and holds that table under an exclusive lock while it does, so on a large table, plan for the pause.
+
 ## Connections and privileges
 
 ### `search_path`
@@ -124,6 +132,8 @@ Like the rest of Mnemosyne, the store answers expected failures with a result an
 |---|---|---|
 | `Conflict` | `40001` serialization failure, `40P01` deadlock, `23503` foreign-key violation from a concurrent erase, `55P03` lock not available | Retry the operation. |
 | `Unavailable` | `08` connection errors, `53` insufficient resources, `57P` operator intervention, `57014` query cancelled or statement timeout, `25006` read-only transaction such as on a standby, or no SQLSTATE at all | The server can't serve now. Retry later. |
+
+Feedback on a run that a concurrent erase or prune removes while the feedback waits for it answers `NotFound`, not `Conflict`, the same as feedback on a run that never existed. The run is gone, so a retry can't succeed.
 
 Any other database error is a bug, and the exception propagates.
 

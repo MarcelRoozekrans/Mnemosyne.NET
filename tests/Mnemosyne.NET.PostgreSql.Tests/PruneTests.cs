@@ -609,7 +609,7 @@ public sealed class PruneTests(PgVectorFixture fixture) : IClassFixture<PgVector
         await using (var connection = (await fixture.DataSource.OpenConnectionAsync(Ct)).AsAsync())
         {
             Assert.Equal(1, await new Repositories.ExecutionRepository(connection).InsertAsync(
-                Guid.CreateVersion7(DateTimeOffset.UtcNow.AddSeconds(1)), r.Id.Value, scope.Value, true, 10, null, "test", null, SubjectA, null, Ct));
+                Guid.CreateVersion7(DateTimeOffset.UtcNow.AddSeconds(1)), r.Id.Value, scope.Value, true, null, null, null, 10, null, "test", null, SubjectA, null, Ct));
         }
 
         await BackdateScopeAsync(fixture.DataSource, scope);
@@ -792,9 +792,9 @@ public sealed class PruneTests(PgVectorFixture fixture) : IClassFixture<PgVector
     private static async Task<ExecutionId> AppendAsync(
         ReasonletPostgreSqlStore store, ReasonletScope scope, ReasonletId id, string subject, ReasonletOutcome? outcome = null)
     {
-        var result = await store.AppendExecutionAsync(scope, id, outcome ?? Success, new ReasonletProvenance { Source = "test", SubjectId = subject }, Ct);
+        var result = await store.AppendExecutionAsync(scope, id, outcome ?? Success, new ReasonletProvenance { Source = "test", SubjectId = subject }, null, Ct);
         Assert.True(result.IsSuccess);
-        return result.Value;
+        return result.Value.Execution;
     }
 
     private static Task BackdateAsync(NpgsqlDataSource dataSource, params ExecutionId[] executions) => Entries.ExecuteAsync(
@@ -857,8 +857,8 @@ public sealed class PruneTests(PgVectorFixture fixture) : IClassFixture<PgVector
         await Entries.ExecuteAsync(
             dataSource,
             """
-            INSERT INTO mnemosyne.reasonlet_executions (id, reasonlet_id, scope, executed_at, success, duration_ticks, source)
-            SELECT gen_random_uuid(), id, scope, now() - interval '10 days', true, 0, 's' FROM mnemosyne.reasonlets WHERE id = ANY($1)
+            INSERT INTO mnemosyne.reasonlet_executions (id, reasonlet_id, scope, executed_at, agent_success, success, duration_ticks, source)
+            SELECT gen_random_uuid(), id, scope, now() - interval '10 days', true, true, 0, 's' FROM mnemosyne.reasonlets WHERE id = ANY($1)
             """,
             ids);
         await Entries.ExecuteAsync(

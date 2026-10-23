@@ -11,7 +11,7 @@ namespace Mnemosyne.NET.PostgreSql;
 /// them, under the names on <see cref="MnemosyneTelemetry"/>.
 /// </summary>
 /// <remarks>
-/// No signal carries user data: no scope, subject, question, intent, name, graph, tags or run id. Ids and versions are
+/// No signal carries user data: no scope, subject, question, answer, intent, name, graph, tags or run id. Ids and versions are
 /// opaque, so they may appear. With no listener attached an activity is never created, and every tag is set through a
 /// null-conditional call, so nothing is formatted or boxed for it; the instruments take their tags as a
 /// <see cref="TagList"/>, which lives on the stack.
@@ -25,6 +25,7 @@ internal static class StoreTelemetry
     private const string ExceptionEvent = "exception";
     private const string ExceptionTypeTag = "exception.type";
     private const string DbStatusCodeTag = "db.response.status_code";
+    private const string VerdictSourceTag = "mnemosyne.verdict_source";
     private const string Ok = "ok";
     private const string ExceptionOutcome = "exception";
 
@@ -151,15 +152,37 @@ internal static class StoreTelemetry
         _ => kind.ToString(),
     };
 
-    /// <summary>Tags a successful remember with what it stored, and counts it by capture kind.</summary>
+    /// <summary>The name a verdict source is tagged with, without formatting a defined one.</summary>
+    internal static string VerdictSourceName(ReasonletVerdictSource source) => source switch
+    {
+        ReasonletVerdictSource.Agent => "agent",
+        ReasonletVerdictSource.Evaluator => "evaluator",
+        ReasonletVerdictSource.Feedback => "feedback",
+        _ => source.ToString(),
+    };
+
+    /// <summary>
+    /// Tags a successful remember with what it stored, the verdict source of the run it recorded included, and counts it
+    /// by capture kind.
+    /// </summary>
     internal static void Remember(Activity? activity, ReasonletReceipt receipt)
     {
         var kind = CaptureKindName(receipt.Kind);
         activity?.SetTag("mnemosyne.capture_kind", kind);
+        VerdictSource(activity, receipt.Source);
         activity?.SetTag("mnemosyne.reasonlet.id", receipt.Id.Value.ToString());
         activity?.SetTag("mnemosyne.reasonlet.version", receipt.Version);
         Remembered.Add(1, new TagList { { "mnemosyne.capture_kind", kind } });
     }
+
+    /// <summary>
+    /// Tags an operation with the source of a run's verdict as <c>mnemosyne.verdict_source</c>: <c>agent</c>,
+    /// <c>evaluator</c> or <c>feedback</c>. An execution append tags it before it runs, so a failed append has it too; a
+    /// remember tags its recorded run's on success; feedback that gave a <c>Worked</c> verdict tags <c>feedback</c>,
+    /// whether or not it flipped the run's effective success.
+    /// </summary>
+    internal static void VerdictSource(Activity? activity, ReasonletVerdictSource source) =>
+        activity?.SetTag(VerdictSourceTag, VerdictSourceName(source));
 
     /// <summary>Tags a search with its limit, before it runs, so a failed search has it too.</summary>
     internal static void SearchLimit(Activity? activity, int limit) => activity?.SetTag("mnemosyne.search.limit", limit);

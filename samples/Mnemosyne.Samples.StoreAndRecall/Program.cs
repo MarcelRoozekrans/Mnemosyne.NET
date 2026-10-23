@@ -211,9 +211,15 @@ static async Task<int> Walkthrough(IReasonletMemory memory, ReasonletScope scope
 static async Task RecordRuns(
     IReasonletMemory memory, ReasonletScope scope, ReasonletId id, ReasonletOutcome outcome, int count, ReasonletProvenance provenance, CancellationToken ct)
 {
+    var run = new ReasonletRun { Scope = scope, Id = id, Outcome = outcome, Provenance = provenance };
     for (var i = 0; i < count; i++)
     {
-        Require(await memory.RecordExecutionAsync(scope, id, outcome, provenance, ct), "Record an execution");
+        // No evaluator is registered, so the agent's own outcome counts, and the receipt says so.
+        var receipt = Require(await memory.RecordExecutionAsync(run, ct), "Record an execution");
+        if (receipt.Source != ReasonletVerdictSource.Agent || receipt.Success != outcome.Success)
+        {
+            throw new SampleFailure($"Record an execution returned the verdict {receipt.Source} {receipt.Success}, not the agent's.");
+        }
     }
 }
 

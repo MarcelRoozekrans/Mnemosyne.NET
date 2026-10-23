@@ -1,7 +1,9 @@
 using System.Diagnostics;
+using Microsoft.Extensions.AI;
 using Mnemosyne.NET.Abstractions;
 using Npgsql;
 using Xunit;
+using ZeroAlloc.Results;
 
 namespace Mnemosyne.NET.PostgreSql.Tests;
 
@@ -66,6 +68,37 @@ public sealed class TelemetryTests(PgVectorFixture fixture) : IClassFixture<PgVe
     }
 
     [Fact]
+    public async Task RememberTagsTheVerdictSourceOfTheRunItRecords()
+    {
+        var store = await MigratedStoreAsync();
+        var scope = PgVectorFixture.NewScope();
+        var evaluation = new ReasonletEvaluation(true, 0.5, "judge");
+        using var capture = new TelemetryCapture();
+
+        var created = (await store.RememberAsync(Entries.Entry(scope) with { Evaluation = evaluation }, Ct)).Value;
+        var executed = (await store.RememberAsync(Entries.Entry(scope, parentId: created.Id) with { Evaluation = evaluation }, Ct)).Value;
+        var versioned = (await store.RememberAsync(Entries.Entry(scope, Entries.Graph("b"), created.Id) with { Evaluation = evaluation }, Ct)).Value;
+
+        var activities = capture.Activities;
+        Assert.Equal(3, activities.Count);
+        AssertRemembered(activities[0], "NewReasonlet", created, "evaluator");
+        AssertRemembered(activities[1], "ExecutionOnly", executed, "evaluator");
+        AssertRemembered(activities[2], "NewVersion", versioned, "evaluator");
+    }
+
+    [Fact]
+    public async Task AFailedRememberHasNoVerdictSource()
+    {
+        var store = await MigratedStoreAsync();
+        using var capture = new TelemetryCapture();
+
+        var missing = await store.RememberAsync(Entries.Entry(PgVectorFixture.NewScope(), parentId: ReasonletId.New()), Ct);
+
+        Assert.Equal(MnemosyneErrorCode.NotFound, missing.Error.Code);
+        Assert.Null(Single(capture, "mnemosyne.remember").GetTagItem("mnemosyne.verdict_source"));
+    }
+
+    [Fact]
     public async Task AFailedRememberCarriesTheErrorAndNoReceipt()
     {
         var store = await MigratedStoreAsync();
@@ -118,10 +151,66 @@ public sealed class TelemetryTests(PgVectorFixture fixture) : IClassFixture<PgVe
         var receipt = (await store.RememberAsync(Entries.Entry(scope), Ct)).Value;
         using var capture = new TelemetryCapture();
 
-        Assert.True((await store.AppendExecutionAsync(scope, receipt.Id, Success, Entries.Provenance(), Ct)).IsSuccess);
+        Assert.True((await store.AppendExecutionAsync(scope, receipt.Id, Success, Entries.Provenance(), null, Ct)).IsSuccess);
 
-        Assert.Empty(AllTags(Single(capture, "mnemosyne.execution.append")));
+        Assert.Equal([new("mnemosyne.verdict_source", "agent")], AllTags(Single(capture, "mnemosyne.execution.append")));
         AssertOperation(capture, "execution.append", "ok");
+    }
+
+    [Fact]
+    public async Task AJudgedAppendHasVerdictSourceEvaluator()
+    {
+        var store = await MigratedStoreAsync();
+        var scope = PgVectorFixture.NewScope();
+        var receipt = (await store.RememberAsync(Entries.Entry(scope), Ct)).Value;
+        using var capture = new TelemetryCapture();
+
+        var evaluation = new ReasonletEvaluation(false, 0.2, "judge");
+        Assert.True((await store.AppendExecutionAsync(scope, receipt.Id, Success, Entries.Provenance(), evaluation, Ct)).IsSuccess);
+
+        Assert.Equal([new("mnemosyne.verdict_source", "evaluator")], AllTags(Single(capture, "mnemosyne.execution.append")));
+        AssertOperation(capture, "execution.append", "ok");
+    }
+
+    [Fact]
+    public async Task AFailedAppendStillHasItsVerdictSource()
+    {
+        var store = await MigratedStoreAsync();
+        using var capture = new TelemetryCapture();
+
+        var missing = await store.AppendExecutionAsync(PgVectorFixture.NewScope(), ReasonletId.New(), Success, Entries.Provenance(), null, Ct);
+
+        Assert.Equal(MnemosyneErrorCode.NotFound, missing.Error.Code);
+        Assert.Equal(
+            [new("error.type", "NotFound"), new("mnemosyne.verdict_source", "agent")],
+            AllTags(Single(capture, "mnemosyne.execution.append")));
+    }
+
+    [Fact]
+    public async Task FeedbackThatGivesAVerdictHasVerdictSourceFeedback()
+    {
+        var store = await MigratedStoreAsync();
+        var scope = PgVectorFixture.NewScope();
+        var receipt = (await store.RememberAsync(Entries.Entry(scope), Ct)).Value;
+        using var capture = new TelemetryCapture();
+
+        // The run succeeded. Agreeing with it, overruling it and repeating the overrule each give a verdict, so each is
+        // tagged whether or not it flips the effective success; a scores-only update and a failed call give none.
+        Assert.True((await store.AppendFeedbackAsync(scope, receipt.Execution, Feedback with { Worked = true }, Ct)).IsSuccess);
+        Assert.True((await store.AppendFeedbackAsync(scope, receipt.Execution, Feedback with { Worked = false }, Ct)).IsSuccess);
+        Assert.True((await store.AppendFeedbackAsync(scope, receipt.Execution, Feedback with { Worked = false }, Ct)).IsSuccess);
+        Assert.True((await store.AppendFeedbackAsync(scope, receipt.Execution, Feedback, Ct)).IsSuccess);
+        var missing = await store.AppendFeedbackAsync(scope, ExecutionId.New(), Feedback with { Worked = true }, Ct);
+
+        Assert.Equal(MnemosyneErrorCode.NotFound, missing.Error.Code);
+        var activities = capture.Activities;
+        Assert.Equal(5, activities.Count);
+        KeyValuePair<string, object?>[] tagged = [new("mnemosyne.verdict_source", "feedback")];
+        Assert.Equal(tagged, AllTags(activities[0]));
+        Assert.Equal(tagged, AllTags(activities[1]));
+        Assert.Equal(tagged, AllTags(activities[2]));
+        Assert.Empty(AllTags(activities[3]));
+        Assert.Equal([new("error.type", "NotFound")], AllTags(activities[4]));
     }
 
     [Fact]
@@ -208,7 +297,7 @@ public sealed class TelemetryTests(PgVectorFixture fixture) : IClassFixture<PgVe
         var store = await MigratedStoreAsync();
         var scope = PgVectorFixture.NewScope();
         var receipt = (await store.RememberAsync(Entries.Entry(scope), Ct)).Value;
-        await store.AppendExecutionAsync(scope, receipt.Id, Success, Entries.Provenance(), Ct);
+        await store.AppendExecutionAsync(scope, receipt.Id, Success, Entries.Provenance(), null, Ct);
         using var capture = new TelemetryCapture();
 
         var result = (await store.EraseAsync(new ReasonletErasure(scope, bySubject ? "subject-1" : null), Ct)).Value;
@@ -309,7 +398,7 @@ public sealed class TelemetryTests(PgVectorFixture fixture) : IClassFixture<PgVe
 
         var receipt = (await store.RememberAsync(entry, Ct)).Value;
         Assert.True((await store.GetAsync(scope, receipt.Id, Ct)).IsSuccess);
-        var execution = (await store.AppendExecutionAsync(scope, receipt.Id, Success, provenance, Ct)).Value;
+        var execution = (await store.AppendExecutionAsync(scope, receipt.Id, Success, provenance, null, Ct)).Value.Execution;
         Assert.True((await store.AppendFeedbackAsync(scope, execution, Feedback, Ct)).IsSuccess);
         Assert.Single((await store.SearchAsync(scope, entry.Embedding, intent, 5, Ct)).Value);
         Assert.True((await store.EraseAsync(new ReasonletErasure(scope, subject), Ct)).IsSuccess);
@@ -319,9 +408,52 @@ public sealed class TelemetryTests(PgVectorFixture fixture) : IClassFixture<PgVe
         var invalid = await store.RememberAsync(entry with { Embedding = new float[] { 1f, 0.5f } }, Ct);
         Assert.Equal(MnemosyneErrorCode.Validation, invalid.Error.Code);
 
+        // The facade over the store, judging: the token in the capture's answer, the run's question and answer, and the
+        // message of a judge that throws.
+        var judge = new Judge();
+        var memory = new ReasonletMemory(
+            store, new ReasonletSelector(new MnemosyneOptions().Ranking, TimeProvider.System), new ConstantEmbeddings(), null, judge, new MnemosyneOptions());
+        var judged = (await memory.RememberAsync(capture0 with { Answer = $"answer-{token}" }, Ct)).Value;
+        var run = new ReasonletRun
+        {
+            Scope = scope,
+            Id = judged.Id,
+            Outcome = Success,
+            Provenance = provenance,
+            Question = $"question-{token}",
+            Answer = $"answer-{token}",
+        };
+        Assert.True((await memory.RecordExecutionAsync(run, Ct)).IsSuccess);
+        judge.Throw = new HttpRequestException($"judge: {token}");
+        Assert.True((await memory.RecordExecutionAsync(run, Ct)).IsSuccess);
+
+        // A judge that is down with the token in its error's message and detail, and one whose invalid name holds it.
+        judge.Throw = null;
+        judge.Answer = Result<ReasonletEvaluation, MnemosyneError>.Failure(new(MnemosyneErrorCode.Unavailable, $"down: {token}", $"detail: {token}"));
+        Assert.True((await memory.RecordExecutionAsync(run, Ct)).IsSuccess);
+        judge.Answer = new ReasonletEvaluation(true, 0.5, new string('x', 80) + token);
+        await Assert.ThrowsAsync<InvalidOperationException>(async () => await memory.RecordExecutionAsync(run, Ct));
+
         var activities = capture.Activities;
-        Assert.Equal(8, activities.Count);
-        Assert.Equal("Validation", activities[^1].GetTagItem("error.type"));
+        Assert.Equal(21, activities.Count);
+        Assert.Equal("Validation", activities[7].GetTagItem("error.type"));
+
+        // The throwing judge: its evaluate activity shows the failure, and the run falls back to the agent's verdict.
+        Assert.Equal("mnemosyne.evaluate", activities[14].OperationName);
+        Assert.Equal("System.Net.Http.HttpRequestException", activities[14].GetTagItem("error.type"));
+        Assert.Equal("exception", Assert.Single(activities[14].Events).Name);
+        Assert.Equal("mnemosyne.execution.append", activities[15].OperationName);
+        Assert.Equal("agent", activities[15].GetTagItem("mnemosyne.verdict_source"));
+
+        // The judge that is down: Unavailable on its evaluate activity, and the agent's verdict on the append.
+        Assert.Equal("mnemosyne.evaluate", activities[17].OperationName);
+        Assert.Equal("Unavailable", activities[17].GetTagItem("error.type"));
+        Assert.Equal("agent", activities[18].GetTagItem("mnemosyne.verdict_source"));
+
+        // The invalid name: an exception on the evaluate activity, with no evaluator tag, and nothing appended.
+        Assert.Equal("mnemosyne.evaluate", activities[20].OperationName);
+        Assert.Equal("System.InvalidOperationException", activities[20].GetTagItem("error.type"));
+        Assert.Null(activities[20].GetTagItem("mnemosyne.evaluator"));
         var measurements = capture.Measurements;
         Assert.NotEmpty(measurements);
         var emitted = new List<string?>();
@@ -352,7 +484,42 @@ public sealed class TelemetryTests(PgVectorFixture fixture) : IClassFixture<PgVe
             emitted.AddRange(Flatten(measurement.Tags));
         }
 
+        // The scan read the evaluate activity's fields, its exception events and the evaluation instruments, not only
+        // the store's tags.
+        Assert.Contains("mnemosyne.evaluator", emitted);
+        Assert.Contains("mnemosyne.evaluation.score", emitted);
+        Assert.Contains("exception.type", emitted);
+        Assert.Contains("mnemosyne.evaluations", emitted);
         Assert.DoesNotContain(emitted, text => text is not null && text.Contains(token, StringComparison.Ordinal));
+    }
+
+    /// <summary>An evaluator that answers <see cref="Answer"/>, or throws <see cref="Throw"/> when it is set.</summary>
+    private sealed class Judge : IReasonletEvaluator
+    {
+        public Exception? Throw { get; set; }
+
+        public Result<ReasonletEvaluation, MnemosyneError> Answer { get; set; } = new ReasonletEvaluation(true, 0.9, "judge");
+
+        public ValueTask<Result<ReasonletEvaluation, MnemosyneError>> EvaluateAsync(
+            ReasonletEvaluationRequest request, CancellationToken ct) =>
+            Throw is { } thrown ? throw thrown : ValueTask.FromResult(Answer);
+    }
+
+    /// <summary>An embedding generator that answers the same three-value embedding for every text.</summary>
+    private sealed class ConstantEmbeddings : IEmbeddingGenerator<string, Embedding<float>>
+    {
+        public Task<GeneratedEmbeddings<Embedding<float>>> GenerateAsync(
+            IEnumerable<string> values,
+            EmbeddingGenerationOptions? options = null,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(new GeneratedEmbeddings<Embedding<float>>(
+                values.Select(_ => new Embedding<float>(new float[] { 1f, 0.5f, -0.25f }))));
+
+        public object? GetService(Type serviceType, object? serviceKey = null) => null;
+
+        public void Dispose()
+        {
+        }
     }
 
     private static IEnumerable<string?> Flatten(IEnumerable<KeyValuePair<string, object?>> tags) =>
@@ -376,11 +543,16 @@ public sealed class TelemetryTests(PgVectorFixture fixture) : IClassFixture<PgVe
     private static KeyValuePair<string, object?>[] MnemosyneTags(Activity activity) =>
         [.. AllTags(activity).Where(tag => tag.Key.StartsWith("mnemosyne.", StringComparison.Ordinal))];
 
-    private static void AssertRemembered(Activity activity, string kind, ReasonletReceipt receipt)
+    private static void AssertRemembered(Activity activity, string kind, ReasonletReceipt receipt, string source = "agent")
     {
         Assert.Equal(ActivityStatusCode.Unset, activity.Status);
         Assert.Equal(
-            [new("mnemosyne.capture_kind", kind), new("mnemosyne.reasonlet.id", receipt.Id.Value.ToString()), new("mnemosyne.reasonlet.version", receipt.Version)],
+            [
+                new("mnemosyne.capture_kind", kind),
+                new("mnemosyne.reasonlet.id", receipt.Id.Value.ToString()),
+                new("mnemosyne.reasonlet.version", receipt.Version),
+                new("mnemosyne.verdict_source", source),
+            ],
             AllTags(activity));
     }
 

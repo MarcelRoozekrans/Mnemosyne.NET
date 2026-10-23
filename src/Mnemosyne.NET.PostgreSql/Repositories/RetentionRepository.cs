@@ -35,7 +35,8 @@ internal sealed partial class RetentionRepository(IAsyncDbConnection connection)
     /// The metrics rows are left alone on purpose: a pruned run still happened, so the counters and timestamps keep
     /// it. That makes the counters the only complete record of the totals, which is why an erase subtracts what it
     /// removes rather than recounting what is left. Taking no metrics lock also means a prune never waits for an
-    /// append, nor an append for a prune.
+    /// append, nor an append for a prune. A prune can wait for feedback that holds a run, and feedback for a prune
+    /// that holds one; feedback holding a run waits only for its metrics row, which no prune of runs takes.
     /// </para>
     /// </remarks>
     private const string LockAndDeleteSql = """
@@ -225,7 +226,7 @@ internal sealed partial class RetentionRepository(IAsyncDbConnection connection)
     /// <para>
     /// <c>SKIP LOCKED</c> means a prune never waits for a Reasonlet lock, so it cannot take part in a deadlock at this
     /// step, whatever order another writer locks Reasonlets in. A row that another transaction holds in any mode is
-    /// left out: an append's <c>FOR KEY SHARE</c>, a remember's locks on its path, an erase's <c>FOR UPDATE</c>. The
+    /// left out: an append's or feedback's <c>FOR KEY SHARE</c>, a remember's locks on its path, an erase's <c>FOR UPDATE</c>. The
     /// re-check, <see cref="StillIdleSql"/>, treats a row the batch does not hold as used, so a skipped row keeps its
     /// whole ancestry until a later prune. A row an erase has deleted is not found.
     /// </para>

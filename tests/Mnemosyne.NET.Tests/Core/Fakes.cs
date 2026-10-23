@@ -1,5 +1,6 @@
 using Microsoft.Extensions.AI;
 using Mnemosyne.NET.Abstractions;
+using Mnemosyne.NET.Tests.Abstractions;
 using ZeroAlloc.Results;
 
 namespace Mnemosyne.NET.Tests.Core;
@@ -8,7 +9,9 @@ namespace Mnemosyne.NET.Tests.Core;
 internal sealed class FakeStore : IReasonletStore
 {
     public static readonly ReasonletReceipt Receipt =
-        new(ReasonletId.New(), "1.0", ExecutionId.New(), ReasonletCaptureKind.NewReasonlet, ReasonletStatus.Active);
+        new(ReasonletId.New(), "1.0", ExecutionId.New(), ReasonletCaptureKind.NewReasonlet, ReasonletStatus.Active, ReasonletVerdictSource.Agent, true);
+
+    public static readonly ExecutionId ExecutionIdentifier = ExecutionId.New();
 
     public int Dimensions { get; set; } = FakeEmbeddingGenerator.Vector.Length;
 
@@ -16,18 +19,18 @@ internal sealed class FakeStore : IReasonletStore
 
     public ReasonletStoreEntry? Remembered { get; private set; }
 
-    public Result<ReasonletReceipt, MnemosyneError> RememberResult { get; set; } =
-        Result<ReasonletReceipt, MnemosyneError>.Success(Receipt);
+    /// <summary>Gets or sets the remember's answer. When null, the fake answers <see cref="Receipt"/> with the verdict the store rule derives from the entry.</summary>
+    public Result<ReasonletReceipt, MnemosyneError>? RememberResult { get; set; }
 
     public (ReasonletScope Scope, float[] Embedding, string? Intent, int Limit)? Searched { get; private set; }
 
     public Result<IReadOnlyList<ReasonletCandidate>, MnemosyneError> SearchResult { get; set; } =
         Result<IReadOnlyList<ReasonletCandidate>, MnemosyneError>.Success([]);
 
-    public (ReasonletScope Scope, ReasonletId Id, ReasonletOutcome Outcome, ReasonletProvenance Provenance, CancellationToken Ct)? Executed { get; private set; }
+    public (ReasonletScope Scope, ReasonletId Id, ReasonletOutcome Outcome, ReasonletProvenance Provenance, ReasonletEvaluation? Evaluation, CancellationToken Ct)? Executed { get; private set; }
 
-    public Result<ExecutionId, MnemosyneError> ExecutionResult { get; set; } =
-        Result<ExecutionId, MnemosyneError>.Success(ExecutionId.New());
+    /// <summary>Gets or sets the append's answer. When null, the fake answers <see cref="ExecutionIdentifier"/> with the verdict the store rule derives.</summary>
+    public Result<ReasonletRunReceipt, MnemosyneError>? ExecutionResult { get; set; }
 
     public (ReasonletScope Scope, ExecutionId Execution, ReasonletFeedback Feedback, CancellationToken Ct)? Fed { get; private set; }
 
@@ -42,7 +45,8 @@ internal sealed class FakeStore : IReasonletStore
     {
         Calls++;
         Remembered = entry;
-        return ValueTask.FromResult(RememberResult);
+        var (source, success) = Verdict(entry.Capture.Outcome, entry.Evaluation);
+        return ValueTask.FromResult(RememberResult ?? Result<ReasonletReceipt, MnemosyneError>.Success(Receipt with { Source = source, Success = success }));
     }
 
     public ValueTask<Result<IReadOnlyList<ReasonletCandidate>, MnemosyneError>> SearchAsync(
@@ -53,13 +57,18 @@ internal sealed class FakeStore : IReasonletStore
         return ValueTask.FromResult(SearchResult);
     }
 
-    public ValueTask<Result<ExecutionId, MnemosyneError>> AppendExecutionAsync(
-        ReasonletScope scope, ReasonletId id, ReasonletOutcome outcome, ReasonletProvenance provenance, CancellationToken ct)
+    public ValueTask<Result<ReasonletRunReceipt, MnemosyneError>> AppendExecutionAsync(
+        ReasonletScope scope, ReasonletId id, ReasonletOutcome outcome, ReasonletProvenance provenance, ReasonletEvaluation? evaluation, CancellationToken ct)
     {
         Calls++;
-        Executed = (scope, id, outcome, provenance, ct);
-        return ValueTask.FromResult(ExecutionResult);
+        Executed = (scope, id, outcome, provenance, evaluation, ct);
+        var (source, success) = Verdict(outcome, evaluation);
+        return ValueTask.FromResult(ExecutionResult ?? Result<ReasonletRunReceipt, MnemosyneError>.Success(new ReasonletRunReceipt(ExecutionIdentifier, source, success)));
     }
+
+    /// <summary>The verdict a store derives for a new run: the evaluator's when there is one, else the agent's.</summary>
+    private static (ReasonletVerdictSource Source, bool Success) Verdict(ReasonletOutcome outcome, ReasonletEvaluation? evaluation) =>
+        evaluation is { } verdict ? (ReasonletVerdictSource.Evaluator, verdict.Success) : (ReasonletVerdictSource.Agent, outcome.Success);
 
     public ValueTask<UnitResult<MnemosyneError>> AppendFeedbackAsync(
         ReasonletScope scope, ExecutionId execution, ReasonletFeedback feedback, CancellationToken ct)
@@ -76,8 +85,17 @@ internal sealed class FakeStore : IReasonletStore
         return ValueTask.FromResult(EraseResult);
     }
 
-    public ValueTask<Result<ReasonletDefinition, MnemosyneError>> GetAsync(ReasonletScope scope, ReasonletId id, CancellationToken ct) =>
-        throw new NotSupportedException();
+    public (ReasonletScope Scope, ReasonletId Id, CancellationToken Ct)? Got { get; private set; }
+
+    public Result<ReasonletDefinition, MnemosyneError> GetResult { get; set; } =
+        Result<ReasonletDefinition, MnemosyneError>.Success(TestData.Definition());
+
+    public ValueTask<Result<ReasonletDefinition, MnemosyneError>> GetAsync(ReasonletScope scope, ReasonletId id, CancellationToken ct)
+    {
+        Calls++;
+        Got = (scope, id, ct);
+        return ValueTask.FromResult(GetResult);
+    }
 
     public ValueTask<Result<ReasonletPruneResult, MnemosyneError>> PruneAsync(ReasonletRetention retention, CancellationToken ct) =>
         throw new NotSupportedException();
@@ -148,5 +166,113 @@ internal sealed class FakeIntentExtractor : IIntentExtractor
     {
         Questions.Add(question);
         return ValueTask.FromResult(Respond());
+    }
+}
+
+/// <summary>An evaluator that records its requests and answers with a configurable response.</summary>
+internal sealed class FakeEvaluator : IReasonletEvaluator
+{
+    public static readonly ReasonletEvaluation Verdict = new(true, 0.75, "fake-judge");
+
+    public List<ReasonletEvaluationRequest> Requests { get; } = [];
+
+    public List<CancellationToken> Tokens { get; } = [];
+
+    public Func<Result<ReasonletEvaluation, MnemosyneError>> Respond { get; set; } =
+        () => Result<ReasonletEvaluation, MnemosyneError>.Success(Verdict);
+
+    public ValueTask<Result<ReasonletEvaluation, MnemosyneError>> EvaluateAsync(ReasonletEvaluationRequest request, CancellationToken ct)
+    {
+        Requests.Add(request);
+        Tokens.Add(ct);
+        return ValueTask.FromResult(Respond());
+    }
+}
+
+/// <summary>An evaluator that waits on the token it is given until it is cancelled, after running an optional step.</summary>
+internal sealed class WaitingEvaluator(Action? onCall = null) : IReasonletEvaluator
+{
+    public List<CancellationToken> Tokens { get; } = [];
+
+    public async ValueTask<Result<ReasonletEvaluation, MnemosyneError>> EvaluateAsync(ReasonletEvaluationRequest request, CancellationToken ct)
+    {
+        Tokens.Add(ct);
+        onCall?.Invoke();
+        await Task.Delay(Timeout.InfiniteTimeSpan, ct);
+        return FakeEvaluator.Verdict;
+    }
+}
+
+/// <summary>A clock whose timers fire only when <see cref="Fire"/> is called, so a test decides when a timeout expires.</summary>
+internal sealed class ManualTimeProvider : TimeProvider
+{
+    private readonly List<ManualTimer> _timers = [];
+
+    /// <summary>Gets the due times every timer was created or changed with, in order.</summary>
+    public List<TimeSpan> DueTimes { get; } = [];
+
+    public override ITimer CreateTimer(TimerCallback callback, object? state, TimeSpan dueTime, TimeSpan period)
+    {
+        var timer = new ManualTimer(this, callback, state);
+        _timers.Add(timer);
+        timer.Change(dueTime, period);
+        return timer;
+    }
+
+    /// <summary>Fires every live timer that has a finite due time, as if that time had passed.</summary>
+    public void Fire()
+    {
+        foreach (var timer in _timers.ToArray())
+        {
+            timer.FireIfDue();
+        }
+    }
+
+    private sealed class ManualTimer(ManualTimeProvider clock, TimerCallback callback, object? state) : ITimer
+    {
+        private TimeSpan _due = Timeout.InfiniteTimeSpan;
+        private bool _disposed;
+
+        public bool Change(TimeSpan dueTime, TimeSpan period)
+        {
+            clock.DueTimes.Add(dueTime);
+            _due = dueTime;
+            return !_disposed;
+        }
+
+        public void FireIfDue()
+        {
+            if (!_disposed && _due != Timeout.InfiniteTimeSpan)
+            {
+                _due = Timeout.InfiniteTimeSpan;
+                callback(state);
+            }
+        }
+
+        public void Dispose() => _disposed = true;
+
+        public ValueTask DisposeAsync()
+        {
+            Dispose();
+            return ValueTask.CompletedTask;
+        }
+    }
+}
+
+/// <summary>
+/// An evaluator that ignores its token and answers with <see cref="Completion"/>'s task, which completes only when a test
+/// completes it, after running an optional step.
+/// </summary>
+internal sealed class IgnoringEvaluator(Action? onCall = null) : IReasonletEvaluator
+{
+    public TaskCompletionSource<Result<ReasonletEvaluation, MnemosyneError>> Completion { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    public int Calls { get; private set; }
+
+    public ValueTask<Result<ReasonletEvaluation, MnemosyneError>> EvaluateAsync(ReasonletEvaluationRequest request, CancellationToken ct)
+    {
+        Calls++;
+        onCall?.Invoke();
+        return new(Completion.Task);
     }
 }

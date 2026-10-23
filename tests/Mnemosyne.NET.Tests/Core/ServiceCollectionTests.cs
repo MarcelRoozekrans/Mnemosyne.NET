@@ -108,6 +108,59 @@ public sealed class ServiceCollectionTests
         Assert.Null(_store.Searched!.Value.Intent);
     }
 
+    private static ReasonletRun JudgeableRun() => new()
+    {
+        Scope = new ReasonletScope("scope"),
+        Id = ReasonletId.New(),
+        Outcome = new ReasonletOutcome(false, TimeSpan.FromSeconds(1), 0.5),
+        Provenance = TestData.Provenance(),
+        Question = "question",
+        Answer = "answer",
+    };
+
+    [Fact]
+    public async Task ARegisteredEvaluatorIsUsed()
+    {
+        var evaluator = new FakeEvaluator();
+        var services = Services();
+        services.AddSingleton<IReasonletEvaluator>(evaluator);
+        using var provider = services.AddMnemosyne().BuildServiceProvider();
+
+        var result = await provider.GetRequiredService<IReasonletMemory>().RecordExecutionAsync(JudgeableRun(), CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Single(evaluator.Requests);
+        Assert.Equal(FakeEvaluator.Verdict, _store.Executed!.Value.Evaluation);
+    }
+
+    [Fact]
+    public async Task TheRegisteredClockTimesTheJudge()
+    {
+        var clock = new ManualTimeProvider();
+        var services = Services();
+        services.AddSingleton<TimeProvider>(clock);
+        services.AddSingleton<IReasonletEvaluator>(new WaitingEvaluator(clock.Fire));
+        using var provider = services.AddMnemosyne(new MnemosyneOptions { EvaluationTimeout = TimeSpan.FromSeconds(3) }).BuildServiceProvider();
+
+        var result = await provider.GetRequiredService<IReasonletMemory>().RecordExecutionAsync(JudgeableRun(), CancellationToken.None);
+
+        Assert.Equal(ReasonletVerdictSource.Agent, result.Value.Source);
+        Assert.Contains(TimeSpan.FromSeconds(3), clock.DueTimes);
+        Assert.Null(_store.Executed!.Value.Evaluation);
+    }
+
+    [Fact]
+    public async Task AMissingEvaluatorLeavesRunsUnjudged()
+    {
+        using var provider = Services().AddMnemosyne().BuildServiceProvider();
+
+        var result = await provider.GetRequiredService<IReasonletMemory>().RecordExecutionAsync(JudgeableRun(), CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Null(_store.Got);
+        Assert.Null(_store.Executed!.Value.Evaluation);
+    }
+
     [Fact]
     public async Task RegisteringTwiceGivesTheSelectorAndTheFacadeTheSameOptions()
     {
@@ -155,6 +208,16 @@ public sealed class ServiceCollectionTests
         var services = new ServiceCollection();
         services.AddSingleton<IReasonletStore>(_store);
         services.AddScoped<IEmbeddingGenerator<string, Embedding<float>>, FakeEmbeddingGenerator>();
+        using var provider = services.AddMnemosyne().BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
+
+        Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<IReasonletMemory>());
+    }
+
+    [Fact]
+    public void AScopedEvaluatorFailsUnderScopeValidation()
+    {
+        var services = Services();
+        services.AddScoped<IReasonletEvaluator, FakeEvaluator>();
         using var provider = services.AddMnemosyne().BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
 
         Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<IReasonletMemory>());

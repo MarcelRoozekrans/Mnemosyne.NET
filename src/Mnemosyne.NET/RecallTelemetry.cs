@@ -7,7 +7,8 @@ namespace Mnemosyne.NET;
 
 /// <summary>
 /// The recall facade's OpenTelemetry signals: one <c>mnemosyne.recall</c> activity per recall, and the counters and
-/// histograms that count, time and size it, under the names on <see cref="MnemosyneTelemetry"/>.
+/// histograms that count, time and size it, under the names on <see cref="MnemosyneTelemetry"/>. Its source, meter and
+/// operation instruments are shared with <see cref="EvaluationTelemetry"/>.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -29,12 +30,17 @@ internal static class RecallTelemetry
     private const string ActivityName = "mnemosyne.recall";
     private const string Operation = "recall";
     private const string OperationTag = "mnemosyne.operation";
-    private const string OutcomeTag = "mnemosyne.outcome";
+    /// <summary>The tag that carries an operation's outcome.</summary>
+    internal const string OutcomeTag = "mnemosyne.outcome";
     private const string ErrorTypeTag = "error.type";
     private const string ExceptionEvent = "exception";
     private const string ExceptionTypeTag = "exception.type";
-    private const string Ok = "ok";
-    private const string ExceptionOutcome = "exception";
+    /// <summary>The outcome of an operation that succeeded.</summary>
+    internal const string Ok = "ok";
+
+    /// <summary>The outcome of an operation that threw.</summary>
+    internal const string ExceptionOutcome = "exception";
+
     private const string TopTag = "mnemosyne.recall.top";
     private const string IntentFilteredTag = "mnemosyne.recall.intent_filtered";
     private const string IntentFallbackTag = "mnemosyne.recall.intent_fallback";
@@ -83,8 +89,7 @@ internal static class RecallTelemetry
             if (result.IsFailure)
             {
                 outcome = ErrorName(result.Error.Code);
-                activity?.SetTag(ErrorTypeTag, outcome);
-                activity?.SetStatus(ActivityStatusCode.Error);
+                Failed(activity, outcome);
             }
             else
             {
@@ -96,18 +101,42 @@ internal static class RecallTelemetry
         }
         catch (Exception ex)
         {
-            // The type only: the message and the stack trace could quote user data, which no signal may carry.
-            var type = ex.GetType().FullName;
-            activity?.AddEvent(new ActivityEvent(ExceptionEvent, tags: new ActivityTagsCollection { { ExceptionTypeTag, type } }));
-            activity?.SetTag(ErrorTypeTag, type);
-            activity?.SetStatus(ActivityStatusCode.Error);
+            Threw(activity, ex);
             throw;
         }
         finally
         {
-            Operations.Add(1, new TagList { { OperationTag, Operation }, { OutcomeTag, outcome } });
-            Duration.Record(Stopwatch.GetElapsedTime(started).TotalSeconds, new TagList { { OperationTag, Operation } });
+            CountOperation(Operation, outcome, started);
         }
+    }
+
+    /// <summary>Marks an activity as failed with <paramref name="errorType"/>: it sets <c>error.type</c> and the status to Error.</summary>
+    internal static void Failed(Activity? activity, string errorType)
+    {
+        activity?.SetTag(ErrorTypeTag, errorType);
+        activity?.SetStatus(ActivityStatusCode.Error);
+    }
+
+    /// <summary>
+    /// Records an exception on an activity as an <c>exception</c> event that carries <c>exception.type</c> only, and marks
+    /// the activity as failed with the exception's full type name.
+    /// </summary>
+    internal static void Threw(Activity? activity, Exception ex)
+    {
+        // The type only: the message and the stack trace could quote user data, which no signal may carry.
+        var type = ex.GetType().FullName!;
+        activity?.AddEvent(new ActivityEvent(ExceptionEvent, tags: new ActivityTagsCollection { { ExceptionTypeTag, type } }));
+        Failed(activity, type);
+    }
+
+    /// <summary>
+    /// Counts one facade operation under its outcome on <c>mnemosyne.operations</c>, and records its duration since
+    /// <paramref name="started"/> on <c>mnemosyne.operation.duration</c>.
+    /// </summary>
+    internal static void CountOperation(string operation, string outcome, long started)
+    {
+        Operations.Add(1, new TagList { { OperationTag, operation }, { OutcomeTag, outcome } });
+        Duration.Record(Stopwatch.GetElapsedTime(started).TotalSeconds, new TagList { { OperationTag, operation } });
     }
 
     /// <summary>

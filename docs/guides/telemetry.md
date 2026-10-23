@@ -5,7 +5,7 @@ sidebar_position: 3
 
 # Telemetry
 
-Mnemosyne emits OpenTelemetry traces and metrics for every store operation and every recall. It uses only the in-box `System.Diagnostics` types, so it adds no dependency and stays native AOT clean. Your host decides whether to collect the signals and where to send them.
+Mnemosyne emits OpenTelemetry traces and metrics for every store operation, every recall and every call to an evaluator. It uses only the in-box `System.Diagnostics` types, so it adds no dependency and stays native AOT clean. Your host decides whether to collect the signals and where to send them.
 
 ## Turn it on
 
@@ -32,7 +32,7 @@ No activity is created without a listener, and the store builds no tag for one, 
 
 ## Operations
 
-Every store method is one operation, and so is each recall. The operation name appears in the activity name, as `mnemosyne.<operation>`, and in the `mnemosyne.operation` tag on the metrics.
+Every store method is one operation, and so is each recall and each judge call. The operation name appears in the activity name, as `mnemosyne.<operation>`, and in the `mnemosyne.operation` tag on the metrics.
 
 | Operation | Emitted by | What it is |
 |---|---|---|
@@ -45,8 +45,9 @@ Every store method is one operation, and so is each recall. The operation name a
 | `erase` | store | `EraseAsync` |
 | `prune` | store | `PruneAsync` |
 | `recall` | facade | `RecallAsync` |
+| `evaluate` | facade | one call to the registered `IReasonletEvaluator` |
 
-The facade instruments recall only. Remember, recording runs and feedback, and erase are instrumented by the store operations they call, and wrapping them again would count each twice. A recall's `mnemosyne.recall` activity is the parent of the `mnemosyne.search` activity the store emits for it.
+The facade instruments recall and judge calls only. Remember, recording runs and feedback, and erase are instrumented by the store operations they call, and wrapping them again would count each twice. A judge call happens inside a remember or `RecordExecutionAsync`, before the store records the run, and is not a store operation, so it is counted on its own. A recall's `mnemosyne.recall` activity is the parent of the `mnemosyne.search` activity the store emits for it.
 
 ## Activities
 
@@ -55,14 +56,15 @@ There is one activity per operation, with these tags:
 | Activity | Tags |
 |---|---|
 | `mnemosyne.migrate` | none |
-| `mnemosyne.remember` | on success: `mnemosyne.capture_kind` (`NewReasonlet`, `ExecutionOnly` or `NewVersion`), `mnemosyne.reasonlet.id`, `mnemosyne.reasonlet.version` |
+| `mnemosyne.remember` | on success: `mnemosyne.capture_kind` (`NewReasonlet`, `ExecutionOnly` or `NewVersion`), `mnemosyne.reasonlet.id`, `mnemosyne.reasonlet.version`, and `mnemosyne.verdict_source` of the run it records: `evaluator` when the capture comes with an evaluator's verdict, else `agent` |
 | `mnemosyne.get` | none |
-| `mnemosyne.execution.append` | none |
-| `mnemosyne.feedback.append` | none |
+| `mnemosyne.execution.append` | `mnemosyne.verdict_source`, always: `evaluator` when the run comes with an evaluator's verdict, else `agent` |
+| `mnemosyne.feedback.append` | on success, when the feedback gives a `Worked` verdict: `mnemosyne.verdict_source` `feedback`, whether or not it changes the run's verdict |
 | `mnemosyne.search` | `mnemosyne.search.limit`, always; on success `mnemosyne.search.returned`, and `mnemosyne.search.top_similarity` when at least one candidate is returned |
 | `mnemosyne.erase` | `mnemosyne.erase.by` (`scope` or `subject`), always; on success `mnemosyne.erased.reasonlets` and `mnemosyne.erased.executions` |
 | `mnemosyne.prune` | `mnemosyne.pruned.reasonlets` and `mnemosyne.pruned.executions`, always; they count the committed batches, including when the prune fails |
 | `mnemosyne.recall` | see below |
+| `mnemosyne.evaluate` | see below |
 
 ### The recall activity
 
@@ -78,6 +80,18 @@ There is one activity per operation, with these tags:
 | `mnemosyne.recall.chosen.score` | on success, when at least one match is returned: the first match's total score |
 
 The candidate and returned counts show how much the [cut-off](../concepts/ranking.md#the-cut-off) drops, which helps when you tune it for your embedding model.
+
+### The evaluate activity
+
+| Tag | Set when |
+|---|---|
+| `mnemosyne.evaluator` | the judge answered with a valid verdict: the judge's name, from `ReasonletEvaluation.Evaluator` |
+| `mnemosyne.evaluation.success` | the judge answered with a valid verdict: its success, a bool |
+| `mnemosyne.evaluation.score` | the judge answered with a valid verdict: its score |
+
+The activity records how the judge call itself ended. A judge that is down, because it threw, timed out or answered `Unavailable`, shows as a failure here, even though the remember or the run record then succeeds with the agent's verdict. A timeout, whether the judge's own or `MnemosyneOptions.EvaluationTimeout`, is reported as `Unavailable`. A failed judge call has no verdict to name a judge from, so it carries no `mnemosyne.evaluator` tag, on the activity or on the metrics.
+
+An answer that is blank or longer than 32,000 code points is not judged, so no `mnemosyne.evaluate` activity starts for it. With an evaluator registered, it counts once on `mnemosyne.evaluations` with outcome `skipped` and no other tag, and nothing else: no duration and no `evaluate` operation.
 
 ### Failures on an activity
 
@@ -99,23 +113,26 @@ The candidate and returned counts show how much the [cut-off](../concepts/rankin
 | `mnemosyne.pruned.executions` | counter, `{execution}` | none | store, for each committed prune batch |
 | `mnemosyne.recall.returned` | histogram, `{match}` | none | facade, on each successful recall |
 | `mnemosyne.recall.empty` | counter, `{recall}` | none | facade, on each successful recall that returned nothing |
+| `mnemosyne.evaluations` | counter, `{evaluation}` | `mnemosyne.evaluator` when the judge answered, `mnemosyne.outcome` | facade, on each judge call, and on each answer it skips as unusable |
+| `mnemosyne.evaluation.duration` | histogram, seconds | `mnemosyne.evaluator` when the judge answered | facade, on each judge call |
 
-`mnemosyne.operations` and `mnemosyne.operation.duration` come from both the store and the facade. The two meters share one name and the instruments match exactly, so each aggregates as one instrument, and `recall` sits next to the store's operations.
+`mnemosyne.operations` and `mnemosyne.operation.duration` come from both the store and the facade. The two meters share one name and the instruments match exactly, so each aggregates as one instrument, and `recall` and `evaluate` sit next to the store's operations.
 
 ### Outcomes
 
-`mnemosyne.outcome` on `mnemosyne.operations` is one of:
+`mnemosyne.outcome` on `mnemosyne.operations` and `mnemosyne.evaluations` is one of:
 
 | Outcome | Meaning |
 |---|---|
 | `ok` | The operation succeeded. |
 | `Validation`, `NotFound`, `Conflict` or `Unavailable` | The operation answered a failure result with that error code. |
 | `exception` | An exception propagated, cancellation included. |
+| `skipped` | On `mnemosyne.evaluations` only: the answer was blank or too long, so the judge was not called and the run kept the agent's verdict. |
 
-A rising `Conflict` count on `erase` or `prune` means concurrent writes are colliding; both are safe to retry. A rising `Unavailable` count means the database can't serve. [Data lifecycle](data-lifecycle.md) and [the store's errors](postgresql.md#errors) explain when each happens.
+A rising `Conflict` count on `erase` or `prune` means concurrent writes are colliding; both are safe to retry. A rising `Unavailable` count means the database can't serve. On `evaluate`, a rising `Unavailable` or `exception` count means the judge is failing; while it is down, runs are stored with the agent's verdict. A `Validation`, `NotFound` or `Conflict` outcome on `evaluate` means the evaluator adapter has a bug: the facade throws `InvalidOperationException` for it. [Data lifecycle](data-lifecycle.md) and [the store's errors](postgresql.md#errors) explain when each happens.
 
 ## Privacy
 
-No signal carries user data: no question, intent, name, graph, tags, scope, subject or run id, and no error or exception message. Reasonlet ids and versions are opaque, so they appear, and so do scores.
+No signal carries user data: no question, answer, intent, name, graph, tags, scope, subject or run id, and no error or exception message. Reasonlet ids and versions are opaque, so they appear, and so do scores. An evaluator's name appears too: it names the judge, such as `llm-judge`, and nothing about the run.
 
 Scope and subject are left out on purpose. A scope often names a tenant and a subject names a person, and telemetry is exported, sampled and kept in other systems with their own retention. If you need a breakdown by tenant, add it in your own wrapper, where you decide what may leave your application.

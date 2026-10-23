@@ -4,7 +4,8 @@ namespace Mnemosyne.NET.Abstractions;
 /// <remarks>
 /// A host enables them with <c>.AddSource(MnemosyneTelemetry.ActivitySourceName)</c> on its tracer provider and
 /// <c>.AddMeter(MnemosyneTelemetry.MeterName)</c> on its meter provider. No signal carries user data: no scope,
-/// subject, question, intent, name, graph, tags or run id. Ids and versions are opaque, so they may appear.
+/// subject, question, answer, intent, name, graph, tags or run id, and no error or exception message. Ids and versions
+/// are opaque, so they may appear.
 /// </remarks>
 public static class MnemosyneTelemetry
 {

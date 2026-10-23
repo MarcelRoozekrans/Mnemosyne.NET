@@ -195,7 +195,7 @@ public sealed class RecallTests(PgVectorFixture fixture) : IClassFixture<PgVecto
         var store = fixture.CreateStore();
         Assert.True((await store.MigrateAsync(Ct)).IsSuccess);
         var options = new MnemosyneOptions();
-        var memory = new ReasonletMemory(store, new ReasonletSelector(options.Ranking, TimeProvider.System), embeddings, null, options);
+        var memory = new ReasonletMemory(store, new ReasonletSelector(options.Ranking, TimeProvider.System), embeddings, null, null, options);
         return (memory, PgVectorFixture.NewScope());
     }
 
@@ -223,7 +223,8 @@ public sealed class RecallTests(PgVectorFixture fixture) : IClassFixture<PgVecto
     {
         for (var i = 0; i < times; i++)
         {
-            var result = await memory.RecordExecutionAsync(scope, id, outcome, new ReasonletProvenance { Source = "test", SubjectId = subject }, Ct);
+            var run = new ReasonletRun { Scope = scope, Id = id, Outcome = outcome, Provenance = new ReasonletProvenance { Source = "test", SubjectId = subject } };
+            var result = await memory.RecordExecutionAsync(run, Ct);
             Assert.True(result.IsSuccess);
         }
     }

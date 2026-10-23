@@ -25,7 +25,7 @@ Question → Procedure → Answer
 | **Status** | `Active` or `PendingReview`. |
 | **Runs** | How often it ran and how often that succeeded, and when it last ran. |
 
-You don't build a Reasonlet directly. You hand `RememberAsync` a `ReasonletCapture`, which holds the scope, question, graph, the outcome of the run and the provenance, and optionally a name, an intent and a parent. Mnemosyne fills in the rest and returns a receipt with the Reasonlet's id, its version and what the capture produced.
+You don't build a Reasonlet directly. You hand `RememberAsync` a `ReasonletCapture`, which holds the scope, question, graph, the outcome of the run and the provenance, and optionally a name, an intent, a parent and an answer. The answer, the run's final reply, is there only so a registered `IReasonletEvaluator` can judge the run the capture records; it is never stored. Mnemosyne fills in the rest and returns a receipt with the Reasonlet's id, its version and what the capture produced.
 
 ## The graph
 
@@ -92,7 +92,7 @@ Each run you record carries its own provenance too.
 
 Every capture records one run, with the capture's `ReasonletOutcome`: whether it succeeded, how long it took, and an optional quality score between 0 and 1. After that, `RecordExecutionAsync` records each further run.
 
-Mnemosyne keeps a running count of runs and successes for each Reasonlet, and the times of its latest run and latest success. Ranking reads these. You can also attach feedback to a recorded run with `RecordFeedbackAsync`. Feedback is stored, but ranking doesn't use it.
+Mnemosyne keeps a running count of runs and successes for each Reasonlet, and the times of its latest run and latest success. Ranking reads these. A run counts as a success by its effective verdict: a human's `Worked` verdict from feedback when there is one, else an evaluator's verdict when one judged the run, else the agent's own `Success`. [Ranking](ranking.md#success-rate) explains the order. You can attach feedback to a recorded run with `RecordFeedbackAsync`. Its `Worked` verdict, when you give one, counts as described; its three scores are stored, but ranking doesn't use them.
 
 ## Status: Active and PendingReview
 

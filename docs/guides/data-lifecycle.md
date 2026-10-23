@@ -56,6 +56,7 @@ Each Reasonlet keeps counters that ranking reads: `runs`, `successes`, `last_exe
 - **The times fall back.** When a removed run was the latest run or the latest success, that time falls back to the latest one left.
 - **With no run left,** `last_executed_at` falls back to the Reasonlet's creation time, and `last_success_at` to null, meaning unknown, even when `successes` still counts pruned successes. Keeping the stored time would keep the erased subject's own run time.
 - **Pruned runs stay counted.** Runs pruned before the erase stay in `runs` and `successes`, because nothing can identify them any more. They are bare integers with no link to a person, so they are anonymous totals, not personal data.
+- **A removed run counts with its effective verdict.** A run a person's `Worked` feedback overrode is subtracted as the success or failure that feedback made it, not as the agent or the evaluator saw it. Feedback itself also moves these counters, as described under [What counters keep](#what-counters-keep).
 
 ### Transactions and concurrency
 
@@ -139,6 +140,6 @@ Pruning deletes run records, but a pruned run still happened. So:
 
 - **`runs` and `successes` keep pruned runs.** A Reasonlet's track record survives the pruning of its old runs, and ranking keeps using it.
 - **`last_executed_at` and `last_success_at` never change on a prune.** They keep the time of a run whose record is gone.
-- **Only an erase lowers them**, or sets `last_success_at` to null, as described under [What happens to the counters of kept Reasonlets](#what-happens-to-the-counters-of-kept-reasonlets). `last_executed_at` is what retention reads, and it is never null.
+- **An erase or a verdict lowers them.** An erase subtracts the runs it removes, as described under [What happens to the counters of kept Reasonlets](#what-happens-to-the-counters-of-kept-reasonlets). Feedback whose `Worked` verdict turns a success into a failure lowers `successes` by one, and when that run held `last_success_at`, the time falls back to the latest success left, or to null when none is left. Feedback that turns a failure into a success raises `successes` by one and moves `last_success_at` forward to that run's time when it is later. Neither touches `runs` or `last_executed_at`. `last_executed_at` is what retention reads, and it is never null.
 
 The counters are bare numbers with no link to a person, which is why keeping them after a prune or an erase is safe.
