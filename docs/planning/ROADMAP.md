@@ -67,7 +67,7 @@ Design: [roadmap design](../superpowers/specs/2026-10-21-roadmap-design.md), bui
 - [ ] Success rate in ranking comes from evaluated executions
 - [ ] Docs and a sample cover evaluation
 
-### Phase 2.1: Evaluator contract and feedback API [status: active]
+### Phase 2.1: Evaluator contract and feedback API [status: complete]
 **Goal:** `IReasonletEvaluator` and an explicit feedback API that takes precedence over automatic scoring.
 **Surface:** Backend
 **HelpWanted:** no
