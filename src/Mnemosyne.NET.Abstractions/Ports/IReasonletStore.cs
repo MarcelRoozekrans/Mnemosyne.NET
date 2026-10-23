@@ -5,6 +5,13 @@ namespace Mnemosyne.NET.Abstractions;
 /// <summary>The storage port. Implementations persist Reasonlets, executions and feedback. Cancellation throws <see cref="OperationCanceledException"/>; it is never returned as a result.</summary>
 public interface IReasonletStore
 {
+    /// <summary>
+    /// Gets the length every stored and queried embedding must have. It is fixed when the store is configured, and a
+    /// store answers <see cref="MnemosyneErrorCode.Validation"/> for an embedding of any other length. The facade checks
+    /// a generated embedding against it before calling the store.
+    /// </summary>
+    int Dimensions { get; }
+
     /// <summary>Stores an entry, making the three-way ParentId decision atomically.</summary>
     /// <remarks>
     /// The store decides between a new Reasonlet, an execution only and a new version in one atomic step.
@@ -62,6 +69,10 @@ public interface IReasonletStore
     /// Returns only <see cref="ReasonletStatus.Active"/> Reasonlets, never <see cref="ReasonletStatus.PendingReview"/> ones.
     /// Each candidate's <see cref="ReasonletCandidate.Similarity"/> must be <c>max(0, 1 - cosine distance)</c>,
     /// which is in [0, 1] and matches pgvector's <c>&lt;=&gt;</c> cosine distance operator.
+    /// Each candidate must also carry <see cref="ReasonletMetrics.LastExecutedAt"/> in its <see cref="ReasonletCandidate.Metrics"/>,
+    /// and <see cref="ReasonletCandidate.ParentMetrics"/> when the Reasonlet has a parent in its scope, null otherwise.
+    /// The default selector ranks on both: a store that leaves <c>ParentMetrics</c> null disables inheritance, and one that
+    /// leaves <c>LastExecutedAt</c> at its default makes every candidate's freshness zero.
     /// Error codes: <see cref="MnemosyneErrorCode.Validation"/> when the limit is not positive or an argument breaks another invariant, such as a <c>default</c> scope,
     /// <see cref="MnemosyneErrorCode.Unavailable"/> when the backing store fails.
     /// </remarks>

@@ -159,13 +159,22 @@ public class LeafRecordTests
     [InlineData(-1, 0, "Runs")]
     [InlineData(2, -1, "Successes")]
     public void Metrics_Invalid_Fails(int runs, int successes, string path) =>
-        AssertInvalid(new ReasonletMetrics(runs, successes, null).Validate(), path);
+        AssertInvalid(new ReasonletMetrics(runs, successes, null, DateTimeOffset.UnixEpoch).Validate(), path);
 
     [Fact]
     public void Metrics_Boundary_Passes()
     {
-        Assert.True(new ReasonletMetrics(0, 0, null).Validate().IsSuccess);
-        Assert.True(new ReasonletMetrics(2, 2, DateTimeOffset.UnixEpoch).Validate().IsSuccess);
+        Assert.True(default(ReasonletMetrics).Validate().IsSuccess);
+        Assert.True(new ReasonletMetrics(0, 0, null, DateTimeOffset.UnixEpoch).Validate().IsSuccess);
+        Assert.True(new ReasonletMetrics(2, 2, DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch).Validate().IsSuccess);
+    }
+
+    [Fact]
+    public void Metrics_LastExecutedAt_RoundTrips()
+    {
+        var at = new DateTimeOffset(2026, 10, 23, 1, 2, 3, TimeSpan.Zero);
+        Assert.Equal(at, new ReasonletMetrics(1, 0, null, at).LastExecutedAt);
+        Assert.Equal(default, default(ReasonletMetrics).LastExecutedAt);
     }
 
     [Theory]

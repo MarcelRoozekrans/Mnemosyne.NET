@@ -20,6 +20,11 @@ namespace Mnemosyne.NET.PostgreSql.Rows;
 /// <param name="Runs">How many executions the Reasonlet has.</param>
 /// <param name="Successes">How many of them succeeded.</param>
 /// <param name="LastSuccessAt">When the latest successful execution ran, or null when none succeeded.</param>
+/// <param name="LastExecutedAt">When the latest execution ran, or when the Reasonlet was stored if it has no metrics row.</param>
+/// <param name="ParentRuns">The parent's executions, or null when there is no parent metrics row.</param>
+/// <param name="ParentSuccesses">The parent's successful executions, or null when there is no parent metrics row.</param>
+/// <param name="ParentLastSuccessAt">When the parent's latest successful execution ran, or null.</param>
+/// <param name="ParentLastExecutedAt">When the parent's latest execution ran, or null when there is no parent metrics row.</param>
 internal sealed record CandidateRow(
     Guid Id,
     string Scope,
@@ -37,7 +42,12 @@ internal sealed record CandidateRow(
     double Similarity,
     int Runs,
     int Successes,
-    DateTimeOffset? LastSuccessAt)
+    DateTimeOffset? LastSuccessAt,
+    DateTimeOffset LastExecutedAt,
+    int? ParentRuns,
+    int? ParentSuccesses,
+    DateTimeOffset? ParentLastSuccessAt,
+    DateTimeOffset? ParentLastExecutedAt)
 {
     /// <summary>The Reasonlet columns, for the mapping that <c>GetAsync</c> shares.</summary>
     public ReasonletRow ToReasonletRow() =>

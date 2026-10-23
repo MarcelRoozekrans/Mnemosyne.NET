@@ -111,6 +111,18 @@ public sealed class RepoConventionsTests
         Assert.Contains("xargs -r grep -L '<RequiresDocker>true</RequiresDocker>'", job, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void TheStoreDependsOnAbstractionsOnly()
+    {
+        // A store implements the ports; pulling in the core package would drag Microsoft.Extensions.AI into every host
+        // that only stores.
+        var csproj = Path.Combine(RepoRoot(), "src", "Mnemosyne.NET.PostgreSql", "Mnemosyne.NET.PostgreSql.csproj");
+        var references = XDocument.Load(csproj).Descendants("ProjectReference")
+            .Select(e => Path.GetFileName(e.Attribute("Include")?.Value.Replace('\\', '/')))
+            .ToArray();
+        Assert.Equal(new string?[] { "Mnemosyne.NET.Abstractions.csproj" }, references);
+    }
+
     private static string StripComments(string yaml) =>
         string.Join('\n', yaml.Split('\n').Where(l => !l.TrimStart().StartsWith('#')));
 

@@ -41,13 +41,13 @@ Design: [roadmap design](../superpowers/specs/2026-10-21-roadmap-design.md), bui
 **Plan:** `docs/superpowers/plans/2026-10-22-phase-1.4-postgres-store.md`
 **Completed:** 2026-10-22
 
-### Phase 1.5: Telemetry and retention [status: active]
+### Phase 1.5: Telemetry and retention [status: complete]
 **Goal:** OpenTelemetry activities and events for capture, recall, erasure and retention, and a retention policy. Erasure itself moved to phase 1.4.
 **Surface:** Data
 **HelpWanted:** no
 **Plan:** _to be written_
 
-### Phase 1.6: Selector and ranking [status: pending]
+### Phase 1.6: Selector and ranking [status: active]
 **Goal:** Scope and intent filter, pgvector similarity search, and ranking (0.50 similarity, 0.30 success rate, 0.20 freshness) with a score breakdown.
 **Surface:** Backend
 **HelpWanted:** no

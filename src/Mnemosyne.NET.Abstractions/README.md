@@ -9,4 +9,6 @@ Implementations come in `Mnemosyne.NET` and `Mnemosyne.NET.PostgreSql`.
 
 The JSON wire format of a graph is documented by the [published JSON Schema](https://github.com/MarcelRoozekrans/Mnemosyne.NET/blob/main/schemas/reasonlet-graph.v1.schema.json). The schema cannot express every rule, so `ReasonletGraph.Validate()` remains the full check.
 
+`Mnemosyne.NET.Abstractions.Validation.Check` holds the validation helpers the records use, for packages that extend Mnemosyne: each returns success or a `Validation` failure whose message reads `path: reason`, and `Check.All` and `Check.Nested` combine them.
+
 See the [repository README](https://github.com/MarcelRoozekrans/Mnemosyne.NET#readme).

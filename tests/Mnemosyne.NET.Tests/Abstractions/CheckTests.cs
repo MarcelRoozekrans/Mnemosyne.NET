@@ -1,5 +1,6 @@
 using Xunit;
 using Mnemosyne.NET.Abstractions;
+using Mnemosyne.NET.Abstractions.Validation;
 using ZeroAlloc.Results;
 
 namespace Mnemosyne.NET.Tests.Abstractions;

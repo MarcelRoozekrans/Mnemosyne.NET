@@ -37,7 +37,9 @@ if (migrated.IsFailure)
 }
 ```
 
-`IReasonletStore` resolves to the same singleton. The options are passed as an object, not a configure delegate, because their members are `required`. They are validated when you register, and `AddMnemosynePostgreSql` throws `ArgumentOutOfRangeException` for a bad value.
+`IReasonletStore` resolves to the same singleton. This package depends on `Mnemosyne.NET.Abstractions` only, so it does not bring in recall. To recall and rank through `IReasonletMemory`, add the core `Mnemosyne.NET` package as well, register an embedding generator and call `AddMnemosyne`; see the [Mnemosyne.NET README](https://github.com/MarcelRoozekrans/Mnemosyne.NET/tree/main/src/Mnemosyne.NET#readme).
+
+The store options are passed as an object, not a configure delegate, because their members are `required`. They are validated when you register, and `AddMnemosynePostgreSql` throws `ArgumentOutOfRangeException` for a bad value.
 
 ### Slim and native AOT hosts
 
@@ -65,7 +67,7 @@ The first run also builds the HNSW index with `HnswM` and `HnswEfConstruction` a
 | `HnswM` | 16 | 2 to 100 |
 | `HnswEfConstruction` | 64 | 4 to 1000, and at least `2 * HnswM` |
 
-- `Dimensions` is fixed when the schema is created, and 2000 is the most a pgvector HNSW index can hold. Pick the dimension of your embedding model; every embedding passed to the store must match it.
+- `Dimensions` is fixed when the schema is created, and 2000 is the most a pgvector HNSW index can hold. Pick the dimension of your embedding model; every embedding passed to the store must match it. The store reports it as `IReasonletStore.Dimensions`, which the core facade checks each generated embedding against before calling the store.
 - `HnswEfConstruction` must be at least `2 * HnswM` because pgvector refuses to build the index otherwise. Raise it along with `HnswM`.
 
 ## Erasure
@@ -189,6 +191,8 @@ There is one activity per operation.
 | `mnemosyne.search.returned` | histogram | none |
 | `mnemosyne.erased.reasonlets`, `mnemosyne.erased.executions` | counters | none |
 | `mnemosyne.pruned.reasonlets`, `mnemosyne.pruned.executions` | counters | none |
+
+Recall, from the core `Mnemosyne.NET` package, also records `mnemosyne.operations` and `mnemosyne.operation.duration` on the same meter, with operation `recall`; see its [recall telemetry](https://github.com/MarcelRoozekrans/Mnemosyne.NET/tree/main/src/Mnemosyne.NET#telemetry).
 
 ### Privacy
 

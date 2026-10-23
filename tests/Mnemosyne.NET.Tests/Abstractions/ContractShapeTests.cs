@@ -1,6 +1,7 @@
 using System.Reflection;
 using System.Xml.Linq;
 using Mnemosyne.NET.Abstractions;
+using Mnemosyne.NET.Abstractions.Validation;
 using Xunit;
 using ZeroAlloc.Results;
 
@@ -21,7 +22,8 @@ public class ContractShapeTests
     {
         foreach (var contract in Contracts)
         {
-            var methods = contract.GetMethods();
+            // Property accessors are checked by TheStoreExposesItsDimensionsReadOnly.
+            var methods = contract.GetMethods().Where(m => !m.IsSpecialName).ToArray();
             Assert.NotEmpty(methods);
             foreach (var m in methods)
             {
@@ -72,6 +74,25 @@ public class ContractShapeTests
         Assert.Empty(constructors[0].GetParameters());
     }
 
+    [Fact]
+    public void TheStoreExposesItsDimensionsReadOnly()
+    {
+        var properties = typeof(IReasonletStore).GetProperties();
+        var dimensions = Assert.Single(properties);
+        Assert.Equal("Dimensions", dimensions.Name);
+        Assert.Equal(typeof(int), dimensions.PropertyType);
+        Assert.True(dimensions.CanRead);
+        Assert.False(dimensions.CanWrite);
+        foreach (var contract in Contracts.Where(c => c != typeof(IReasonletStore)))
+        {
+            Assert.Empty(contract.GetProperties());
+        }
+    }
+
+    [Fact]
+    public void ReasonletQueryHasNoProvenance() =>
+        Assert.Null(typeof(ReasonletQuery).GetProperty("Provenance"));
+
     [Theory]
     [InlineData(typeof(IReasonletMemory))]
     [InlineData(typeof(IReasonletStore))]
@@ -109,6 +130,40 @@ public class ContractShapeTests
         var copy = result with { Executions = 6 };
         Assert.Equal(2, copy.Reasonlets);
         Assert.Equal(6, copy.Executions);
+    }
+
+    [Fact]
+    public void CheckExposesOnlyTheHelpersOtherPackagesUse()
+    {
+        // Public API: a change here is a breaking or widening change to every package that extends Mnemosyne.
+        var members = typeof(Check).GetMethods(BindingFlags.Public | BindingFlags.Static | BindingFlags.DeclaredOnly)
+            .Select(m => m.Name + "(" + string.Join(", ", m.GetParameters().Select(p => p.ParameterType.Name)) + ")")
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+        Assert.Equal(
+            [
+                "All(ReadOnlySpan`1)",
+                "Fail(String, String)",
+                "Nested(UnitResult`1, String)",
+                "NotDefault(ExecutionId, String)",
+                "NotDefault(ReasonletId, String)",
+                "NotNull(Object, String)",
+                "Range(Int32, Int32, Int32, String)",
+                "UnitInterval(Double, String)",
+            ],
+            members);
+        Assert.True(typeof(Check).IsPublic);
+        Assert.Equal("Mnemosyne.NET.Abstractions.Validation", typeof(Check).Namespace);
+    }
+
+    [Fact]
+    public void OnlyTheTestProjectSeesAbstractionsInternals()
+    {
+        var csproj = Path.Combine(RepoConventionsTests.RepoRoot(), "src", "Mnemosyne.NET.Abstractions", "Mnemosyne.NET.Abstractions.csproj");
+        var friends = XDocument.Load(csproj).Descendants("InternalsVisibleTo")
+            .Select(e => e.Attribute("Include")?.Value)
+            .ToArray();
+        Assert.Equal(new string?[] { "Mnemosyne.NET.Tests" }, friends);
     }
 
     [Fact]

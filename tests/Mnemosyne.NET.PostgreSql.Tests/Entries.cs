@@ -67,6 +67,18 @@ internal static class Entries
         return (T)(await command.ExecuteScalarAsync(TestContext.Current.CancellationToken))!;
     }
 
+    /// <summary>
+    /// Reads one <c>timestamptz</c> as a <see cref="DateTimeOffset"/>, an instant, so a comparison does not depend on the
+    /// server's <c>TimeZone</c>. A cast to <c>timestamp</c> would render it in the session's time zone instead.
+    /// </summary>
+    public static async Task<DateTimeOffset> TimestampAsync(NpgsqlDataSource dataSource, string sql, params object[] parameters)
+    {
+        await using var command = Command(dataSource, sql, parameters);
+        await using var reader = await command.ExecuteReaderAsync(TestContext.Current.CancellationToken);
+        Assert.True(await reader.ReadAsync(TestContext.Current.CancellationToken));
+        return reader.GetFieldValue<DateTimeOffset>(0);
+    }
+
     public static async Task ExecuteAsync(NpgsqlDataSource dataSource, string sql, params object[] parameters)
     {
         await using var command = Command(dataSource, sql, parameters);

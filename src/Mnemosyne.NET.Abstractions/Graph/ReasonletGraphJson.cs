@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization.Metadata;
+using Mnemosyne.NET.Abstractions.Validation;
 using ZeroAlloc.Results;
 
 namespace Mnemosyne.NET.Abstractions;

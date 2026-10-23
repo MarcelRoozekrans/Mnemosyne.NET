@@ -114,9 +114,77 @@ public sealed class SearchTests(PgVectorFixture fixture) : IClassFixture<PgVecto
         Assert.Equal(3, measured.Runs);
         Assert.Equal(2, measured.Successes);
         Assert.Equal(
-            await Entries.ScalarAsync<DateTime>(fixture.DataSource, "SELECT executed_at FROM mnemosyne.reasonlet_executions WHERE id = $1", success.Value),
-            measured.LastSuccessAt!.Value.UtcDateTime);
-        Assert.Equal(new ReasonletMetrics(0, 0, null), result.Value[1].Metrics);
+            await Entries.TimestampAsync(fixture.DataSource, "SELECT executed_at FROM mnemosyne.reasonlet_executions WHERE id = $1", success.Value),
+            measured.LastSuccessAt!.Value);
+        var missing = result.Value[1].Metrics;
+        var created = await Entries.TimestampAsync(
+            fixture.DataSource, "SELECT created_at FROM mnemosyne.reasonlets WHERE id = $1", bare.Value);
+        Assert.Equal(0, missing.Runs);
+        Assert.Equal(0, missing.Successes);
+        Assert.Null(missing.LastSuccessAt);
+        Assert.Equal(created, missing.LastExecutedAt);
+    }
+
+    [Fact]
+    public async Task SearchReturnsLastExecutedAt()
+    {
+        var (store, scope) = await MigratedAsync();
+        var id = await RememberAsync(store, scope, new float[] { 1, 0, 0 }, "measured");
+        Assert.True((await store.AppendExecutionAsync(scope, id, new ReasonletOutcome(false, TimeSpan.Zero, null), Entries.Provenance(), Ct)).IsSuccess);
+
+        var result = await store.SearchAsync(scope, new float[] { 1, 0, 0 }, null, 10, Ct);
+
+        Assert.Equal(
+            await Entries.TimestampAsync(fixture.DataSource, "SELECT last_executed_at FROM mnemosyne.reasonlet_metrics WHERE reasonlet_id = $1", id.Value),
+            result.Value.Single().Metrics.LastExecutedAt);
+    }
+
+    [Fact]
+    public async Task SearchReturnsTheParentsMetricsAndNullForARoot()
+    {
+        var (store, scope) = await MigratedAsync();
+        var root = await RememberAsync(store, scope, new float[] { 1, 0, 0 }, "root");
+        Assert.True((await store.AppendExecutionAsync(scope, root, new ReasonletOutcome(false, TimeSpan.Zero, null), Entries.Provenance(), Ct)).IsSuccess);
+        var child = await store.RememberAsync(
+            Entries.Entry(scope, Entries.Graph("child"), root, embedding: new float[] { 0, 1, 0 }), Ct);
+        Assert.True(child.IsSuccess);
+
+        var result = await store.SearchAsync(scope, new float[] { 1, 0, 0 }, null, 10, Ct);
+
+        var rootHit = result.Value.Single(c => c.Reasonlet.Id == root);
+        var childHit = result.Value.Single(c => c.Reasonlet.Id == child.Value.Id);
+        Assert.Null(rootHit.ParentMetrics);
+        var parent = childHit.ParentMetrics!.Value;
+        Assert.Equal(
+            await Entries.ScalarAsync<int>(fixture.DataSource, "SELECT runs FROM mnemosyne.reasonlet_metrics WHERE reasonlet_id = $1", root.Value), parent.Runs);
+        Assert.Equal(
+            await Entries.ScalarAsync<int>(fixture.DataSource, "SELECT successes FROM mnemosyne.reasonlet_metrics WHERE reasonlet_id = $1", root.Value), parent.Successes);
+        Assert.Equal(
+            await Entries.TimestampAsync(fixture.DataSource, "SELECT last_success_at FROM mnemosyne.reasonlet_metrics WHERE reasonlet_id = $1", root.Value),
+            parent.LastSuccessAt!.Value);
+        Assert.Equal(
+            await Entries.TimestampAsync(fixture.DataSource, "SELECT last_executed_at FROM mnemosyne.reasonlet_metrics WHERE reasonlet_id = $1", root.Value),
+            parent.LastExecutedAt);
+        Assert.NotEqual(childHit.Metrics, parent);
+    }
+
+    [Fact]
+    public async Task SearchReturnsNullParentMetricsAfterTheParentIsErased()
+    {
+        var (store, scope) = await MigratedAsync();
+        var parentProvenance = new ReasonletProvenance { Source = "test", SubjectId = "erased" };
+        var parent = await store.RememberAsync(
+            Entries.Entry(scope, Entries.Graph("parent"), embedding: new float[] { 1, 0, 0 }, provenance: parentProvenance), Ct);
+        var child = await store.RememberAsync(
+            Entries.Entry(scope, Entries.Graph("child"), parent.Value.Id, new float[] { 0, 1, 0 }), Ct);
+        Assert.True(child.IsSuccess);
+        Assert.True((await store.EraseAsync(new ReasonletErasure(scope, "erased"), Ct)).IsSuccess);
+
+        var result = await store.SearchAsync(scope, new float[] { 1, 0, 0 }, null, 10, Ct);
+
+        var hit = Assert.Single(result.Value);
+        Assert.Equal(child.Value.Id, hit.Reasonlet.Id);
+        Assert.Null(hit.ParentMetrics);
     }
 
     [Fact]

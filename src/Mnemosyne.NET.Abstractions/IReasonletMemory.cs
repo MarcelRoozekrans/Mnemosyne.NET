@@ -18,7 +18,9 @@ public interface IReasonletMemory
     /// Error codes: <see cref="MnemosyneErrorCode.Validation"/> when the capture breaks an invariant,
     /// <see cref="MnemosyneErrorCode.NotFound"/> when the parent does not exist in the capture's scope (including a parent that exists only in another scope),
     /// <see cref="MnemosyneErrorCode.Conflict"/> when the write loses a race the store detects, such as the parent being erased between lookup and insert,
-    /// <see cref="MnemosyneErrorCode.Unavailable"/> when the backing store or the embedding generator fails.
+    /// <see cref="MnemosyneErrorCode.Unavailable"/> when the backing store, the embedding generator or the intent extractor fails, or the generator
+    /// returns an embedding the store cannot use: empty, not of the store's <see cref="IReasonletStore.Dimensions"/>, non-finite or of zero norm. An extractor that fails is never
+    /// replaced by a guessed intent, so a wrong intent is never stored.
     /// </remarks>
     /// <param name="capture">The capture to store.</param>
     /// <param name="ct">The cancellation token.</param>
@@ -27,10 +29,13 @@ public interface IReasonletMemory
 
     /// <summary>Finds and ranks the Reasonlets that best answer a query.</summary>
     /// <remarks>
-    /// The query's <see cref="ReasonletQuery.Provenance"/> identifies the run and subject the recall serves,
-    /// for audit and erasure by subject. Recall provenance is persisted with the phase 1.5 audit events, and subject erasure must then remove and count those too.
+    /// A match must have a similarity of at least <see cref="ReasonletQuery.MinSimilarity"/> when that is set. When absent, the
+    /// selector's own cut-off applies; the default selector uses <c>ReasonletRankingOptions.MinSimilarity</c>, 0.5.
+    /// The result is empty, and still a success, when nothing passes.
+    /// An intent extractor that fails does not fail the recall: it searches every intent instead, since a missing filter only widens the search.
     /// Error codes: <see cref="MnemosyneErrorCode.Validation"/> when the query breaks an invariant,
-    /// <see cref="MnemosyneErrorCode.Unavailable"/> when the backing store, the embedding generator, the intent extractor or the selector fails.
+    /// <see cref="MnemosyneErrorCode.Unavailable"/> when the backing store, the embedding generator or the selector fails, or the generator
+    /// returns an embedding the store cannot use: empty, not of the store's <see cref="IReasonletStore.Dimensions"/>, non-finite or of zero norm.
     /// </remarks>
     /// <param name="query">The query.</param>
     /// <param name="ct">The cancellation token.</param>

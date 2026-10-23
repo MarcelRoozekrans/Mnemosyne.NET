@@ -55,6 +55,10 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
         _options = options;
     }
 
+    /// <inheritdoc />
+    /// <remarks>It is <see cref="MnemosynePostgreSqlOptions.Dimensions"/>, which the first <see cref="MigrateAsync"/> records.</remarks>
+    public int Dimensions => _options.Dimensions;
+
     /// <summary>Creates or updates the <c>mnemosyne</c> schema and applies the embedding dimension and HNSW options.</summary>
     /// <remarks>
     /// Calling it again is harmless. The server must run PostgreSQL 15 or later and pgvector 0.8.0 or later, or the
@@ -684,7 +688,15 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
         var candidates = new List<ReasonletCandidate>(rows.Count);
         foreach (var row in rows)
         {
-            candidates.Add(new ReasonletCandidate(ToDefinition(row.ToReasonletRow()), row.Similarity, new ReasonletMetrics(row.Runs, row.Successes, row.LastSuccessAt)));
+            // The parent's counter row has NOT NULL runs, so a null run count means there is no row.
+            var parent = row.ParentRuns is { } parentRuns
+                ? new ReasonletMetrics(parentRuns, row.ParentSuccesses!.Value, row.ParentLastSuccessAt, row.ParentLastExecutedAt!.Value)
+                : (ReasonletMetrics?)null;
+            candidates.Add(new ReasonletCandidate(
+                ToDefinition(row.ToReasonletRow()),
+                row.Similarity,
+                new ReasonletMetrics(row.Runs, row.Successes, row.LastSuccessAt, row.LastExecutedAt),
+                parent));
         }
 
         return candidates;
