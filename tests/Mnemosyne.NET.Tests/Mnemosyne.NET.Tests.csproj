@@ -18,6 +18,8 @@
     <None Include="..\..\schemas\reasonlet-graph.v1.schema.json" Link="schemas\reasonlet-graph.v1.schema.json" CopyToOutputDirectory="PreserveNewest" />
     <!-- The telemetry capture the Docker tier uses, so both tiers listen and filter the same way. -->
     <Compile Include="..\Mnemosyne.NET.PostgreSql.Tests\TelemetryCapture.cs" Link="PostgreSql\TelemetryCapture.cs" />
+    <!-- The sample's hashing embedding generator, compiled in rather than referenced: the sample is an Exe. -->
+    <Compile Include="..\..\samples\Mnemosyne.Samples.StoreAndRecall\HashingEmbeddingGenerator.cs" Link="Samples\HashingEmbeddingGenerator.cs" />
   </ItemGroup>
 
   <ItemGroup>

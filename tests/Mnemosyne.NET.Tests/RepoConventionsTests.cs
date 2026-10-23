@@ -84,6 +84,21 @@ public sealed class RepoConventionsTests
     }
 
     [Fact]
+    public void CiRunsTheSample()
+    {
+        // The sample checks the ranking the docs describe, so it is a test only while CI runs it and may not fail
+        // quietly. aot-publish already starts the pgvector service the sample needs.
+        var root = RepoRoot();
+        Assert.True(
+            File.Exists(Path.Combine(root, "samples", "Mnemosyne.Samples.StoreAndRecall", "Mnemosyne.Samples.StoreAndRecall.csproj")),
+            "the store-and-recall sample's project is missing");
+
+        var job = JobBody(StripComments(File.ReadAllText(Path.Combine(root, ".github", "workflows", "ci.yml"))), "aot-publish");
+        Assert.Contains("dotnet run --project samples/Mnemosyne.Samples.StoreAndRecall", job, StringComparison.Ordinal);
+        Assert.DoesNotContain("continue-on-error:", job, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void EveryTestProjectUsingTestcontainersRequiresDocker()
     {
         var root = RepoRoot();

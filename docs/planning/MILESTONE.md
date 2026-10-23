@@ -17,9 +17,9 @@ with getting-started docs and a sample. See the
 - [ ] All planned phases complete
 - [ ] All tests passing, including integration tests against PostgreSQL + pgvector
 - [ ] CI green, including the Native AOT gate
-- [ ] A procedure can be stored with intent, embedding, execution and feedback, scoped and with provenance
-- [ ] For a new question, the selector returns ranked candidates with a score breakdown, filtered by scope
-- [ ] Telemetry, erasure by scope or subject, and retention work
+- [x] A procedure can be stored with intent, embedding, execution and feedback, scoped and with provenance
+- [x] For a new question, the selector returns ranked candidates with a score breakdown, filtered by scope
+- [x] Telemetry, erasure by scope or subject, and retention work
 - [ ] A preview is on NuGet via release-please, and the docsite is live with getting-started docs and a sample
 
 ## Phases
@@ -28,8 +28,8 @@ with getting-started docs and a sample. See the
 3. Phase 1.3 — Graph JSON schema v1 [complete]
 4. Phase 1.4 — PostgreSQL + pgvector store [complete]
 5. Phase 1.5 — Telemetry and retention [complete]
-6. Phase 1.6 — Selector and ranking [active]
-7. Phase 1.7 — Docsite skeleton and first sample [pending]
+6. Phase 1.6 — Selector and ranking [complete]
+7. Phase 1.7 — Docsite skeleton and first sample [active]
 
 ## Audit History
 | Date | Verdict | Gaps |

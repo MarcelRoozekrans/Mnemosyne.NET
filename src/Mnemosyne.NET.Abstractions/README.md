@@ -11,4 +11,6 @@ The JSON wire format of a graph is documented by the [published JSON Schema](htt
 
 `Mnemosyne.NET.Abstractions.Validation.Check` holds the validation helpers the records use, for packages that extend Mnemosyne: each returns success or a `Validation` failure whose message reads `path: reason`, and `Check.All` and `Check.Nested` combine them.
 
+Documentation: [Reasonlets](https://marcelroozekrans.github.io/Mnemosyne.NET/concepts/reasonlets) and [Getting started](https://marcelroozekrans.github.io/Mnemosyne.NET/getting-started).
+
 See the [repository README](https://github.com/MarcelRoozekrans/Mnemosyne.NET#readme).

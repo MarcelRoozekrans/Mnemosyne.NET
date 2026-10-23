@@ -1,0 +1,8 @@
+{
+  "label": "Concepts",
+  "position": 4,
+  "link": {
+    "type": "generated-index",
+    "description": "The ideas behind Mnemosyne: what a Reasonlet is, how versions form a lineage, how scopes and subjects keep data apart, and how recall ranks."
+  }
+}

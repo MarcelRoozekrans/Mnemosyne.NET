@@ -1,0 +1,127 @@
+name: Docs
+
+# Builds the documentation site on every pull request. A broken link or a dependency drift becomes
+# a red check on the change that caused it, instead of a discovery months later.
+#
+# Publishing happens only from main, on a push or a manual run, to https://marcelroozekrans.github.io/Mnemosyne.NET/.
+# A pull request still gets the build as a check, and neither uploads an artifact nor deploys,
+# otherwise any PR could stage what gets published.
+#
+# Path-filtered on purpose, unlike ci.yml, which builds and tests .NET on every push and pull
+# request. This site is a separate deliverable: package.json, the docs/ tree and the site config are
+# the entire input to `npm run build`, and .NET source changes cannot affect it. Filtering means a
+# PR touching only src/ or tests/ does not pay for a Node install and a webpack build it cannot
+# have broken, while a PR touching docs/, package.json or the site config still gets the check.
+on:
+  push:
+    branches: [main]
+    paths:
+      # docs/ is the site's content, and can hold more than markdown (React/MDX components,
+      # assets), so the pattern is deliberately not narrowed to *.md.
+      - "docs/**"
+      - "package.json"
+      - "package-lock.json"
+      - "docusaurus.config.ts"
+      - "sidebars.ts"
+      - "babel.config.js"
+      - "tsconfig.json"
+      # src/css is Docusaurus's customCss (docusaurus.config.ts), not the .NET source tree. This
+      # repository's src/ is otherwise .NET projects, irrelevant to this build, and happens to
+      # hold the site's one customisation point alongside them.
+      - "src/css/**"
+      # src/pages, src/theme and static/ do not exist yet, but are Docusaurus's conventional
+      # locations for custom pages, swizzled components and static assets. Listed so that adding
+      # any of them is covered by this check on the same commit.
+      - "src/pages/**"
+      - "src/theme/**"
+      - "static/**"
+      - ".github/workflows/docs.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "docs/**"
+      - "package.json"
+      - "package-lock.json"
+      - "docusaurus.config.ts"
+      - "sidebars.ts"
+      - "babel.config.js"
+      - "tsconfig.json"
+      - "src/css/**"
+      - "src/pages/**"
+      - "src/theme/**"
+      - "static/**"
+      - ".github/workflows/docs.yml"
+  # Same reasoning as ci.yml: GitHub does not trigger workflows for a push carrying more than 1,000
+  # commits, so this lets a re-run happen after a flake or a runner outage without an empty commit.
+  workflow_dispatch:
+
+# Pull requests cancel superseded runs: three pushes to a branch would otherwise queue three complete
+# builds, and the first two are already irrelevant. A run on main is never cancelled, so a deploy
+# that has started always finishes.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# This job reads the repository and nothing else. The default is repository-configurable and
+# therefore not a default at all, so it is stated here, the same rule ci.yml follows.
+permissions:
+  contents: read
+
+# The deploy job needs more than that, and takes it at the job level rather than here: `pages:
+# write` to publish and `id-token: write` for the OIDC exchange actions/deploy-pages uses. Granting
+# them workflow-wide would hand them to the build job too, which runs on pull requests from forks.
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    # Generous for a build measured in minutes, far below the 360-minute default: a hung install or
+    # a hung webpack compile should be reported promptly, not silently burn runner time.
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      # Pinned explicitly rather than left to the runner default. A floating Node default on the
+      # runner image is the same kind of risk as a floating transitive dependency: the build breaks
+      # at a time nobody chose. 24 matches ci.yml's commitlint job.
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      # Installs from the committed package-lock.json. Without a lockfile the next fresh install
+      # picks new transitive versions, and a build that was green yesterday breaks without a change.
+      - name: Install
+        run: npm ci
+
+      # Fails on broken internal links: docusaurus.config.ts sets `onBrokenLinks: 'throw'`. This
+      # step must not be softened with `continue-on-error`; a green build over broken links is the
+      # defect this check exists to remove.
+      - name: Build
+        run: npm run build
+
+      # On main, for a push or a manual run. A pull request build is a check, not a publication: uploading its
+      # output would let any PR stage what the deploy job then publishes.
+      - name: Upload the built site
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: build
+
+  # Publishes what the build job produced. A separate job rather than more steps, because that is
+  # what lets the permissions above stay narrow and what gives GitHub the deployment record.
+  deploy:
+    needs: build
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5
