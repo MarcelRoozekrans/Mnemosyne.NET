@@ -187,18 +187,24 @@ static async Task<int> Walkthrough(IReasonletMemory memory, ReasonletScope scope
         Console.WriteLine("The close match fell below the 0.5 similarity cut-off, so recall dropped it.");
     }
 
-    // 4. Check the ranking the docs describe: the new version first, the proven original second.
-    ReasonletId[] expected = [newVersion.Id, original.Id];
-    var actual = matches.Take(2).Select(m => m.Reasonlet.Id).ToArray();
-    if (!actual.SequenceEqual(expected))
+    // 4. Check the ranking the docs describe: three matches, the new version first, the proven original second and
+    // the close match last, with the totals the docs publish. Freshness is 1.000 within a run, so they are stable.
+    ReasonletId[] expected = [newVersion.Id, original.Id, closeMatch.Id];
+    double[] expectedTotals = [0.883, 0.878, 0.802];
+    var actual = matches.Select(m => m.Reasonlet.Id).ToArray();
+    var actualTotals = matches.Select(m => Math.Round(m.Score.Total, 3)).ToArray();
+    if (matches.Count != expected.Length || !actual.SequenceEqual(expected) || !actualTotals.SequenceEqual(expectedTotals))
     {
         Console.Error.WriteLine("The ranking differs from what the sample expects.");
-        Console.Error.WriteLine($"  expected: {Describe(expected, matches, original, closeMatch, newVersion)}");
-        Console.Error.WriteLine($"  actual:   {Describe(actual, matches, original, closeMatch, newVersion)}");
+        Console.Error.WriteLine($"  matches: expected {expected.Length}, got {matches.Count}");
+        Console.Error.WriteLine($"  expected order:  {Describe(expected, matches, original, closeMatch, newVersion)}");
+        Console.Error.WriteLine($"  actual order:    {Describe(actual, matches, original, closeMatch, newVersion)}");
+        Console.Error.WriteLine(string.Create(CultureInfo.InvariantCulture, $"  expected totals: {string.Join(", ", expectedTotals.Select(t => t.ToString("F3", CultureInfo.InvariantCulture)))}"));
+        Console.Error.WriteLine(string.Create(CultureInfo.InvariantCulture, $"  actual totals:   {string.Join(", ", actualTotals.Select(t => t.ToString("F3", CultureInfo.InvariantCulture)))}"));
         return 1;
     }
 
-    Console.WriteLine("Checked the ranking: the new version ranks first and the proven original second.");
+    Console.WriteLine("Checked the ranking: the new version first, the proven original second and the close match last, with the totals the docs publish.");
     return 0;
 }
 
