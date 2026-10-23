@@ -180,7 +180,7 @@ A dependency is **down** when it throws, or when it times out: an `OperationCanc
 |---|---|---|
 | The query or capture is invalid | `Validation` | `Validation` |
 | The embedding generator is down, or returns no embedding | `Unavailable` | `Unavailable` |
-| The generator returns an embedding the store cannot use: empty, with a NaN or infinite value, with a zero norm, or a length the store rejects | `Unavailable` | `Unavailable` |
+| The generator returns an embedding the store cannot use: empty, not of the store's `Dimensions`, with a NaN or infinite value, or with a zero norm | `Unavailable` | `Unavailable` |
 | The intent extractor is down | searches every intent; the recall succeeds | `Unavailable`, so a wrong intent is never stored |
 | The extractor fails with any other error code, or returns an invalid intent | throws `InvalidOperationException` | throws `InvalidOperationException` |
 | The store returns an invalid candidate | throws `InvalidOperationException` | not applicable |
@@ -188,7 +188,7 @@ A dependency is **down** when it throws, or when it times out: an `OperationCanc
 | Your token is cancelled | the `OperationCanceledException` propagates | the `OperationCanceledException` propagates |
 
 - **Why recall falls back.** A missing intent filter only widens the search, so recall still finds the right procedure, ranked among more candidates. The recall activity records it with `mnemosyne.recall.intent_fallback`. Remember has no such fallback: a guessed intent would be stored for good.
-- **Why a rejected embedding is `Unavailable`.** The generator made the embedding, not you, so nothing in your input is invalid. The facade checks for an empty, non-finite or zero-norm embedding before it calls the store. It cannot know the store's dimension, so it maps the store's `Validation` on the embedding to `Unavailable`; every other store `Validation`, such as a bad limit, is returned unchanged. The error's message is fixed, and its detail names the reason: `length`, `non-finite` or `norm`, or the store's own message about the embedding.
+- **Why an unusable embedding is `Unavailable`.** The generator made the embedding, not you, so nothing in your input is invalid. The facade checks the embedding before it calls the store: it must have the store's `IReasonletStore.Dimensions` values, all finite, with a nonzero norm. The error's message is fixed, and its detail gives only the reason, `length`, `non-finite` or `norm`, with the two lengths for a wrong length. Store errors, `Validation` included, are returned unchanged.
 - **No user text in errors.** For an exception, the error's detail names its type. The error never carries the exception's message or the extractor's own text, because either can quote the question.
 - **Adapter bugs throw.** The extractor is given a valid question, so any error code other than `Unavailable` from it is a bug in the adapter, as is an invalid intent or an invalid candidate from the store.
 

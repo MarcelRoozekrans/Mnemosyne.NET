@@ -55,6 +55,10 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
         _options = options;
     }
 
+    /// <inheritdoc />
+    /// <remarks>It is <see cref="MnemosynePostgreSqlOptions.Dimensions"/>, which the first <see cref="MigrateAsync"/> records.</remarks>
+    public int Dimensions => _options.Dimensions;
+
     /// <summary>Creates or updates the <c>mnemosyne</c> schema and applies the embedding dimension and HNSW options.</summary>
     /// <remarks>
     /// Calling it again is harmless. The server must run PostgreSQL 15 or later and pgvector 0.8.0 or later, or the

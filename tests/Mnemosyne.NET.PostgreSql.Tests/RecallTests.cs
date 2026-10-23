@@ -151,7 +151,8 @@ public sealed class RecallTests(PgVectorFixture fixture) : IClassFixture<PgVecto
     [Fact]
     public async Task AWrongLengthEmbeddingIsUnavailableAtRecallAndRemember()
     {
-        // The store has 3 dimensions, so a 4-value embedding passes the facade's own checks and only the store rejects it.
+        // The real store reports 3 dimensions, so the facade refuses a 4-value embedding before it reaches the store: the
+        // scope stays empty.
         var embeddings = new FixedEmbeddings { [Query] = [1f, 0f, 0f, 0f] };
         var (memory, scope) = await MemoryAsync(embeddings);
 
@@ -171,8 +172,10 @@ public sealed class RecallTests(PgVectorFixture fixture) : IClassFixture<PgVecto
         {
             Assert.Equal(MnemosyneErrorCode.Unavailable, error.Code);
             Assert.Equal("The embedding generator returned an embedding the store cannot use.", error.Message);
-            Assert.Contains("must have 3 values", error.Detail);
+            Assert.Equal("length: the embedding has 4 values, but the store's dimension is 3", error.Detail);
         }
+
+        Assert.Equal(0L, await Entries.ScalarAsync<long>(fixture.DataSource, "SELECT count(*) FROM mnemosyne.reasonlets WHERE scope = $1", scope.Value));
     }
 
     /// <summary>A unit vector in the xy-plane whose cosine with (1, 0, 0) is <paramref name="similarity"/>.</summary>

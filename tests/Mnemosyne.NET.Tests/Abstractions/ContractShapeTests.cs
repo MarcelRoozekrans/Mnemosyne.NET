@@ -22,7 +22,8 @@ public class ContractShapeTests
     {
         foreach (var contract in Contracts)
         {
-            var methods = contract.GetMethods();
+            // Property accessors are checked by TheStoreExposesItsDimensionsReadOnly.
+            var methods = contract.GetMethods().Where(m => !m.IsSpecialName).ToArray();
             Assert.NotEmpty(methods);
             foreach (var m in methods)
             {
@@ -71,6 +72,21 @@ public class ContractShapeTests
         var constructors = record.GetConstructors();
         Assert.Single(constructors);
         Assert.Empty(constructors[0].GetParameters());
+    }
+
+    [Fact]
+    public void TheStoreExposesItsDimensionsReadOnly()
+    {
+        var properties = typeof(IReasonletStore).GetProperties();
+        var dimensions = Assert.Single(properties);
+        Assert.Equal("Dimensions", dimensions.Name);
+        Assert.Equal(typeof(int), dimensions.PropertyType);
+        Assert.True(dimensions.CanRead);
+        Assert.False(dimensions.CanWrite);
+        foreach (var contract in Contracts.Where(c => c != typeof(IReasonletStore)))
+        {
+            Assert.Empty(contract.GetProperties());
+        }
     }
 
     [Fact]

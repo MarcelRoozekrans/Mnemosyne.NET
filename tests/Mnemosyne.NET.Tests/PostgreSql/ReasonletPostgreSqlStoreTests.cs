@@ -22,6 +22,10 @@ public sealed class ReasonletPostgreSqlStoreTests : IAsyncDisposable
     }
 
     [Fact]
+    public void DimensionsIsTheConfiguredDimension() =>
+        Assert.Equal(7, new ReasonletPostgreSqlStore(_unreachable, new MnemosynePostgreSqlOptions { Dimensions = 7 }).Dimensions);
+
+    [Fact]
     public void TheConstructorRefusesNullArguments()
     {
         Assert.Throws<ArgumentNullException>(() => new ReasonletPostgreSqlStore(null!, Options));

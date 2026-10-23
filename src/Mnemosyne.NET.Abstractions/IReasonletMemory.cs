@@ -19,7 +19,7 @@ public interface IReasonletMemory
     /// <see cref="MnemosyneErrorCode.NotFound"/> when the parent does not exist in the capture's scope (including a parent that exists only in another scope),
     /// <see cref="MnemosyneErrorCode.Conflict"/> when the write loses a race the store detects, such as the parent being erased between lookup and insert,
     /// <see cref="MnemosyneErrorCode.Unavailable"/> when the backing store, the embedding generator or the intent extractor fails, or the generator
-    /// returns an embedding the store cannot use, for example one whose length does not match the store's. An extractor that fails is never
+    /// returns an embedding the store cannot use: empty, not of the store's <see cref="IReasonletStore.Dimensions"/>, non-finite or of zero norm. An extractor that fails is never
     /// replaced by a guessed intent, so a wrong intent is never stored.
     /// </remarks>
     /// <param name="capture">The capture to store.</param>
@@ -35,7 +35,7 @@ public interface IReasonletMemory
     /// An intent extractor that fails does not fail the recall: it searches every intent instead, since a missing filter only widens the search.
     /// Error codes: <see cref="MnemosyneErrorCode.Validation"/> when the query breaks an invariant,
     /// <see cref="MnemosyneErrorCode.Unavailable"/> when the backing store, the embedding generator or the selector fails, or the generator
-    /// returns an embedding the store cannot use, for example one whose length does not match the store's.
+    /// returns an embedding the store cannot use: empty, not of the store's <see cref="IReasonletStore.Dimensions"/>, non-finite or of zero norm.
     /// </remarks>
     /// <param name="query">The query.</param>
     /// <param name="ct">The cancellation token.</param>

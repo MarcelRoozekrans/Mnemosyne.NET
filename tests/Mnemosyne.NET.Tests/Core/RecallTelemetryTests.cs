@@ -255,10 +255,9 @@ public sealed class RecallTelemetryTests
     }
 
     [Fact]
-    public async Task AnEmbeddingTheStoreRejectsIsOutcomeUnavailable()
+    public async Task AnEmbeddingOfTheWrongLengthIsOutcomeUnavailable()
     {
-        _store.SearchResult = Result<IReadOnlyList<ReasonletCandidate>, MnemosyneError>.Failure(
-            new(MnemosyneErrorCode.Validation, "embedding: must have 4 values, the store's dimension, but has 3"));
+        _store.Dimensions = 4;
         using var capture = new TelemetryCapture();
 
         var result = await Memory().RecallAsync(TestData.Query(), Ct);
@@ -491,6 +490,8 @@ public sealed class RecallTelemetryTests
     private sealed class TracingStore(IReasonletStore inner) : IReasonletStore
     {
         private static readonly ActivitySource Source = new(MnemosyneTelemetry.ActivitySourceName);
+
+        public int Dimensions => inner.Dimensions;
 
         public async ValueTask<Result<IReadOnlyList<ReasonletCandidate>, MnemosyneError>> SearchAsync(
             ReasonletScope scope, ReadOnlyMemory<float> embedding, string? intent, int limit, CancellationToken ct)

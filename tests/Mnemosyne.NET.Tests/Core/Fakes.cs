@@ -10,6 +10,8 @@ internal sealed class FakeStore : IReasonletStore
     public static readonly ReasonletReceipt Receipt =
         new(ReasonletId.New(), "1.0", ExecutionId.New(), ReasonletCaptureKind.NewReasonlet, ReasonletStatus.Active);
 
+    public int Dimensions { get; set; } = FakeEmbeddingGenerator.Vector.Length;
+
     public int Calls { get; private set; }
 
     public ReasonletStoreEntry? Remembered { get; private set; }

@@ -5,6 +5,13 @@ namespace Mnemosyne.NET.Abstractions;
 /// <summary>The storage port. Implementations persist Reasonlets, executions and feedback. Cancellation throws <see cref="OperationCanceledException"/>; it is never returned as a result.</summary>
 public interface IReasonletStore
 {
+    /// <summary>
+    /// Gets the length every stored and queried embedding must have. It is fixed when the store is configured, and a
+    /// store answers <see cref="MnemosyneErrorCode.Validation"/> for an embedding of any other length. The facade checks
+    /// a generated embedding against it before calling the store.
+    /// </summary>
+    int Dimensions { get; }
+
     /// <summary>Stores an entry, making the three-way ParentId decision atomically.</summary>
     /// <remarks>
     /// The store decides between a new Reasonlet, an execution only and a new version in one atomic step.

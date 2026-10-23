@@ -370,38 +370,42 @@ public sealed class ReasonletMemoryTests
         Assert.Equal(0, _store.Calls);
     }
 
+    public static TheoryData<float[]> WrongLengths() => new() { new[] { 0.6f, 0.8f }, new[] { 0.6f, 0.8f, 0f, 0f } };
+
     [Theory]
-    [InlineData("embedding: must have 4 values, the store's dimension, but has 3")]
-    [InlineData("Embedding: must have 4 values, the store's dimension, but has 3")]
-    [InlineData("embedding[2]: must be a finite number")]
-    public async Task TheStoresValidationOnTheEmbeddingAtRecallIsUnavailable(string message)
+    [MemberData(nameof(WrongLengths))]
+    public async Task AWrongLengthEmbeddingIsUnavailableAtRecallAndRememberWithoutCallingTheStore(float[] vector)
     {
-        _store.SearchResult = Result<IReadOnlyList<ReasonletCandidate>, MnemosyneError>.Failure(new(MnemosyneErrorCode.Validation, message));
+        _generator.Respond = () => new([new Embedding<float>(vector)]);
 
-        var result = await Memory().RecallAsync(TestData.Query(), CancellationToken.None);
+        var recalled = await Memory().RecallAsync(TestData.Query() with { Question = Secret }, CancellationToken.None);
+        var remembered = await Memory().RememberAsync(TestData.Capture() with { Question = Secret }, CancellationToken.None);
 
-        Assert.Equal(new MnemosyneError(MnemosyneErrorCode.Unavailable, "The embedding generator returned an embedding the store cannot use.", message), result.Error);
-        Assert.Equal(0, _selector.Calls);
+        var expected = $"length: the embedding has {vector.Length} values, but the store's dimension is 3";
+        foreach (var error in new[] { recalled.Error, remembered.Error })
+        {
+            AssertUnusableEmbedding(error, "length");
+            Assert.Equal(expected, error.Detail);
+        }
+
+        Assert.Equal(0, _store.Calls);
     }
 
     [Fact]
-    public async Task TheStoresValidationOnTheEmbeddingAtRememberIsUnavailable()
+    public async Task TheLengthCheckUsesTheStoresDimension()
     {
-        const string Message = "Embedding: must have 4 values, the store's dimension, but has 3";
-        _store.RememberResult = Result<ReasonletReceipt, MnemosyneError>.Failure(new(MnemosyneErrorCode.Validation, Message));
+        _store.Dimensions = 2;
+        _generator.Respond = () => new([new Embedding<float>(new[] { 0.6f, 0.8f })]);
 
-        var result = await Memory().RememberAsync(TestData.Capture(), CancellationToken.None);
-
-        Assert.Equal(new MnemosyneError(MnemosyneErrorCode.Unavailable, "The embedding generator returned an embedding the store cannot use.", Message), result.Error);
+        Assert.True((await Memory().RecallAsync(TestData.Query(), CancellationToken.None)).IsSuccess);
+        Assert.Equal([0.6f, 0.8f], _store.Searched!.Value.Embedding);
     }
 
     [Theory]
+    [InlineData(MnemosyneErrorCode.Validation, "embedding: must have 4 values, the store's dimension, but has 3")]
     [InlineData(MnemosyneErrorCode.Validation, "limit: must be from 1 to 200")]
-    [InlineData(MnemosyneErrorCode.Validation, "embeddings: not the embedding path")]
-    [InlineData(MnemosyneErrorCode.Validation, "embedding")]
-    [InlineData(MnemosyneErrorCode.Validation, "Dimensions: the database's embeddings have 4 dimensions")]
     [InlineData(MnemosyneErrorCode.Unavailable, "embedding: down")]
-    public async Task EveryOtherStoreErrorPassesThrough(MnemosyneErrorCode code, string message)
+    public async Task EveryStoreErrorPassesThrough(MnemosyneErrorCode code, string message)
     {
         var error = new MnemosyneError(code, message);
         _store.SearchResult = Result<IReadOnlyList<ReasonletCandidate>, MnemosyneError>.Failure(error);
