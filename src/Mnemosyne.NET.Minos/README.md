@@ -60,3 +60,7 @@ A failed Minos call never throws. It returns a `MnemosyneError` with the fixed m
 - Every other kind means the judge could not judge, and maps to `Unavailable`. The facade then keeps the agent's own verdict.
 
 Exceptions and cancellation propagate.
+
+## Documentation
+
+- [Judging runs with Minos](https://marcelroozekrans.github.io/Mnemosyne.NET/guides/minos-evaluator): installing, registering, tuning the threshold, every failure kind, privacy and telemetry.

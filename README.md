@@ -13,13 +13,14 @@ Documentation: <https://marcelroozekrans.github.io/Mnemosyne.NET/>
 
 - [Getting started](https://marcelroozekrans.github.io/Mnemosyne.NET/getting-started) and the [store-and-recall sample](https://marcelroozekrans.github.io/Mnemosyne.NET/samples)
 - [Concepts](https://marcelroozekrans.github.io/Mnemosyne.NET/category/concepts): Reasonlets, versions, scopes and subjects, ranking
-- [Guides](https://marcelroozekrans.github.io/Mnemosyne.NET/category/guides): the PostgreSQL store, data lifecycle, telemetry
+- [Guides](https://marcelroozekrans.github.io/Mnemosyne.NET/category/guides): the PostgreSQL store, data lifecycle, judging runs with Minos, telemetry
 
 | Package | What it holds |
 |---|---|
 | [`Mnemosyne.NET.Abstractions`](src/Mnemosyne.NET.Abstractions/README.md) | The records and the interfaces |
 | [`Mnemosyne.NET`](src/Mnemosyne.NET/README.md) | The default facade and ranking |
 | [`Mnemosyne.NET.PostgreSql`](src/Mnemosyne.NET.PostgreSql/README.md) | The PostgreSQL and pgvector store |
+| [`Mnemosyne.NET.Minos`](src/Mnemosyne.NET.Minos/README.md) | A run evaluator that asks a Minos.NET decision model |
 
 Part of the same family as [Minos.NET](https://github.com/MarcelRoozekrans/Minos.NET)
 (decisions), [Rag.NET](https://github.com/MarcelRoozekrans/Rag.NET) (knowledge),

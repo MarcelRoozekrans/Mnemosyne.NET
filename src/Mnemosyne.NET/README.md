@@ -51,7 +51,7 @@ if (recalled.IsSuccess)
 
 ## Judging runs
 
-By default a run counts as a success when the agent says it worked. Register an `IReasonletEvaluator` and give the run its question and answer, and the evaluator's verdict counts instead. The answer goes to the evaluator and is never stored. A judge that is down, or slower than `MnemosyneOptions.EvaluationTimeout` (30 seconds by default), doesn't fail the call: the run is stored with the agent's verdict. So is a run whose answer is blank or longer than 32,000 code points, which is not judged. The receipt says which verdict counted. A person's verdict, recorded with feedback, overrides both.
+By default a run counts as a success when the agent says it worked. Register an `IReasonletEvaluator` and give the run its question and answer, and the evaluator's verdict counts instead. The answer goes to the evaluator and is never stored. A judge that is down, or slower than `MnemosyneOptions.EvaluationTimeout` (30 seconds by default), doesn't fail the call: the run is stored with the agent's verdict. So is a run whose answer is blank or longer than 32,000 code points, which is not judged. The receipt says which verdict counted. A person's verdict, recorded with feedback, overrides both. The `Mnemosyne.NET.Minos` package is a ready-made judge that asks a Minos.NET decision model: see [Judging runs with Minos](https://marcelroozekrans.github.io/Mnemosyne.NET/guides/minos-evaluator).
 
 ```csharp
 // myEvaluator is your IReasonletEvaluator; register it as a singleton.
@@ -93,6 +93,7 @@ Feedback with `Worked` null keeps an earlier verdict, so a verdict can be change
 - [Ranking](https://marcelroozekrans.github.io/Mnemosyne.NET/concepts/ranking): what recall does, the cut-off, the score, every option, how recall fails, and [a worked example](https://marcelroozekrans.github.io/Mnemosyne.NET/concepts/ranking#a-worked-example).
 - [Reasonlets](https://marcelroozekrans.github.io/Mnemosyne.NET/concepts/reasonlets): what a capture holds, how intent and name are filled in, and what recall returns.
 - [Versions and lineage](https://marcelroozekrans.github.io/Mnemosyne.NET/concepts/versions): how a capture becomes a new Reasonlet, a new version or a run.
+- [Judging runs with Minos](https://marcelroozekrans.github.io/Mnemosyne.NET/guides/minos-evaluator): a ready-made evaluator, its threshold, failures and privacy.
 - [Telemetry](https://marcelroozekrans.github.io/Mnemosyne.NET/guides/telemetry): the recall and evaluate activities and metrics, alongside the store's.
 
 See the [repository README](https://github.com/MarcelRoozekrans/Mnemosyne.NET#readme).
