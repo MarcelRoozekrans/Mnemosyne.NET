@@ -37,7 +37,7 @@ if (migrated.IsFailure)
 }
 ```
 
-`IReasonletStore` resolves to the same singleton. To recall and rank through `IReasonletMemory`, also register an embedding generator and call `AddMnemosyne` from the core package; see the [Mnemosyne.NET README](https://github.com/MarcelRoozekrans/Mnemosyne.NET/tree/main/src/Mnemosyne.NET#readme).
+`IReasonletStore` resolves to the same singleton. This package depends on `Mnemosyne.NET.Abstractions` only, so it does not bring in recall. To recall and rank through `IReasonletMemory`, add the core `Mnemosyne.NET` package as well, register an embedding generator and call `AddMnemosyne`; see the [Mnemosyne.NET README](https://github.com/MarcelRoozekrans/Mnemosyne.NET/tree/main/src/Mnemosyne.NET#readme).
 
 The store options are passed as an object, not a configure delegate, because their members are `required`. They are validated when you register, and `AddMnemosynePostgreSql` throws `ArgumentOutOfRangeException` for a bad value.
 

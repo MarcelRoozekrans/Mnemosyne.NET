@@ -26,6 +26,5 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Mnemosyne.NET.Abstractions\Mnemosyne.NET.Abstractions.csproj" />
-    <ProjectReference Include="..\Mnemosyne.NET\Mnemosyne.NET.csproj" />
   </ItemGroup>
 </Project>

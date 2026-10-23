@@ -10,7 +10,7 @@ An agent asks a question and gets back the few Reasonlets most worth trying, bes
 
 ## Setup
 
-Register a store, an embedding generator and the facade. The store here is the one from `Mnemosyne.NET.PostgreSql`. The embedding generator is any `IEmbeddingGenerator<string, Embedding<float>>` from Microsoft.Extensions.AI, so a model your host already uses for chat or search works.
+Register a store, an embedding generator and the facade. The store here is the one from `Mnemosyne.NET.PostgreSql`, a separate package that depends on `Mnemosyne.NET.Abstractions` only, so reference both it and this package. The embedding generator is any `IEmbeddingGenerator<string, Embedding<float>>` from Microsoft.Extensions.AI, so a model your host already uses for chat or search works.
 
 ```csharp
 using Microsoft.Extensions.AI;
