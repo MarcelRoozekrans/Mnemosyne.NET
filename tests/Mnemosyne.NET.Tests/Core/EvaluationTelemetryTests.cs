@@ -171,6 +171,38 @@ public sealed class EvaluationTelemetryTests
         AssertMeasurements(capture, "Unavailable", evaluator: null);
     }
 
+    [Theory]
+    [MemberData(nameof(Paths))]
+    public async Task ATimeoutThatExpiresWhileTheCallWaitsForAStuckJudgeEndsTheWait(string path)
+    {
+        // The judge is entered and stuck, ignoring its token, before the clock fires, so the facade must really be
+        // waiting when the timeout expires; nothing cancels inside the judge.
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var clock = new ManualTimeProvider();
+        var evaluator = new IgnoringEvaluator(() => entered.TrySetResult());
+        var memory = new ReasonletMemory(_store, _selector, _generator, null, evaluator, new MnemosyneOptions(), clock);
+        var bound = TimeSpan.FromSeconds(10);
+        using var capture = new TelemetryCapture();
+
+        var call = SourceAsync(memory, path);
+        await entered.Task.WaitAsync(bound, Ct);
+        Assert.False(call.IsCompleted);
+
+        clock.Fire();
+        var source = await call.WaitAsync(bound, Ct);
+
+        Assert.Equal(ReasonletVerdictSource.Agent, source);
+        Assert.False(evaluator.Completion.Task.IsCompleted);
+        var activity = Single(capture);
+        Assert.Equal([new("error.type", "Unavailable")], AllTags(activity));
+        AssertMeasurements(capture, "Unavailable", evaluator: null);
+    }
+
+    private async Task<ReasonletVerdictSource> SourceAsync(ReasonletMemory memory, string path) =>
+        path == "record"
+            ? (await memory.RecordExecutionAsync(Run() with { Question = "question", Answer = "answer" }, Ct)).Value.Source
+            : (await memory.RememberAsync(TestData.Capture() with { Answer = "answer" }, Ct)).Value.Source;
+
     public static TheoryData<string, string> UnusableAnswers() => new()
     {
         { "record", "blank" },

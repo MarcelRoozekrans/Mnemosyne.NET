@@ -1290,6 +1290,48 @@ public sealed class ReasonletMemoryTests
         }
     }
 
+    [Fact]
+    public void AJudgeTaskAlreadyFaultedWhenAbandonedLeavesNoUnobservedException()
+    {
+        var unobserved = 0;
+        void OnUnobserved(object? sender, UnobservedTaskExceptionEventArgs e)
+        {
+            if (e.Exception.InnerExceptions.Any(inner => inner is AbandonedJudgeException))
+            {
+                Interlocked.Increment(ref unobserved);
+            }
+        }
+
+        TaskScheduler.UnobservedTaskException += OnUnobserved;
+        try
+        {
+            AbandonAFaultedTask();
+            for (var i = 0; i < 3; i++)
+            {
+                GC.Collect();
+                GC.WaitForPendingFinalizers();
+            }
+
+            Assert.Equal(0, Volatile.Read(ref unobserved));
+        }
+        finally
+        {
+            TaskScheduler.UnobservedTaskException -= OnUnobserved;
+        }
+    }
+
+    /// <summary>
+    /// Abandons a task that faulted before <c>Abandon</c> ran, as when the judge fails between the cancelled wait and the
+    /// catch, and drops it. Not inlined, so the task is unreachable once it returns.
+    /// </summary>
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    private static void AbandonAFaultedTask()
+    {
+        var faulted = Task.FromException<Result<ReasonletEvaluation, MnemosyneError>>(new AbandonedJudgeException());
+        ReasonletMemory.Abandon(faulted);
+        ReasonletMemory.Abandon(null);
+    }
+
     /// <summary>Abandons a judge on its timeout, then fails the judge's task once the record call has returned.</summary>
     private async Task AbandonThenFailAsync()
     {

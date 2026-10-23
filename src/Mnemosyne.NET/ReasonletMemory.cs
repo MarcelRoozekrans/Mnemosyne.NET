@@ -563,11 +563,13 @@ public sealed class ReasonletMemory : IReasonletMemory
     /// <summary>
     /// Lets a judge call the facade stopped waiting for run on unobserved: when it ends, a continuation reads its
     /// exception, so a later failure is never an unobserved task exception, and does nothing else. It never touches the
-    /// store, the telemetry or the caller, whose call has already returned.
+    /// store, the telemetry or the caller, whose call has already returned. It is attached whatever the task's state: a
+    /// task that faulted between the cancelled wait and this call runs the continuation at once, so no completion can
+    /// slip past unobserved.
     /// </summary>
-    private static void Abandon(Task<Result<ReasonletEvaluation, MnemosyneError>>? pending)
+    internal static void Abandon(Task<Result<ReasonletEvaluation, MnemosyneError>>? pending)
     {
-        if (pending is { IsCompleted: false })
+        if (pending is not null)
         {
             _ = pending.ContinueWith(
                 static task => _ = task.Exception,
