@@ -117,10 +117,12 @@ public sealed class SearchTests(PgVectorFixture fixture) : IClassFixture<PgVecto
             await Entries.ScalarAsync<DateTime>(fixture.DataSource, "SELECT executed_at FROM mnemosyne.reasonlet_executions WHERE id = $1", success.Value),
             measured.LastSuccessAt!.Value.UtcDateTime);
         var missing = result.Value[1].Metrics;
-        Assert.Equal(new ReasonletMetrics(0, 0, null, missing.LastExecutedAt), missing);
-        Assert.Equal(
-            await Entries.ScalarAsync<DateTime>(fixture.DataSource, "SELECT created_at FROM mnemosyne.reasonlets WHERE id = $1", bare.Value),
-            missing.LastExecutedAt.UtcDateTime);
+        var created = await Entries.ScalarAsync<DateTime>(
+            fixture.DataSource, "SELECT created_at FROM mnemosyne.reasonlets WHERE id = $1", bare.Value);
+        Assert.Equal(0, missing.Runs);
+        Assert.Equal(0, missing.Successes);
+        Assert.Null(missing.LastSuccessAt);
+        Assert.Equal(created, missing.LastExecutedAt.UtcDateTime);
     }
 
     [Fact]
