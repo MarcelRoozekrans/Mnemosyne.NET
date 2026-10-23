@@ -59,7 +59,7 @@ Design: [roadmap design](../superpowers/specs/2026-10-21-roadmap-design.md), bui
 **HelpWanted:** no
 **Plan:** _to be written_
 
-## Milestone 2: Evaluation [status: pending]
+## Milestone 2: Evaluation [status: active]
 **Goal:** Answer "did it work?" without the caller hand-filling feedback, so the success-rate term in ranking is real (handover phase 3).
 **Definition of Done:**
 - [ ] Runs are scored by a pluggable evaluator, with explicit feedback overriding it
@@ -67,7 +67,7 @@ Design: [roadmap design](../superpowers/specs/2026-10-21-roadmap-design.md), bui
 - [ ] Success rate in ranking comes from evaluated executions
 - [ ] Docs and a sample cover evaluation
 
-### Phase 2.1: Evaluator contract and feedback API [status: pending]
+### Phase 2.1: Evaluator contract and feedback API [status: active]
 **Goal:** `IReasonletEvaluator` and an explicit feedback API that takes precedence over automatic scoring.
 **Surface:** Backend
 **HelpWanted:** no
