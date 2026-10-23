@@ -57,10 +57,13 @@ public sealed class MinosFacadeTests
         Assert.Equal(new ReasonletEvaluation(success, probability, "minos"), _store.Executed!.Value.Evaluation);
     }
 
+    private const string Sentinel = "MINOS-MESSAGE-SENTINEL-7d3f";
+
     [Fact]
-    public async Task ARateLimitedJudgeLeavesTheAgentsVerdict()
+    public async Task ARateLimitedJudgeLeavesTheAgentsVerdictAndLeaksNoMessage()
     {
-        using var provider = Provider(FakeDecisionClient.Failing(DecisionErrorKind.RateLimited));
+        using var provider = Provider(FakeDecisionClient.Failing(DecisionErrorKind.RateLimited, Sentinel));
+        using var capture = new TelemetryCapture();
 
         var receipt = await provider.GetRequiredService<IReasonletMemory>().RecordExecutionAsync(Run(), Ct);
 
@@ -68,15 +71,58 @@ public sealed class MinosFacadeTests
         Assert.Equal(ReasonletVerdictSource.Agent, receipt.Value.Source);
         Assert.False(receipt.Value.Success);
         Assert.Null(_store.Executed!.Value.Evaluation);
+        Assert.DoesNotContain(Sentinel, receipt.Value.ToString(), StringComparison.Ordinal);
+        var evaluate = Assert.Single(capture.Activities, a => a.OperationName == "mnemosyne.evaluate");
+        Assert.Equal(ActivityStatusCode.Error, evaluate.Status);
+        Assert.Equal("Unavailable", evaluate.GetTagItem("error.type"));
+        AssertNoSentinel(capture);
     }
 
     [Fact]
-    public async Task InvalidQuestionsAreABugThatThrows()
+    public async Task TheEvaluatorsErrorNamesOnlyTheKind()
     {
-        using var provider = Provider(FakeDecisionClient.Failing(DecisionErrorKind.InvalidQuestions));
+        using var provider = Provider(FakeDecisionClient.Failing(DecisionErrorKind.RateLimited, Sentinel));
 
-        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+        var result = await provider.GetRequiredService<IReasonletEvaluator>().EvaluateAsync(MinosTestData.Request(), Ct);
+
+        Assert.Equal(MnemosyneErrorCode.Unavailable, result.Error.Code);
+        Assert.Equal("minos: RateLimited", result.Error.Detail);
+        Assert.DoesNotContain(Sentinel, result.Error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task InvalidQuestionsAreABugThatThrowsWithoutTheMessage()
+    {
+        using var provider = Provider(FakeDecisionClient.Failing(DecisionErrorKind.InvalidQuestions, Sentinel));
+        using var capture = new TelemetryCapture();
+
+        var thrown = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
             await provider.GetRequiredService<IReasonletMemory>().RecordExecutionAsync(Run(), Ct));
+
+        Assert.DoesNotContain(Sentinel, thrown.ToString(), StringComparison.Ordinal);
+        AssertNoSentinel(capture);
+    }
+
+    /// <summary>Asserts that no tag, status description or event of any captured activity holds the sentinel.</summary>
+    private static void AssertNoSentinel(TelemetryCapture capture)
+    {
+        foreach (var activity in capture.Activities)
+        {
+            Assert.DoesNotContain(Sentinel, activity.StatusDescription ?? string.Empty, StringComparison.Ordinal);
+            foreach (var tag in activity.TagObjects)
+            {
+                Assert.DoesNotContain(Sentinel, tag.Value?.ToString() ?? string.Empty, StringComparison.Ordinal);
+            }
+
+            foreach (var recorded in activity.Events)
+            {
+                Assert.DoesNotContain(Sentinel, recorded.Name, StringComparison.Ordinal);
+                foreach (var tag in recorded.Tags)
+                {
+                    Assert.DoesNotContain(Sentinel, tag.Value?.ToString() ?? string.Empty, StringComparison.Ordinal);
+                }
+            }
+        }
     }
 
     [Fact]

@@ -470,7 +470,8 @@ internal sealed class ApprovingEvaluator : IReasonletEvaluator
 
 /// <summary>
 /// A Minos decision client that answers the judge's Noul with 0.9, as Minos's testing guide describes. It echoes the
-/// request's own definition, so the response matches whatever question set asked.
+/// request's own definition, so the response matches whatever question set asked. The one answer must match the question
+/// set's single Noul: a second question makes the response constructor throw, so the smoke fails loudly with exit 34.
 /// </summary>
 internal sealed class ApprovingDecisionClient : IDecisionClient
 {
