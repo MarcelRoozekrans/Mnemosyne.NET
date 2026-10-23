@@ -396,10 +396,33 @@ public sealed class TelemetryTests(PgVectorFixture fixture) : IClassFixture<PgVe
         judge.Throw = new HttpRequestException($"judge: {token}");
         Assert.True((await memory.RecordExecutionAsync(run, Ct)).IsSuccess);
 
+        // A judge that is down with the token in its error's message and detail, and one whose invalid name holds it.
+        judge.Throw = null;
+        judge.Answer = Result<ReasonletEvaluation, MnemosyneError>.Failure(new(MnemosyneErrorCode.Unavailable, $"down: {token}", $"detail: {token}"));
+        Assert.True((await memory.RecordExecutionAsync(run, Ct)).IsSuccess);
+        judge.Answer = new ReasonletEvaluation(true, 0.5, new string('x', 80) + token);
+        await Assert.ThrowsAsync<InvalidOperationException>(async () => await memory.RecordExecutionAsync(run, Ct));
+
         var activities = capture.Activities;
-        Assert.Equal(16, activities.Count);
+        Assert.Equal(21, activities.Count);
         Assert.Equal("Validation", activities[7].GetTagItem("error.type"));
-        Assert.Equal("System.Net.Http.HttpRequestException", activities[^2].GetTagItem("error.type"));
+
+        // The throwing judge: its evaluate activity shows the failure, and the run falls back to the agent's verdict.
+        Assert.Equal("mnemosyne.evaluate", activities[14].OperationName);
+        Assert.Equal("System.Net.Http.HttpRequestException", activities[14].GetTagItem("error.type"));
+        Assert.Equal("exception", Assert.Single(activities[14].Events).Name);
+        Assert.Equal("mnemosyne.execution.append", activities[15].OperationName);
+        Assert.Equal("agent", activities[15].GetTagItem("mnemosyne.verdict_source"));
+
+        // The judge that is down: Unavailable on its evaluate activity, and the agent's verdict on the append.
+        Assert.Equal("mnemosyne.evaluate", activities[17].OperationName);
+        Assert.Equal("Unavailable", activities[17].GetTagItem("error.type"));
+        Assert.Equal("agent", activities[18].GetTagItem("mnemosyne.verdict_source"));
+
+        // The invalid name: an exception on the evaluate activity, with no evaluator tag, and nothing appended.
+        Assert.Equal("mnemosyne.evaluate", activities[20].OperationName);
+        Assert.Equal("System.InvalidOperationException", activities[20].GetTagItem("error.type"));
+        Assert.Null(activities[20].GetTagItem("mnemosyne.evaluator"));
         var measurements = capture.Measurements;
         Assert.NotEmpty(measurements);
         var emitted = new List<string?>();
@@ -430,19 +453,25 @@ public sealed class TelemetryTests(PgVectorFixture fixture) : IClassFixture<PgVe
             emitted.AddRange(Flatten(measurement.Tags));
         }
 
+        // The scan read the evaluate activity's fields, its exception events and the evaluation instruments, not only
+        // the store's tags.
+        Assert.Contains("mnemosyne.evaluator", emitted);
+        Assert.Contains("mnemosyne.evaluation.score", emitted);
+        Assert.Contains("exception.type", emitted);
+        Assert.Contains("mnemosyne.evaluations", emitted);
         Assert.DoesNotContain(emitted, text => text is not null && text.Contains(token, StringComparison.Ordinal));
     }
 
-    /// <summary>An evaluator that answers a fixed verdict, or throws <see cref="Throw"/> when it is set.</summary>
+    /// <summary>An evaluator that answers <see cref="Answer"/>, or throws <see cref="Throw"/> when it is set.</summary>
     private sealed class Judge : IReasonletEvaluator
     {
         public Exception? Throw { get; set; }
 
+        public Result<ReasonletEvaluation, MnemosyneError> Answer { get; set; } = new ReasonletEvaluation(true, 0.9, "judge");
+
         public ValueTask<Result<ReasonletEvaluation, MnemosyneError>> EvaluateAsync(
             ReasonletEvaluationRequest request, CancellationToken ct) =>
-            Throw is { } thrown
-                ? throw thrown
-                : ValueTask.FromResult(Result<ReasonletEvaluation, MnemosyneError>.Success(new ReasonletEvaluation(true, 0.9, "judge")));
+            Throw is { } thrown ? throw thrown : ValueTask.FromResult(Answer);
     }
 
     /// <summary>An embedding generator that answers the same three-value embedding for every text.</summary>
