@@ -22,6 +22,30 @@ using Mnemosyne.NET.Minos;
 var evaluator = new MinosReasonletEvaluator(client, new MinosEvaluatorOptions { SuccessThreshold = 0.6 });
 ```
 
+## Registration
+
+`AddMnemosyneMinosEvaluator` registers the evaluator as the singleton `IReasonletEvaluator`, which `AddMnemosyne` then picks up. The host registers the `IDecisionClient` as a singleton too, because the evaluator captures it.
+
+```csharp
+using Minos;
+using Mnemosyne.NET;
+using Mnemosyne.NET.Minos;
+
+// client is the host's IDecisionClient, registered as a singleton.
+services.AddSingleton<IDecisionClient>(client);
+services.AddMnemosyneMinosEvaluator(new MinosEvaluatorOptions { SuccessThreshold = 0.6 });
+services.AddMnemosyne();
+```
+
+To give the judge its own client, register it as a keyed service and set `DecisionClientKey`:
+
+```csharp
+services.AddKeyedSingleton<IDecisionClient>("judge", judgeClient);
+services.AddMnemosyneMinosEvaluator(new MinosEvaluatorOptions { DecisionClientKey = "judge" });
+```
+
+Invalid options throw an `ArgumentException` at registration.
+
 ## What the judge sees
 
 The judge reads a JSON object with the run's `question`, the Reasonlet's `intent`, the `procedure` graph as its canonical JSON, nested as an object, and the run's `answer`. It never sees the agent's own success flag or the Reasonlet's name.

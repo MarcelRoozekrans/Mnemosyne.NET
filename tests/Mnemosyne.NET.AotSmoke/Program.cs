@@ -2,8 +2,10 @@ using System.Diagnostics;
 using System.Diagnostics.Metrics;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
+using Minos;
 using Mnemosyne.NET;
 using Mnemosyne.NET.Abstractions;
+using Mnemosyne.NET.Minos;
 using Mnemosyne.NET.PostgreSql;
 using Npgsql;
 using ZeroAlloc.Results;
@@ -229,6 +231,12 @@ static async Task<int> PostgreSqlSmoke(string connectionString, ReasonletGraph g
         return facade;
     }
 
+    var minos = await MinosSmoke(dataSource, graph, ct);
+    if (minos != 0)
+    {
+        return minos;
+    }
+
     // Every operation above stopped an activity, and the prune and erase among them: check the names, not just a count.
     string[] expected = ["mnemosyne.migrate", "mnemosyne.remember", "mnemosyne.search", "mnemosyne.erase", "mnemosyne.prune"];
     var missing = expected.Where(name => !activityNames.Contains(name)).ToArray();
@@ -369,6 +377,66 @@ static async Task<int> FacadeSmoke(NpgsqlDataSource dataSource, ReasonletGraph g
     return 0;
 }
 
+// The Minos evaluator as a host wires it: a decision client in the container, AddMnemosyneMinosEvaluator, and the
+// facade. The fake client answers the judge's one question with 0.9 under native AOT, which exercises the generated
+// question set and the source-generated state serializer. A run the agent called a failure is judged a success.
+static async Task<int> MinosSmoke(NpgsqlDataSource dataSource, ReasonletGraph graph, CancellationToken ct)
+{
+    var services = new ServiceCollection();
+    services.AddSingleton(dataSource);
+    services.AddSingleton<IEmbeddingGenerator<string, Embedding<float>>>(new FixedEmbeddingGenerator());
+    services.AddSingleton<IDecisionClient>(new ApprovingDecisionClient());
+    services.AddMnemosynePostgreSql(new MnemosynePostgreSqlOptions { Dimensions = 3 });
+    services.AddMnemosyneMinosEvaluator();
+    services.AddMnemosyne();
+    await using var provider = services.BuildServiceProvider();
+
+    var memory = provider.GetRequiredService<IReasonletMemory>();
+    var scope = new ReasonletScope($"aot-minos-{Guid.NewGuid():N}");
+    const string question = "How do I search through Minos?";
+    var remembered = await memory.RememberAsync(
+        new ReasonletCapture
+        {
+            Scope = scope,
+            Question = question,
+            Graph = graph,
+            Outcome = new ReasonletOutcome(true, TimeSpan.FromMilliseconds(5), null),
+            Provenance = new ReasonletProvenance { Source = "aot-smoke" },
+        },
+        ct);
+    if (remembered.IsFailure)
+    {
+        Console.Error.WriteLine($"Remember for the Minos smoke failed: {remembered.Error.Message}");
+        return 35;
+    }
+
+    var judged = await memory.RecordExecutionAsync(
+        new ReasonletRun
+        {
+            Scope = scope,
+            Id = remembered.Value.Id,
+            Outcome = new ReasonletOutcome(false, TimeSpan.FromMilliseconds(5), null),
+            Provenance = new ReasonletProvenance { Source = "aot-smoke" },
+            Question = question,
+            Answer = "Search with the search tool.",
+        },
+        ct);
+    if (judged.IsFailure || judged.Value.Source != ReasonletVerdictSource.Evaluator || !judged.Value.Success)
+    {
+        Console.Error.WriteLine($"Judging a run through Minos failed: {(judged.IsFailure ? judged.Error.Message : judged.Value.ToString())}");
+        return 34;
+    }
+
+    var erased = await memory.EraseAsync(new ReasonletErasure(scope, null), ct);
+    if (erased.IsFailure)
+    {
+        Console.Error.WriteLine($"Erase after the Minos smoke failed: {erased.Error.Message}");
+        return 36;
+    }
+
+    return 0;
+}
+
 // Reads a run's verdict inputs and its effective success with a plain reader, which needs no reflection.
 static async Task<(bool Agent, bool? Evaluated, string? Evaluator, double? Score, bool? Feedback, bool Success)?> ReadVerdictAsync(
     NpgsqlDataSource dataSource, ExecutionId execution, CancellationToken ct)
@@ -398,6 +466,23 @@ internal sealed class ApprovingEvaluator : IReasonletEvaluator
 
     public ValueTask<Result<ReasonletEvaluation, MnemosyneError>> EvaluateAsync(ReasonletEvaluationRequest request, CancellationToken ct) =>
         ValueTask.FromResult<Result<ReasonletEvaluation, MnemosyneError>>(new ReasonletEvaluation(true, 0.75, Name));
+}
+
+/// <summary>
+/// A Minos decision client that answers the judge's Noul with 0.9, as Minos's testing guide describes. It echoes the
+/// request's own definition, so the response matches whatever question set asked.
+/// </summary>
+internal sealed class ApprovingDecisionClient : IDecisionClient
+{
+    public ValueTask<Result<DecisionResponse, DecisionError>> EvaluateAsync(DecisionRequest request, CancellationToken cancellationToken = default) =>
+        ValueTask.FromResult(Result<DecisionResponse, DecisionError>.Success(
+            new DecisionResponse(request.Definition, [QuestionAnswer.Noul(0.9)], model: "aot-fake")));
+
+    public object? GetService(Type serviceType, object? serviceKey = null) => null;
+
+    public void Dispose()
+    {
+    }
 }
 
 /// <summary>An embedding generator that embeds every text as the same 3-dimension vector.</summary>
