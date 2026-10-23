@@ -16,7 +16,7 @@ Question → Procedure → Answer
 | Part | What it is |
 |---|---|
 | **Question** | The question the procedure answered, in the user's words. Mnemosyne embeds it, so recall can find the Reasonlet for a question worded differently. |
-| **Graph** | The procedure: a graph of steps that ends in an answer. |
+| **Graph** | The procedure: a graph of steps that typically ends in an answer. |
 | **Intent** | A short label for the kind of problem, such as `refund`. Recall can filter on it. |
 | **Name** | A readable name for people and logs. |
 | **Version** | `1.0` for a new procedure, `1.1`, `1.2` and so on for improved versions of it. See [Versions and lineage](versions.md). |
@@ -90,7 +90,7 @@ Each run you record carries its own provenance too.
 
 Every capture records one run, with the capture's `ReasonletOutcome`: whether it succeeded, how long it took, and an optional quality score between 0 and 1. After that, `RecordExecutionAsync` records each further run.
 
-Mnemosyne keeps a running count of runs and successes for each Reasonlet, and the times of its latest run and latest success. Ranking reads these. You can also attach feedback to a recorded run with `RecordFeedbackAsync`. Feedback is stored but doesn't affect ranking yet.
+Mnemosyne keeps a running count of runs and successes for each Reasonlet, and the times of its latest run and latest success. Ranking reads these. You can also attach feedback to a recorded run with `RecordFeedbackAsync`. Feedback is stored, but ranking doesn't use it.
 
 ## Status: Active and PendingReview
 
@@ -99,7 +99,7 @@ A Reasonlet is either `Active` or `PendingReview`.
 - **`Active`** Reasonlets take part in recall.
 - **`PendingReview`** Reasonlets are stored but never returned by recall. The status is there for a review step, where a person approves a captured procedure before agents may use it.
 
-Today every capture is stored as `Active`; the receipt reports the status. The opt-in review step that sets `PendingReview` is planned for a later release.
+Nothing sets `PendingReview` today: every capture is stored as `Active`, and the receipt reports the status.
 
 ## What recall returns
 

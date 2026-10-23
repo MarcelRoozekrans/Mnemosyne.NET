@@ -80,7 +80,7 @@ Three registrations make up Mnemosyne:
 
 - **`AddMnemosynePostgreSql`** registers the store. It takes the `NpgsqlDataSource` from the container. `Dimensions` is the length of every embedding, and it is fixed the first time the schema is created.
 - **The embedding generator** turns questions into vectors. Use the same model for remembering and recalling.
-- **`AddMnemosyne`** registers `IReasonletMemory`, the facade you call. With no argument it uses the default options. Register the store and the generator as singletons, because the facade is one.
+- **`AddMnemosyne`** registers `IReasonletMemory`, the facade you call. With no argument it uses the default options. Register the data source and the generator as singletons, because the facade is one.
 
 ## 4. Run the migrations
 
@@ -196,11 +196,19 @@ dotnet run
 
 The output shows the stored Reasonlet, then the match with its score. Its similarity depends on the model. Its success rate is 0.583, from one successful run smoothed toward a neutral 0.5, and its freshness is close to 1 because it ran moments ago.
 
-Run it a second time and the remember stores another Reasonlet: without a `ParentId`, every capture is a new one. To start over, erase the scope:
+Run it a second time and the remember stores another Reasonlet, so recall returns two matches: without a `ParentId`, every capture is a new one.
+
+To have each run start clean, add an erase of the scope at the end of `Program.cs`:
 
 ```csharp
 var erased = await memory.EraseAsync(new ReasonletErasure(scope, SubjectId: null), ct);
+if (erased.IsFailure)
+{
+    throw new InvalidOperationException($"{erased.Error.Code}: {erased.Error.Message}");
+}
 ```
+
+With it, every run leaves the database empty and prints one match.
 
 ## Next steps
 

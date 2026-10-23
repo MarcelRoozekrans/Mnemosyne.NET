@@ -11,11 +11,6 @@ This page describes the default ranking, `ReasonletSelector`, with its default s
 
 ## What recall does
 
-```mermaid
-flowchart LR
-    q["Query"] --> i["Resolve the<br/>intent filter"] --> e["Embed the<br/>question"] --> s["Search the scope<br/>for a candidate pool"] --> c["Drop candidates<br/>below the cut-off"] --> r["Score and sort"] --> t["Return the<br/>top matches"]
-```
-
 1. **Resolve the intent filter.** The query's intent if it has one, else an extracted intent when the extractor is at least 70% confident, else no filter. [Reasonlets](reasonlets.md#intent) explains this.
 2. **Embed the question** with the registered embedding generator.
 3. **Search** the scope for the nearest `Active` Reasonlets. `PendingReview` Reasonlets are never candidates. The search asks for a pool of 20 candidates, or for the query's `Top` when that is larger, up to 200.
@@ -55,7 +50,7 @@ success rate = (successes + 5 × prior) / (runs + 5)
 
 The 5 is the prior weight: the prior counts as five extra runs. For a procedure with no parent, the prior is a neutral 0.5. So a brand-new procedure with one successful run scores (1 + 2.5) / 6 = 0.583, not 1. After 20 successes out of 20 it scores 22.5 / 25 = 0.900, and the prior matters less and less as runs accumulate.
 
-Runs are counted from outcomes: every remember records one run with the capture's outcome, and every `RecordExecutionAsync` records another. Feedback attached to a run doesn't change the success rate yet.
+Runs are counted from outcomes: every remember records one run with the capture's outcome, and every `RecordExecutionAsync` records another. Feedback attached to a run is stored, but ranking doesn't use it.
 
 ### A new version inherits upward only
 
@@ -136,7 +131,7 @@ Recall returns a result, and fails only for a real problem:
 | The intent extractor is down | no error: recall searches every intent instead |
 | Your cancellation token fires | `OperationCanceledException` is thrown |
 
-An error never quotes the question or the text of an exception, because either could hold user data. For an exception, the error's detail names only its type.
+When the embedding generator or the intent extractor fails, the error never quotes the question or the exception's message, because either could hold user data. Its detail names only the exception type. A store error is different: its detail can carry the database's error message, a SQLSTATE code and the server's message text. That text doesn't include row values unless the host turns on Npgsql's `IncludeErrorDetail` connection setting.
 
 ## Settings
 

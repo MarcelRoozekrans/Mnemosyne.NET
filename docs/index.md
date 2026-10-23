@@ -20,7 +20,7 @@ Each stored procedure is a **Reasonlet**:
 Question → Procedure → Answer
 ```
 
-The procedure is a small graph of steps, such as tool calls, retrievals and decisions, that ends in an answer. Mnemosyne stores it with an embedding of the question, so a differently worded question can still find it, and with a record of every run, so it knows which procedures work.
+The procedure is a small graph of steps, such as tool calls, retrievals and decisions, that typically ends in an answer. Mnemosyne stores it with an embedding of the question, so a differently worded question can still find it, and with a record of every run, so it knows which procedures work.
 
 Other kinds of memory answer other questions:
 
@@ -32,7 +32,7 @@ Other kinds of memory answer other questions:
 
 ## The loop
 
-Mnemosyne works as a loop of four steps.
+Mnemosyne works as a loop of three steps, with forgetting alongside it.
 
 ```mermaid
 flowchart LR
@@ -41,14 +41,14 @@ flowchart LR
     learn["Learn<br/>record each run,<br/>capture improved versions"]
     forget["Forget<br/>erase a tenant or a person,<br/>prune what is unused"]
     store --> recall --> learn --> recall
-    learn --> forget
-    store --> forget
 ```
+
+Forget is not a step in that flow: you erase or prune when you need to, apart from the loop.
 
 1. **Store.** After a run, the agent remembers the question, the procedure it followed and whether it worked.
 2. **Recall.** For a new question, Mnemosyne finds the stored procedures that match it and ranks them by similarity, track record and freshness. Every match carries its score breakdown, so you can see why it ranked where it did.
-3. **Learn.** The agent records each run of a recalled procedure. When it improves a procedure, it remembers the improved one as a new version, which starts from its parent's track record.
-4. **Forget.** You can erase everything for a tenant, or everything that belongs to one person, and prune procedures nobody uses any more.
+3. **Learn.** The agent records each run of a recalled procedure. When it improves a procedure, it remembers the improved one as a new version. The new version starts from its parent's track record when that record is better than neutral, so an improvement on a proven procedure isn't ranked as unproven.
+4. **Forget.** You can erase everything for a tenant, or everything that belongs to one person, through `IReasonletMemory`. Pruning procedures nobody uses any more is `PruneAsync` on the store, not on `IReasonletMemory`, because it is an administrative job the host schedules.
 
 ## When to use it
 

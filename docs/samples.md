@@ -51,7 +51,7 @@ The heart of the output is the ranked list:
 
 [Ranking](concepts/ranking.md#a-worked-example) works through every number in this table.
 
-The sample checks this order itself, and the repository's CI runs it on every pull request and every push to main. If a change to the ranking broke what this page shows, CI would fail.
+The sample checks this order itself, and the repository's CI runs it on every pull request to `main` and every push to `main`. If a change to the ranking broke what this page shows, CI would fail.
 
 ### The embedding generator is a stand-in
 
