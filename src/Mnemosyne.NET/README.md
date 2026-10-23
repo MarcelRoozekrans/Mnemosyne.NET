@@ -172,14 +172,23 @@ The stored capture carries the same resolved intent and name. The question is em
 
 The facade answers with a result for an expected failure and throws only for a bug or a cancellation.
 
-- **The embedding generator or the intent extractor fails.** An exception from either answers `Unavailable`, and so does an `Unavailable` result from the extractor, or a generator that returns no embedding. For an exception, the error's detail names its type. The error never carries the exception's message or the extractor's own text, because either can quote the question.
-- **A timeout.** An `OperationCanceledException` from the generator or the extractor while your token is not cancelled is a timeout, such as an `HttpClient` timeout, and answers `Unavailable` too.
-- **A cancellation.** When your token is cancelled, the `OperationCanceledException` propagates.
-- **An adapter bug.** These throw `InvalidOperationException`:
-  - the extractor fails with any error code other than `Unavailable`;
-  - the extractor returns an invalid intent;
-  - the store returns an invalid candidate.
-- **The store or the selector fails.** Its error is returned unchanged. That includes the store's `Validation` for an embedding whose length does not match the store's dimension.
+A dependency is **down** when it throws, or when it times out: an `OperationCanceledException` while your token is not cancelled, such as an `HttpClient` timeout. An extractor that answers `Unavailable` is down too.
+
+| What happens | Recall | Remember |
+|---|---|---|
+| The query or capture is invalid | `Validation` | `Validation` |
+| The embedding generator is down, or returns no embedding | `Unavailable` | `Unavailable` |
+| The generator returns an embedding the store cannot use: empty, with a NaN or infinite value, with a zero norm, or a length the store rejects | `Unavailable` | `Unavailable` |
+| The intent extractor is down | searches every intent; the recall succeeds | `Unavailable`, so a wrong intent is never stored |
+| The extractor fails with any other error code, or returns an invalid intent | throws `InvalidOperationException` | throws `InvalidOperationException` |
+| The store returns an invalid candidate | throws `InvalidOperationException` | not applicable |
+| The store or the selector fails otherwise | its error, unchanged | the store's error, unchanged |
+| Your token is cancelled | the `OperationCanceledException` propagates | the `OperationCanceledException` propagates |
+
+- **Why recall falls back.** A missing intent filter only widens the search, so recall still finds the right procedure, ranked among more candidates. The recall activity records it with `mnemosyne.recall.intent_fallback`. Remember has no such fallback: a guessed intent would be stored for good.
+- **Why a rejected embedding is `Unavailable`.** The generator made the embedding, not you, so nothing in your input is invalid. The facade checks for an empty, non-finite or zero-norm embedding before it calls the store. It cannot know the store's dimension, so it maps the store's `Validation` on the embedding to `Unavailable`; every other store `Validation`, such as a bad limit, is returned unchanged. The error's message is fixed, and its detail names the reason: `length`, `non-finite` or `norm`, or the store's own message about the embedding.
+- **No user text in errors.** For an exception, the error's detail names its type. The error never carries the exception's message or the extractor's own text, because either can quote the question.
+- **Adapter bugs throw.** The extractor is given a valid question, so any error code other than `Unavailable` from it is a bug in the adapter, as is an invalid intent or an invalid candidate from the store.
 
 `RecallAsync` reports every exception through the returned task, a null query included, rather than throwing synchronously, so that its telemetry records it. The exception surfaces when you await the task.
 
@@ -197,6 +206,7 @@ Each recall emits one `mnemosyne.recall` activity. The store's own activities, s
 |---|---|
 | `mnemosyne.recall.top` | always |
 | `mnemosyne.recall.intent_filtered` | always, a bool: whether recall filtered on an intent. A recall that fails before the intent is resolved reports whether the query carried one. |
+| `mnemosyne.recall.intent_fallback` | only when the intent extractor was down and recall searched every intent: `true`. It carries no error or exception message. |
 | `mnemosyne.recall.candidates` | after the search: how many candidates the store returned |
 | `mnemosyne.recall.returned` | on success: how many matches recall returned |
 | `mnemosyne.recall.chosen.id` | on success, when at least one match is returned: the first match's id |

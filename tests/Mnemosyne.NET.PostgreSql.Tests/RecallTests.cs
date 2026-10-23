@@ -60,7 +60,7 @@ public sealed class RecallTests(PgVectorFixture fixture) : IClassFixture<PgVecto
         // With k = 5 and freshness 1, the totals are 0.5 * similarity + 0.3 * successRate + 0.2:
         //   original:    successRate (40 + 5 * 0.5) / (40 + 5) = 42.5 / 45 = 0.94444
         //                total 0.425 + 0.28333 + 0.2 = 0.90833
-        //   new version: its prior is the original's rate, 42.5 / 45, so successRate (1 + 5 * 42.5 / 45) / (1 + 5) = 0.95370
+        //   new version: its prior is max(the original's rate, 0.5) = 42.5 / 45, so successRate (1 + 5 * 42.5 / 45) / (1 + 5) = 0.95370
         //                total 0.43 + 0.28611 + 0.2 = 0.91611
         //   close match: successRate (5 + 5 * 0.5) / (10 + 5) = 7.5 / 15 = 0.5
         //                total 0.46 + 0.15 + 0.2 = 0.81
@@ -146,6 +146,33 @@ public sealed class RecallTests(PgVectorFixture fixture) : IClassFixture<PgVecto
         Assert.Equal("unspecified", await ColumnAsync("intent", receipt.Value.Id));
         Assert.Equal("Export the monthly report to PDF", await ColumnAsync("name", receipt.Value.Id));
         Assert.Equal("[0.6,0.8,0]", await ColumnAsync("embedding::text", receipt.Value.Id));
+    }
+
+    [Fact]
+    public async Task AWrongLengthEmbeddingIsUnavailableAtRecallAndRemember()
+    {
+        // The store has 3 dimensions, so a 4-value embedding passes the facade's own checks and only the store rejects it.
+        var embeddings = new FixedEmbeddings { [Query] = [1f, 0f, 0f, 0f] };
+        var (memory, scope) = await MemoryAsync(embeddings);
+
+        var recalled = await memory.RecallAsync(new ReasonletQuery { Scope = scope, Question = Query }, Ct);
+        var remembered = await memory.RememberAsync(
+            new ReasonletCapture
+            {
+                Scope = scope,
+                Question = Query,
+                Graph = Entries.Graph("wrong-length"),
+                Outcome = Success,
+                Provenance = new ReasonletProvenance { Source = "test" },
+            },
+            Ct);
+
+        foreach (var error in new[] { recalled.Error, remembered.Error })
+        {
+            Assert.Equal(MnemosyneErrorCode.Unavailable, error.Code);
+            Assert.Equal("The embedding generator returned an embedding the store cannot use.", error.Message);
+            Assert.Contains("must have 3 values", error.Detail);
+        }
     }
 
     /// <summary>A unit vector in the xy-plane whose cosine with (1, 0, 0) is <paramref name="similarity"/>.</summary>

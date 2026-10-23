@@ -13,12 +13,19 @@ namespace Mnemosyne.NET;
 /// <see cref="IReasonletSelector"/>.
 /// </summary>
 /// <remarks>
-/// An exception from the embedding generator or the intent extractor answers <see cref="MnemosyneErrorCode.Unavailable"/>,
-/// unless it is an <see cref="OperationCanceledException"/> while the caller's token is cancelled, which propagates. A
-/// cancellation exception while the token is not cancelled is a timeout and answers Unavailable too. The error's detail
-/// names the exception type but never holds its message, which can contain the question. An Unavailable result from the
-/// extractor is rewrapped with a fixed message for the same reason, and any other error code from it throws
-/// <see cref="InvalidOperationException"/>, as an invalid intent does.
+/// <para>
+/// An exception from the embedding generator or the intent extractor counts as that dependency being down, unless it is
+/// an <see cref="OperationCanceledException"/> while the caller's token is cancelled, which propagates. A cancellation
+/// exception while the token is not cancelled is a timeout and counts as down too. An Unavailable result from the
+/// extractor also counts as down, and any other error code from it throws <see cref="InvalidOperationException"/>, as an
+/// invalid intent does, because both are adapter bugs.
+/// </para>
+/// <para>
+/// A generator that is down answers <see cref="MnemosyneErrorCode.Unavailable"/>, and so does one that returns an
+/// embedding the store cannot use. An extractor that is down answers Unavailable at remember, so a wrong intent is never
+/// stored; recall instead searches every intent. No error carries an exception's message or the extractor's own text,
+/// which can quote the question: the detail names the exception type, or the reason an embedding is unusable.
+/// </para>
 /// </remarks>
 public sealed class ReasonletMemory : IReasonletMemory
 {
@@ -29,6 +36,8 @@ public sealed class ReasonletMemory : IReasonletMemory
     internal const int MaxDefaultNameLength = 200;
 
     private const string ExtractorFailed = "The intent extractor failed.";
+
+    private const string UnusableEmbedding = "The embedding generator returned an embedding the store cannot use.";
 
     /// <summary>The most candidates recall asks the store for, the upper bound of <see cref="MnemosyneOptions.CandidatePool"/>.</summary>
     private const int MaxSearchLimit = 200;
@@ -77,7 +86,8 @@ public sealed class ReasonletMemory : IReasonletMemory
     /// <remarks>
     /// The intent is the capture's, else the extractor's answer at any confidence, else <c>unspecified</c>. The name is the
     /// capture's, else the first non-blank line of the question, trimmed and cut to 200 code points. The stored capture
-    /// carries the same resolved intent and name.
+    /// carries the same resolved intent and name. An extractor that is down answers <see cref="MnemosyneErrorCode.Unavailable"/>
+    /// rather than storing a guessed intent. An embedding the store rejects answers Unavailable, as it does at recall.
     /// </remarks>
     /// <exception cref="ArgumentNullException"><paramref name="capture"/> is null.</exception>
     /// <exception cref="InvalidOperationException">The intent extractor answered with an invalid intent or an error code other than Unavailable.</exception>
@@ -104,15 +114,18 @@ public sealed class ReasonletMemory : IReasonletMemory
         }
 
         var entry = new ReasonletStoreEntry(capture with { Intent = intent.Value, Name = name }, intent.Value, name, embedding.Value);
-        return await _store.RememberAsync(entry, ct).ConfigureAwait(false);
+        var receipt = await _store.RememberAsync(entry, ct).ConfigureAwait(false);
+        return receipt.IsFailure ? RejectedEmbedding(receipt.Error) : receipt;
     }
 
     /// <inheritdoc />
     /// <remarks>
     /// The intent filter is the query's, else the extractor's answer when its confidence is at least
-    /// <see cref="MnemosyneOptions.MinIntentConfidence"/>, else none. The store is asked for
+    /// <see cref="MnemosyneOptions.MinIntentConfidence"/>, else none. An extractor that is down does not fail the recall:
+    /// it searches every intent instead, and tags <c>mnemosyne.recall.intent_fallback</c>. The store is asked for
     /// <see cref="MnemosyneOptions.CandidatePool"/> candidates, raised to <see cref="ReasonletQuery.Top"/> when that is
-    /// larger, and the selector ranks them. A store or selector error is returned unchanged.
+    /// larger, and the selector ranks them. A store or selector error is returned unchanged, except that the store's
+    /// Validation on the embedding answers <see cref="MnemosyneErrorCode.Unavailable"/>.
     /// <para>
     /// Each recall emits a <c>mnemosyne.recall</c> activity, with the store's own activities nested in it, and counts
     /// and times itself under operation <c>recall</c>, on the <see cref="MnemosyneTelemetry"/> names. No signal carries
@@ -140,13 +153,13 @@ public sealed class ReasonletMemory : IReasonletMemory
             return valid.Error;
         }
 
-        var intent = await ResolveRecallIntentAsync(query, ct).ConfigureAwait(false);
-        if (intent.IsFailure)
+        var (intent, fellBack) = await ResolveRecallIntentAsync(query, ct).ConfigureAwait(false);
+        RecallTelemetry.IntentFiltered(activity, intent is not null);
+        if (fellBack)
         {
-            return intent.Error;
+            RecallTelemetry.IntentFallback(activity);
         }
 
-        RecallTelemetry.IntentFiltered(activity, intent.Value is not null);
         var embedding = await EmbedAsync(query.Question, ct).ConfigureAwait(false);
         if (embedding.IsFailure)
         {
@@ -154,10 +167,10 @@ public sealed class ReasonletMemory : IReasonletMemory
         }
 
         var limit = Math.Min(MaxSearchLimit, Math.Max(_options.CandidatePool, query.Top));
-        var candidates = await _store.SearchAsync(query.Scope, embedding.Value, intent.Value, limit, ct).ConfigureAwait(false);
+        var candidates = await _store.SearchAsync(query.Scope, embedding.Value, intent, limit, ct).ConfigureAwait(false);
         if (candidates.IsFailure)
         {
-            return candidates.Error;
+            return RejectedEmbedding(candidates.Error);
         }
 
         RecallTelemetry.Candidates(activity, candidates.Value.Count);
@@ -226,21 +239,26 @@ public sealed class ReasonletMemory : IReasonletMemory
         return line[..end].TrimEnd();
     }
 
-    private async ValueTask<Result<string?, MnemosyneError>> ResolveRecallIntentAsync(ReasonletQuery query, CancellationToken ct)
+    /// <summary>
+    /// Resolves recall's intent filter. An extractor that is down gives no filter and sets <c>FellBack</c>: a missing
+    /// filter only widens the search, while failing would leave the agent with nothing.
+    /// </summary>
+    private async ValueTask<(string? Intent, bool FellBack)> ResolveRecallIntentAsync(ReasonletQuery query, CancellationToken ct)
     {
         if (query.Intent is not null || _extractor is null)
         {
-            return Result<string?, MnemosyneError>.Success(query.Intent);
+            return (query.Intent, false);
         }
 
+        // ExtractAsync fails only with Unavailable; every other extractor failure throws.
         var extracted = await ExtractAsync(_extractor, query.Question, ct).ConfigureAwait(false);
         if (extracted.IsFailure)
         {
-            return extracted.Error;
+            return (null, true);
         }
 
         var confident = extracted.Value.Confidence >= _options.MinIntentConfidence;
-        return Result<string?, MnemosyneError>.Success(confident ? extracted.Value.Intent : null);
+        return (confident ? extracted.Value.Intent : null, false);
     }
 
     private async ValueTask<Result<string, MnemosyneError>> ResolveRememberIntentAsync(ReasonletCapture capture, CancellationToken ct)
@@ -313,7 +331,60 @@ public sealed class ReasonletMemory : IReasonletMemory
             return new MnemosyneError(MnemosyneErrorCode.Unavailable, "The embedding generator returned no embedding.");
         }
 
-        return Result<ReadOnlyMemory<float>, MnemosyneError>.Success(embeddings[0].Vector);
+        var vector = embeddings[0].Vector;
+        return UnusableReason(vector.Span) is { } reason
+            ? new MnemosyneError(MnemosyneErrorCode.Unavailable, UnusableEmbedding, reason)
+            : Result<ReadOnlyMemory<float>, MnemosyneError>.Success(vector);
+    }
+
+    /// <summary>
+    /// Returns why no store can use an embedding, or null when it is usable as far as the facade can tell. Cosine
+    /// similarity needs at least one value, finite values and a nonzero norm. The norm is summed in single precision, as
+    /// pgvector sums it, so squares that overflow count as an unusable norm too. The facade cannot know the store's
+    /// dimension, so a wrong length is left to the store; see <see cref="RejectedEmbedding"/>.
+    /// </summary>
+    internal static string? UnusableReason(ReadOnlySpan<float> embedding)
+    {
+        if (embedding.IsEmpty)
+        {
+            return "length: the embedding is empty";
+        }
+
+        var squares = 0f;
+        foreach (var value in embedding)
+        {
+            if (!float.IsFinite(value))
+            {
+                return "non-finite: the embedding holds a NaN or infinite value";
+            }
+
+            squares += value * value;
+        }
+
+        return squares > 0f && float.IsFinite(squares) ? null : "norm: the embedding has a zero norm, or its squares overflow";
+    }
+
+    /// <summary>
+    /// Maps the store's <see cref="MnemosyneErrorCode.Validation"/> on the embedding, such as a length that does not match
+    /// its dimension, to <see cref="MnemosyneErrorCode.Unavailable"/>: the generator made the embedding, not the caller,
+    /// so the caller's input is not what is invalid. Every other error passes through unchanged.
+    /// </summary>
+    /// <remarks>
+    /// The facade validated everything else the store checks, so the store's path is the only sign of an embedding
+    /// failure: a Validation message whose path is <c>embedding</c>, in any case, followed by <c>:</c> or an index. The
+    /// store's own message, which describes only the embedding, becomes the detail.
+    /// </remarks>
+    internal static MnemosyneError RejectedEmbedding(MnemosyneError error) =>
+        error.Code == MnemosyneErrorCode.Validation && IsEmbeddingPath(error.Message)
+            ? new MnemosyneError(MnemosyneErrorCode.Unavailable, UnusableEmbedding, error.Message)
+            : error;
+
+    private static bool IsEmbeddingPath(string message)
+    {
+        const string Path = "embedding";
+        return message.Length > Path.Length
+            && message.StartsWith(Path, StringComparison.OrdinalIgnoreCase)
+            && message[Path.Length] is ':' or '[';
     }
 
     /// <summary>Throws when the store returned a candidate that breaks an invariant, which is a store bug.</summary>

@@ -15,10 +15,12 @@ public interface IReasonletMemory
     /// <item><term>ParentId set and the graph different</term><description>A new version, as a child with lineage. Kind <see cref="ReasonletCaptureKind.NewVersion"/>.</description></item>
     /// </list>
     /// Two concurrent captures with the same parent but different graphs create sibling versions.
-    /// Error codes: <see cref="MnemosyneErrorCode.Validation"/> when the capture breaks an invariant, or when the store rejects the embedding, for example for its length,
+    /// Error codes: <see cref="MnemosyneErrorCode.Validation"/> when the capture breaks an invariant,
     /// <see cref="MnemosyneErrorCode.NotFound"/> when the parent does not exist in the capture's scope (including a parent that exists only in another scope),
     /// <see cref="MnemosyneErrorCode.Conflict"/> when the write loses a race the store detects, such as the parent being erased between lookup and insert,
-    /// <see cref="MnemosyneErrorCode.Unavailable"/> when the backing store, the embedding generator or the intent extractor fails.
+    /// <see cref="MnemosyneErrorCode.Unavailable"/> when the backing store, the embedding generator or the intent extractor fails, or the generator
+    /// returns an embedding the store cannot use, for example one whose length does not match the store's. An extractor that fails is never
+    /// replaced by a guessed intent, so a wrong intent is never stored.
     /// </remarks>
     /// <param name="capture">The capture to store.</param>
     /// <param name="ct">The cancellation token.</param>
@@ -27,10 +29,13 @@ public interface IReasonletMemory
 
     /// <summary>Finds and ranks the Reasonlets that best answer a query.</summary>
     /// <remarks>
-    /// A match must have a similarity of at least <see cref="ReasonletQuery.MinSimilarity"/> when that is set.
+    /// A match must have a similarity of at least <see cref="ReasonletQuery.MinSimilarity"/> when that is set. When absent, the
+    /// selector's own cut-off applies; the default selector uses <c>ReasonletRankingOptions.MinSimilarity</c>, 0.5.
     /// The result is empty, and still a success, when nothing passes.
-    /// Error codes: <see cref="MnemosyneErrorCode.Validation"/> when the query breaks an invariant, or when the store rejects the embedding, for example for its length,
-    /// <see cref="MnemosyneErrorCode.Unavailable"/> when the backing store, the embedding generator, the intent extractor or the selector fails.
+    /// An intent extractor that fails does not fail the recall: it searches every intent instead, since a missing filter only widens the search.
+    /// Error codes: <see cref="MnemosyneErrorCode.Validation"/> when the query breaks an invariant,
+    /// <see cref="MnemosyneErrorCode.Unavailable"/> when the backing store, the embedding generator or the selector fails, or the generator
+    /// returns an embedding the store cannot use, for example one whose length does not match the store's.
     /// </remarks>
     /// <param name="query">The query.</param>
     /// <param name="ct">The cancellation token.</param>

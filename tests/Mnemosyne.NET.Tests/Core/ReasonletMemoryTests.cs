@@ -226,26 +226,29 @@ public sealed class ReasonletMemoryTests
         Assert.Equal(0, _store.Calls);
     }
 
-    [Fact]
-    public async Task AnExtractorExceptionAtRecallIsUnavailableWithoutItsMessage()
+    public static TheoryData<string> ExtractorOutages() => ["exception", "unavailable", "timeout"];
+
+    [Theory]
+    [MemberData(nameof(ExtractorOutages))]
+    public async Task AnExtractorOutageAtRecallSearchesUnfiltered(string outage)
     {
-        var extractor = new FakeIntentExtractor { Respond = () => throw new HttpRequestException(Secret) };
+        var extractor = new FakeIntentExtractor
+        {
+            Respond = outage switch
+            {
+                "exception" => () => throw new HttpRequestException(Secret),
+                "unavailable" => () => Result<ReasonletIntent, MnemosyneError>.Failure(SentinelError(MnemosyneErrorCode.Unavailable)),
+                _ => () => throw new TaskCanceledException(Secret),
+            },
+        };
+        var candidate = Candidate();
+        _store.SearchResult = Result<IReadOnlyList<ReasonletCandidate>, MnemosyneError>.Success([candidate]);
 
         var result = await Memory(extractor).RecallAsync(TestData.Query() with { Question = Secret }, CancellationToken.None);
 
-        AssertUnavailableWithoutMessage(result.Error, nameof(HttpRequestException));
-        Assert.Equal(0, _generator.Calls);
-    }
-
-    [Fact]
-    public async Task AnUnavailableExtractorAtRecallIsRewrappedWithoutItsText()
-    {
-        var extractor = new FakeIntentExtractor { Respond = () => Result<ReasonletIntent, MnemosyneError>.Failure(SentinelError(MnemosyneErrorCode.Unavailable)) };
-
-        var result = await Memory(extractor).RecallAsync(TestData.Query(), CancellationToken.None);
-
-        AssertRewrappedExtractorFailure(result.Error);
-        Assert.Equal(0, _generator.Calls);
+        Assert.Equal(candidate.Reasonlet, Assert.Single(result.Value).Reasonlet);
+        Assert.Null(_store.Searched!.Value.Intent);
+        Assert.Equal(1, _generator.Calls);
     }
 
     [Theory]
@@ -304,17 +307,6 @@ public sealed class ReasonletMemoryTests
     }
 
     [Fact]
-    public async Task AnExtractorTimeoutAtRecallIsUnavailableWithoutItsMessage()
-    {
-        var extractor = new FakeIntentExtractor { Respond = () => throw new TaskCanceledException(Secret) };
-
-        var result = await Memory(extractor).RecallAsync(TestData.Query() with { Question = Secret }, CancellationToken.None);
-
-        AssertUnavailableWithoutMessage(result.Error, nameof(TaskCanceledException));
-        Assert.Equal(0, _generator.Calls);
-    }
-
-    [Fact]
     public async Task NoEmbeddingIsUnavailable()
     {
         _generator.Respond = () => new GeneratedEmbeddings<Embedding<float>>();
@@ -333,6 +325,101 @@ public sealed class ReasonletMemoryTests
         var result = await Memory().RecallAsync(TestData.Query(), CancellationToken.None);
 
         Assert.Equal(MnemosyneErrorCode.Unavailable, result.Error.Code);
+    }
+
+    // ---- Embeddings the store cannot use ----
+
+    public static TheoryData<float[], string> UnusableEmbeddings() => new()
+    {
+        { [], "length" },
+        { [0.6f, float.NaN, 0f], "non-finite" },
+        { [0.6f, float.PositiveInfinity, 0f], "non-finite" },
+        { [0f, 0f, 0f], "norm" },
+        { [float.MaxValue, 0f, 0f], "norm" },
+    };
+
+    private static void AssertUnusableEmbedding(MnemosyneError error, string reason)
+    {
+        Assert.Equal(MnemosyneErrorCode.Unavailable, error.Code);
+        Assert.Equal("The embedding generator returned an embedding the store cannot use.", error.Message);
+        Assert.StartsWith(reason + ":", error.Detail);
+        Assert.DoesNotContain("secret", error.Detail!, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
+    [MemberData(nameof(UnusableEmbeddings))]
+    public async Task AnUnusableEmbeddingAtRecallIsUnavailableBeforeTheStore(float[] vector, string reason)
+    {
+        _generator.Respond = () => new([new Embedding<float>(vector)]);
+
+        var result = await Memory().RecallAsync(TestData.Query() with { Question = Secret }, CancellationToken.None);
+
+        AssertUnusableEmbedding(result.Error, reason);
+        Assert.Equal(0, _store.Calls);
+    }
+
+    [Theory]
+    [MemberData(nameof(UnusableEmbeddings))]
+    public async Task AnUnusableEmbeddingAtRememberIsUnavailableBeforeTheStore(float[] vector, string reason)
+    {
+        _generator.Respond = () => new([new Embedding<float>(vector)]);
+
+        var result = await Memory().RememberAsync(TestData.Capture() with { Question = Secret }, CancellationToken.None);
+
+        AssertUnusableEmbedding(result.Error, reason);
+        Assert.Equal(0, _store.Calls);
+    }
+
+    [Theory]
+    [InlineData("embedding: must have 4 values, the store's dimension, but has 3")]
+    [InlineData("Embedding: must have 4 values, the store's dimension, but has 3")]
+    [InlineData("embedding[2]: must be a finite number")]
+    public async Task TheStoresValidationOnTheEmbeddingAtRecallIsUnavailable(string message)
+    {
+        _store.SearchResult = Result<IReadOnlyList<ReasonletCandidate>, MnemosyneError>.Failure(new(MnemosyneErrorCode.Validation, message));
+
+        var result = await Memory().RecallAsync(TestData.Query(), CancellationToken.None);
+
+        Assert.Equal(new MnemosyneError(MnemosyneErrorCode.Unavailable, "The embedding generator returned an embedding the store cannot use.", message), result.Error);
+        Assert.Equal(0, _selector.Calls);
+    }
+
+    [Fact]
+    public async Task TheStoresValidationOnTheEmbeddingAtRememberIsUnavailable()
+    {
+        const string Message = "Embedding: must have 4 values, the store's dimension, but has 3";
+        _store.RememberResult = Result<ReasonletReceipt, MnemosyneError>.Failure(new(MnemosyneErrorCode.Validation, Message));
+
+        var result = await Memory().RememberAsync(TestData.Capture(), CancellationToken.None);
+
+        Assert.Equal(new MnemosyneError(MnemosyneErrorCode.Unavailable, "The embedding generator returned an embedding the store cannot use.", Message), result.Error);
+    }
+
+    [Theory]
+    [InlineData(MnemosyneErrorCode.Validation, "limit: must be from 1 to 200")]
+    [InlineData(MnemosyneErrorCode.Validation, "embeddings: not the embedding path")]
+    [InlineData(MnemosyneErrorCode.Validation, "embedding")]
+    [InlineData(MnemosyneErrorCode.Validation, "Dimensions: the database's embeddings have 4 dimensions")]
+    [InlineData(MnemosyneErrorCode.Unavailable, "embedding: down")]
+    public async Task EveryOtherStoreErrorPassesThrough(MnemosyneErrorCode code, string message)
+    {
+        var error = new MnemosyneError(code, message);
+        _store.SearchResult = Result<IReadOnlyList<ReasonletCandidate>, MnemosyneError>.Failure(error);
+        _store.RememberResult = Result<ReasonletReceipt, MnemosyneError>.Failure(error);
+
+        Assert.Equal(error, (await Memory().RecallAsync(TestData.Query(), CancellationToken.None)).Error);
+        Assert.Equal(error, (await Memory().RememberAsync(TestData.Capture(), CancellationToken.None)).Error);
+    }
+
+    [Fact]
+    public async Task QueryValidationStillAnswersValidation()
+    {
+        _generator.Respond = () => new([new Embedding<float>(new[] { float.NaN })]);
+
+        var result = await Memory().RecallAsync(TestData.Query() with { Top = 0 }, CancellationToken.None);
+
+        Assert.Equal(MnemosyneErrorCode.Validation, result.Error.Code);
+        Assert.Equal(0, _generator.Calls);
     }
 
     // ---- Remember ----

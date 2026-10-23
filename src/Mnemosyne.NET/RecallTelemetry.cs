@@ -37,6 +37,7 @@ internal static class RecallTelemetry
     private const string ExceptionOutcome = "exception";
     private const string TopTag = "mnemosyne.recall.top";
     private const string IntentFilteredTag = "mnemosyne.recall.intent_filtered";
+    private const string IntentFallbackTag = "mnemosyne.recall.intent_fallback";
     private const string CandidatesTag = "mnemosyne.recall.candidates";
     private const string ReturnedTag = "mnemosyne.recall.returned";
     private const string ChosenIdTag = "mnemosyne.recall.chosen.id";
@@ -121,6 +122,12 @@ internal static class RecallTelemetry
 
     /// <summary>Tags a recall with whether its resolved intent filter is set.</summary>
     internal static void IntentFiltered(Activity? activity, bool filtered) => activity?.SetTag(IntentFilteredTag, filtered);
+
+    /// <summary>
+    /// Tags a recall that searched every intent because the intent extractor was down. The tag is a bare <c>true</c>: it
+    /// carries no error or exception message.
+    /// </summary>
+    internal static void IntentFallback(Activity? activity) => activity?.SetTag(IntentFallbackTag, true);
 
     /// <summary>Tags a recall with how many candidates the store returned.</summary>
     internal static void Candidates(Activity? activity, int count) => activity?.SetTag(CandidatesTag, count);

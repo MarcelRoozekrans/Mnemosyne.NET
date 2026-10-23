@@ -17,8 +17,8 @@ public sealed record ReasonletQuery
     public string? Intent { get; init; }
 
     /// <summary>
-    /// Gets an optional floor on the similarity of a match, in [0, 1]. A Reasonlet below it is not returned. When absent
-    /// no floor applies.
+    /// Gets an optional floor on the similarity of a match, in [0, 1]. A Reasonlet below it is not returned. When absent,
+    /// the selector's own cut-off applies; the default selector uses <c>ReasonletRankingOptions.MinSimilarity</c>, 0.5.
     /// </summary>
     public double? MinSimilarity { get; init; }
 

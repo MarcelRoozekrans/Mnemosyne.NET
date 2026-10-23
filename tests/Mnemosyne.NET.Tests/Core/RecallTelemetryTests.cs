@@ -218,22 +218,53 @@ public sealed class RecallTelemetryTests
         AssertOperation(capture, "Unavailable");
     }
 
-    [Fact]
-    public async Task AnExtractorUnavailableIsOutcomeUnavailable()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task AnExtractorOutageFallsBackAndIsTagged(bool throws)
     {
         var extractor = new FakeIntentExtractor
         {
-            Respond = () => Result<ReasonletIntent, MnemosyneError>.Failure(new(MnemosyneErrorCode.Unavailable, "down")),
+            Respond = throws
+                ? () => throw new HttpRequestException("down")
+                : () => Result<ReasonletIntent, MnemosyneError>.Failure(new(MnemosyneErrorCode.Unavailable, "down")),
         };
+        _store.SearchResult = Result<IReadOnlyList<ReasonletCandidate>, MnemosyneError>.Success([Candidate()]);
         using var capture = new TelemetryCapture();
 
         var result = await Memory(extractor).RecallAsync(TestData.Query(), Ct);
 
-        Assert.Equal(MnemosyneErrorCode.Unavailable, result.Error.Code);
+        Assert.Single(result.Value);
         var activity = Single(capture);
-        Assert.Equal("Unavailable", activity.GetTagItem("error.type"));
-        Assert.Equal(ActivityStatusCode.Error, activity.Status);
+        Assert.Equal(false, activity.GetTagItem("mnemosyne.recall.intent_filtered"));
+        Assert.Equal(true, activity.GetTagItem("mnemosyne.recall.intent_fallback"));
+        Assert.Null(activity.GetTagItem("error.type"));
+        Assert.Equal(ActivityStatusCode.Unset, activity.Status);
         Assert.Empty(activity.Events);
+        AssertOperation(capture, "ok");
+    }
+
+    [Fact]
+    public async Task ARecallThatResolvedItsIntentHasNoFallbackTag()
+    {
+        using var capture = new TelemetryCapture();
+
+        await Memory(FakeIntentExtractor.Answering("extracted", 0.1)).RecallAsync(TestData.Query(), Ct);
+
+        Assert.Null(Single(capture).GetTagItem("mnemosyne.recall.intent_fallback"));
+    }
+
+    [Fact]
+    public async Task AnEmbeddingTheStoreRejectsIsOutcomeUnavailable()
+    {
+        _store.SearchResult = Result<IReadOnlyList<ReasonletCandidate>, MnemosyneError>.Failure(
+            new(MnemosyneErrorCode.Validation, "embedding: must have 4 values, the store's dimension, but has 3"));
+        using var capture = new TelemetryCapture();
+
+        var result = await Memory().RecallAsync(TestData.Query(), Ct);
+
+        Assert.Equal(MnemosyneErrorCode.Unavailable, result.Error.Code);
+        Assert.Equal("Unavailable", Single(capture).GetTagItem("error.type"));
         AssertOperation(capture, "Unavailable");
     }
 
@@ -312,8 +343,9 @@ public sealed class RecallTelemetryTests
         Assert.Single((await Memory().RecallAsync(query, Ct)).Value);
 
         // A dependency exception whose message quotes the question, through an extractor and the generator.
+        // The extractor's outage falls back to an unfiltered search, so that recall succeeds.
         var extractor = new FakeIntentExtractor { Respond = () => throw new InvalidCastException($"extractor: {token}") };
-        Assert.Equal(MnemosyneErrorCode.Unavailable, (await Memory(extractor).RecallAsync(query with { Intent = null }, Ct)).Error.Code);
+        Assert.Single((await Memory(extractor).RecallAsync(query with { Intent = null }, Ct)).Value);
         _generator.Respond = () => throw new InvalidCastException($"generator: {token}");
         Assert.Equal(MnemosyneErrorCode.Unavailable, (await Memory().RecallAsync(query, Ct)).Error.Code);
 
