@@ -9,4 +9,7 @@
     <Project Path="tests/Mnemosyne.NET.AotSmoke/Mnemosyne.NET.AotSmoke.csproj" />
     <Project Path="tests/Mnemosyne.NET.PostgreSql.Tests/Mnemosyne.NET.PostgreSql.Tests.csproj" />
   </Folder>
+  <Folder Name="/samples/">
+    <Project Path="samples/Mnemosyne.Samples.StoreAndRecall/Mnemosyne.Samples.StoreAndRecall.csproj" />
+  </Folder>
 </Solution>

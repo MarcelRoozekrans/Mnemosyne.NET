@@ -24,5 +24,7 @@
     <ProjectReference Include="..\..\src\Mnemosyne.NET.Abstractions\Mnemosyne.NET.Abstractions.csproj" />
     <ProjectReference Include="..\..\src\Mnemosyne.NET.PostgreSql\Mnemosyne.NET.PostgreSql.csproj" />
     <ProjectReference Include="..\..\src\Mnemosyne.NET\Mnemosyne.NET.csproj" />
+    <!-- For the sample's hashing embedding generator, whose tests live here; coverage.config.xml excludes the sample. -->
+    <ProjectReference Include="..\..\samples\Mnemosyne.Samples.StoreAndRecall\Mnemosyne.Samples.StoreAndRecall.csproj" />
   </ItemGroup>
 </Project>
