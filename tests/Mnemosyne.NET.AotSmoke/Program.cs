@@ -6,6 +6,7 @@ using Mnemosyne.NET;
 using Mnemosyne.NET.Abstractions;
 using Mnemosyne.NET.PostgreSql;
 using Npgsql;
+using ZeroAlloc.Results;
 
 // The publish proves the packages compile clean under native AOT. This round-trip proves the source-generated
 // graph serializer also works at runtime, and the hash check proves the canonical hash matches the JIT result.
@@ -63,12 +64,20 @@ static async Task<int> PostgreSqlSmoke(string connectionString, ReasonletGraph g
 {
     // Listeners attach before the store runs, so the instrumentation executes under native AOT. Only counts are kept.
     var activityNames = new System.Collections.Concurrent.ConcurrentBag<string>();
+    var verdictSources = new System.Collections.Concurrent.ConcurrentBag<string>();
     var measurements = 0;
     using var activityListener = new ActivityListener
     {
         ShouldListenTo = source => source.Name == MnemosyneTelemetry.ActivitySourceName,
         Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllDataAndRecorded,
-        ActivityStopped = activity => activityNames.Add(activity.OperationName),
+        ActivityStopped = activity =>
+        {
+            activityNames.Add(activity.OperationName);
+            if (activity.GetTagItem("mnemosyne.verdict_source") is string source)
+            {
+                verdictSources.Add($"{activity.OperationName}={source}");
+            }
+        },
     };
     ActivitySource.AddActivityListener(activityListener);
     using var meterListener = new MeterListener
@@ -234,6 +243,15 @@ static async Task<int> PostgreSqlSmoke(string connectionString, ReasonletGraph g
         return 27;
     }
 
+    // The judged run and the human verdict on it, as the store tagged them.
+    string[] expectedSources = ["mnemosyne.execution.append=evaluator", "mnemosyne.feedback.append=feedback"];
+    var missingSources = expectedSources.Where(source => !verdictSources.Contains(source)).ToArray();
+    if (!activityNames.Contains("mnemosyne.evaluate") || missingSources.Length > 0)
+    {
+        Console.Error.WriteLine($"Evaluation telemetry is missing: evaluate activity {activityNames.Contains("mnemosyne.evaluate")}, verdict sources {string.Join(", ", missingSources)}");
+        return 32;
+    }
+
     if (Volatile.Read(ref measurements) == 0)
     {
         Console.Error.WriteLine("No metric measurement was captured.");
@@ -245,12 +263,14 @@ static async Task<int> PostgreSqlSmoke(string connectionString, ReasonletGraph g
 }
 
 // The facade as a host wires it: the store from AddMnemosynePostgreSql, an embedding generator, and AddMnemosyne, all
-// resolved from a container under native AOT. It remembers, recalls the same question and erases its own scope.
+// resolved from a container under native AOT, with an evaluator. It remembers, recalls the same question, records a
+// judged run and a human verdict on it, and erases its own scope.
 static async Task<int> FacadeSmoke(NpgsqlDataSource dataSource, ReasonletGraph graph, CancellationToken ct)
 {
     var services = new ServiceCollection();
     services.AddSingleton(dataSource);
     services.AddSingleton<IEmbeddingGenerator<string, Embedding<float>>>(new FixedEmbeddingGenerator());
+    services.AddSingleton<IReasonletEvaluator>(new ApprovingEvaluator());
     services.AddMnemosynePostgreSql(new MnemosynePostgreSqlOptions { Dimensions = 3 });
     services.AddMnemosyne();
     await using var provider = services.BuildServiceProvider();
@@ -288,14 +308,86 @@ static async Task<int> FacadeSmoke(NpgsqlDataSource dataSource, ReasonletGraph g
         return 25;
     }
 
+    // The agent says the run failed and the judge says it worked, so the judge's verdict counts. The answer is never
+    // stored, so the stored columns are all there is to read: the store exposes no verdict, so the smoke reads it in SQL.
+    var judged = await memory.RecordExecutionAsync(
+        new ReasonletRun
+        {
+            Scope = scope,
+            Id = remembered.Value.Id,
+            Outcome = new ReasonletOutcome(false, TimeSpan.FromMilliseconds(5), null),
+            Provenance = new ReasonletProvenance { Source = "aot-smoke" },
+            Question = question,
+            Answer = "Search with the search tool.",
+        },
+        ct);
+    if (judged.IsFailure)
+    {
+        Console.Error.WriteLine($"Recording a judged run failed: {judged.Error.Message}");
+        return 28;
+    }
+
+    var verdict = await ReadVerdictAsync(dataSource, judged.Value, ct);
+    if (verdict != (false, true, ApprovingEvaluator.Name, 0.75, null, true))
+    {
+        Console.Error.WriteLine($"The judged run stored {verdict}");
+        return 29;
+    }
+
+    // A human's verdict overrides the judge's.
+    var feedback = await memory.RecordFeedbackAsync(scope, judged.Value, new ReasonletFeedback(0.2, 0.2, 0.2, Worked: false), ct);
+    if (feedback.IsFailure)
+    {
+        Console.Error.WriteLine($"Feedback with a verdict failed: {feedback.Error.Message}");
+        return 30;
+    }
+
+    verdict = await ReadVerdictAsync(dataSource, judged.Value, ct);
+    if (verdict != (false, true, ApprovingEvaluator.Name, 0.75, false, false))
+    {
+        Console.Error.WriteLine($"The run after feedback stored {verdict}");
+        return 31;
+    }
+
     var erased = await memory.EraseAsync(new ReasonletErasure(scope, null), ct);
-    if (erased.IsFailure || erased.Value.Reasonlets != 1 || erased.Value.Executions != 1)
+    if (erased.IsFailure || erased.Value.Reasonlets != 1 || erased.Value.Executions != 2)
     {
         Console.Error.WriteLine($"Erase through the facade failed: {(erased.IsFailure ? erased.Error.Message : $"{erased.Value.Reasonlets} Reasonlets, {erased.Value.Executions} executions deleted")}");
         return 26;
     }
 
     return 0;
+}
+
+// Reads a run's verdict inputs and its effective success with a plain reader, which needs no reflection.
+static async Task<(bool Agent, bool? Evaluated, string? Evaluator, double? Score, bool? Feedback, bool Success)?> ReadVerdictAsync(
+    NpgsqlDataSource dataSource, ExecutionId execution, CancellationToken ct)
+{
+    await using var command = dataSource.CreateCommand(
+        "SELECT agent_success, evaluated_success, evaluator, evaluation_score, feedback_worked, success FROM mnemosyne.reasonlet_executions WHERE id = $1");
+    command.Parameters.Add(new NpgsqlParameter<Guid> { TypedValue = execution.Value });
+    await using var reader = await command.ExecuteReaderAsync(ct);
+    if (!await reader.ReadAsync(ct))
+    {
+        return null;
+    }
+
+    return (
+        reader.GetBoolean(0),
+        reader.IsDBNull(1) ? null : reader.GetBoolean(1),
+        reader.IsDBNull(2) ? null : reader.GetString(2),
+        reader.IsDBNull(3) ? null : reader.GetDouble(3),
+        reader.IsDBNull(4) ? null : reader.GetBoolean(4),
+        reader.GetBoolean(5));
+}
+
+/// <summary>An evaluator that judges every run a success with a score of 0.75.</summary>
+internal sealed class ApprovingEvaluator : IReasonletEvaluator
+{
+    public const string Name = "aot-judge";
+
+    public ValueTask<Result<ReasonletEvaluation, MnemosyneError>> EvaluateAsync(ReasonletEvaluationRequest request, CancellationToken ct) =>
+        ValueTask.FromResult<Result<ReasonletEvaluation, MnemosyneError>>(new ReasonletEvaluation(true, 0.75, Name));
 }
 
 /// <summary>An embedding generator that embeds every text as the same 3-dimension vector.</summary>
