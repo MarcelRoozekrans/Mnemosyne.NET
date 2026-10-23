@@ -1,5 +1,8 @@
+using System.Net;
+using System.Text;
 using System.Text.Json;
 using Minos;
+using Minos.SystemOne;
 using Mnemosyne.NET.Abstractions;
 using Mnemosyne.NET.Minos;
 using Mnemosyne.NET.Tests.Abstractions;
@@ -197,19 +200,52 @@ public sealed class MinosReasonletEvaluatorTests
     }
 
     [Theory]
-    [InlineData(1.2)]
-    [InlineData(-0.01)]
-    [InlineData(double.NaN)]
-    [InlineData(double.PositiveInfinity)]
-    public async Task AProbabilityOutsideTheUnitIntervalIsAnInvalidResponse(double probability)
+    [InlineData("1.2")]
+    [InlineData("-0.01")]
+    public async Task AProbabilityOutsideTheUnitIntervalOnTheWireIsAnInvalidResponse(string probability)
     {
-        // QuestionAnswer.Noul rejects these, but Minos does not range-check what it reads off the wire, so the fake builds the answer unchecked.
-        var result = await Evaluator(FakeDecisionClient.AnsweringUnchecked(probability)).EvaluateAsync(Request(), CancellationToken.None);
+        // QuestionAnswer.Noul rejects these, so a fake can't build them. A real client reading them off the wire accepts them.
+        using var http = new HttpClient(new CannedHandler("{\"answers\":{\"resolves\":{\"type\":\"noul\",\"noul\":" + probability + "}}}"));
+        using var client = new SystemOneDecisionClient(http, new SystemOneDecisionClientOptions { ApiKey = "test-key", MaxRetries = 0 });
+
+        var result = await Evaluator(client).EvaluateAsync(Request(), CancellationToken.None);
 
         Assert.True(result.IsFailure);
         Assert.Equal(
             new MnemosyneError(MnemosyneErrorCode.Unavailable, "The Minos judge could not judge the run.", "minos: InvalidResponse"),
             result.Error);
+    }
+
+    [Fact]
+    public async Task AProbabilityInsideTheUnitIntervalOnTheWireIsTheScore()
+    {
+        using var http = new HttpClient(new CannedHandler("""{"answers":{"resolves":{"type":"noul","noul":0.75}}}"""));
+        using var client = new SystemOneDecisionClient(http, new SystemOneDecisionClientOptions { ApiKey = "test-key", MaxRetries = 0 });
+
+        var result = await Evaluator(client).EvaluateAsync(Request(), CancellationToken.None);
+
+        Assert.Equal(new ReasonletEvaluation(true, 0.75, "minos"), result.Value);
+    }
+
+    [Theory]
+    [InlineData(0.0, true)]
+    [InlineData(0.5, true)]
+    [InlineData(1.0, true)]
+    [InlineData(1.2, false)]
+    [InlineData(-0.01, false)]
+    [InlineData(double.NaN, false)]
+    [InlineData(double.PositiveInfinity, false)]
+    [InlineData(double.NegativeInfinity, false)]
+    public void TheGuardAcceptsOnlyNumbersInTheUnitInterval(double value, bool expected)
+    {
+        // JSON can't carry NaN or Infinity, so the guard's own logic covers them.
+        Assert.Equal(expected, MinosReasonletEvaluator.IsProbability(value));
+    }
+
+    private sealed class CannedHandler(string body) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
+            Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(body, Encoding.UTF8, "application/json") });
     }
 
     [Fact]

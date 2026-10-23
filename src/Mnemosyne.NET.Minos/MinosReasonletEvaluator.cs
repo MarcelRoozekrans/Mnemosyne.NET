@@ -68,7 +68,7 @@ public sealed class MinosReasonletEvaluator : IReasonletEvaluator
 
         // Minos does not range-check a probability read off the wire, and this is the trust boundary.
         var probability = result.Value.Resolves.Probability;
-        if (!(probability >= 0 && probability <= 1))
+        if (!IsProbability(probability))
         {
             return Result<ReasonletEvaluation, MnemosyneError>.Failure(ToError(DecisionErrorKind.InvalidResponse));
         }
@@ -76,6 +76,9 @@ public sealed class MinosReasonletEvaluator : IReasonletEvaluator
         return Result<ReasonletEvaluation, MnemosyneError>.Success(
             new ReasonletEvaluation(probability >= _options.SuccessThreshold, probability, _options.EvaluatorName));
     }
+
+    /// <summary>Returns whether a value is a probability: a number in [0, 1]. NaN is not one.</summary>
+    internal static bool IsProbability(double value) => value >= 0 && value <= 1;
 
     /// <summary>Maps a Minos failure to a fixed error whose detail names only the kind.</summary>
     private static MnemosyneError ToError(DecisionErrorKind kind)

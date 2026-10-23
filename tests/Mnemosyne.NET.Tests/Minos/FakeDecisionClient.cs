@@ -1,4 +1,3 @@
-using System.Reflection;
 using Minos;
 using Mnemosyne.NET.Minos;
 using ZeroAlloc.Results;
@@ -28,21 +27,6 @@ internal sealed class FakeDecisionClient : IDecisionClient
             MinosJudgeQuestions.Definition,
             [QuestionAnswer.Noul(probability)],
             model: "fake")));
-
-    /// <summary>
-    /// Answers the judge's Noul with <paramref name="probability"/> unchecked. <see cref="QuestionAnswer.Noul"/> rejects a value
-    /// outside [0, 1], but Minos does not range-check what it reads off the wire, so this builds the answer through the internal
-    /// constructor a provider's parser uses, to reach the evaluator's trust-boundary check.
-    /// </summary>
-    public static FakeDecisionClient AnsweringUnchecked(double probability)
-    {
-        var constructor = typeof(QuestionAnswer).GetConstructors(BindingFlags.Instance | BindingFlags.NonPublic).Single();
-        var answer = (QuestionAnswer)constructor.Invoke(["resolves", QuestionKind.Noul, -1, probability, 0.0, null, 0, 0]);
-        return new((_, _) => Result<DecisionResponse, DecisionError>.Success(new DecisionResponse(
-            MinosJudgeQuestions.Definition,
-            [answer],
-            model: "fake")));
-    }
 
     /// <summary>Fails every call with <paramref name="kind"/> and <paramref name="message"/>.</summary>
     public static FakeDecisionClient Failing(DecisionErrorKind kind, string message = "The fake failed on purpose.") =>
