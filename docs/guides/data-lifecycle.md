@@ -17,6 +17,8 @@ Stored procedures don't live forever. A tenant leaves, a person asks to have the
 `EraseAsync` takes a `ReasonletErasure`: a scope, and optionally a subject.
 
 ```csharp
+using Mnemosyne.NET.Abstractions;
+
 // Everything in the scope: a tenant leaves.
 var erased = await memory.EraseAsync(new ReasonletErasure(scope, SubjectId: null), ct);
 
@@ -91,6 +93,10 @@ It is on the store, `ReasonletPostgreSqlStore` and the `IReasonletStore` port, n
 At least one window must be set, and a window that is set must be positive. A policy that breaks either rule, or has an invalid scope, answers `Validation`.
 
 ```csharp
+using Microsoft.Extensions.DependencyInjection;
+using Mnemosyne.NET.Abstractions;
+using Mnemosyne.NET.PostgreSql;
+
 var store = provider.GetRequiredService<ReasonletPostgreSqlStore>();
 var pruned = await store.PruneAsync(
     new ReasonletRetention

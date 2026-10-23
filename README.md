@@ -31,7 +31,7 @@ Part of the same family as [Minos.NET](https://github.com/MarcelRoozekrans/Minos
 | Minos.NET | Decisions | What decision should be made? |
 | **Mnemosyne.NET** | **Procedures** | **How did we solve this before, and did it work?** |
 
-Status: pre-release, milestone 1 in progress. See [the design](docs/superpowers/specs/2026-10-21-mnemosyne-reasonlets-design.md).
+Status: pre-release.
 
 ## License
 

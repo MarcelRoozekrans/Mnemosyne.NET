@@ -52,7 +52,7 @@ if (migrated.IsFailure)
 
 - `AddMnemosynePostgreSql` registers `ReasonletPostgreSqlStore` as a singleton, and `IReasonletStore` as that same instance.
 - The options are an object, not a configure delegate, because `Dimensions` is a `required` member and a delegate can't set one. They are checked when you register, and a bad value throws `ArgumentOutOfRangeException`.
-- The store opens one connection per operation from the data source.
+- The store holds at most one connection at a time from the data source. Most operations use one; a prune opens several in sequence, one per batch.
 
 ### Slim and native AOT hosts
 
@@ -102,6 +102,8 @@ The migration history is the other thing the `search_path` decides. The migratio
 
 **The role the store runs as** needs the `TEMPORARY` privilege on the database. An erase by subject keeps the runs it removes in a temporary table for the length of its transaction. PostgreSQL grants `TEMPORARY` to `PUBLIC` by default, so this only matters if your DBA has revoked it.
 
+If the store runs as a different role from the one that migrates, that role also needs `USAGE` on the `mnemosyne` schema and on the schema the `vector` extension lives in, plus `SELECT`, `INSERT`, `UPDATE` and `DELETE` on the tables in `mnemosyne`.
+
 ## Searching
 
 Recall asks the store for the candidates nearest to the question's embedding, in one scope. The store answers with up to the requested number of `Active` Reasonlets, from 1 to 200, sorted exactly by distance.
@@ -110,7 +112,7 @@ Recall asks the store for the candidates nearest to the question's embedding, in
 - **Small scopes still fill up.** Iterative scans keep reading the index until they have enough rows that pass the scope filter, so a scope with a small share of the table usually still gets its full limit.
 - **The scan has a budget.** It stops after `hnsw.max_scan_tuples` index tuples, 20,000 by default, and `hnsw.scan_mem_multiplier` can end it early once it uses its memory budget. So a very small scope in a very large table can come back with fewer candidates than the limit.
 - **Exact ties have no order.** Candidates at exactly the same distance come back in an unspecified order.
-- **The embedding needs a norm.** Cosine similarity is undefined for an all-zero vector, so the store answers `Validation` to a search or remember with one. Through `IReasonletMemory` you see `Unavailable` instead, because the facade checks the embedding it generated before it calls the store.
+- **The embedding needs a nonzero, finite norm.** Cosine similarity is undefined for an all-zero vector, and pgvector sums the squares in single precision, so they can overflow. The store answers `Validation` to a search or remember whose embedding has a zero norm or squares that overflow. Through `IReasonletMemory` you see `Unavailable` instead, because the facade checks the embedding it generated before it calls the store.
 
 Each candidate's metrics, its runs, successes and last success, come from a counter row the store keeps in step with every run it records, so search doesn't aggregate runs.
 

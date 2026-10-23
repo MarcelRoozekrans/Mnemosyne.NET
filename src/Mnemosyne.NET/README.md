@@ -15,7 +15,7 @@ dotnet add package Mnemosyne.NET.PostgreSql
 
 ## Setup and recall
 
-Register a store, an embedding generator and the facade. The store here is `Mnemosyne.NET.PostgreSql`, which the host migrates at startup. The embedding generator is any `IEmbeddingGenerator<string, Embedding<float>>` from Microsoft.Extensions.AI.
+Register a store, an embedding generator and the facade. The store here is `Mnemosyne.NET.PostgreSql`, which the host migrates at startup; see [Migrations](https://marcelroozekrans.github.io/Mnemosyne.NET/guides/postgresql#migrations). The embedding generator is any `IEmbeddingGenerator<string, Embedding<float>>` from Microsoft.Extensions.AI.
 
 ```csharp
 using Microsoft.Extensions.AI;

@@ -126,7 +126,7 @@ Recall returns a result, and fails only for a real problem:
 |---|---|
 | The query is invalid, for example a blank question or `Top` outside 1 to 50 | `Validation` |
 | The embedding generator throws, times out or returns nothing | `Unavailable` |
-| The embedding has the wrong number of dimensions, a NaN or infinite value, or a zero norm | `Unavailable` |
+| The embedding has the wrong number of dimensions, a NaN or infinite value, a zero norm, or a norm whose squares overflow | `Unavailable` |
 | The store or the selector fails | its error, unchanged, usually `Unavailable` |
 | The intent extractor is down | no error: recall searches every intent instead |
 | The intent extractor answers an error code other than `Unavailable`, or an invalid intent | `InvalidOperationException` is thrown |

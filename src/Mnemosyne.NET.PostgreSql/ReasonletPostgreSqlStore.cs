@@ -17,8 +17,8 @@ namespace Mnemosyne.NET.PostgreSql;
 /// <summary>An <see cref="IReasonletStore"/> on PostgreSQL with pgvector.</summary>
 /// <remarks>
 /// The host calls <see cref="MigrateAsync"/> once at startup, before anything else. Every other member answers
-/// <see cref="MnemosyneErrorCode.Unavailable"/> until the schema is migrated. The store opens one connection
-/// per operation from the data source it is given. Every public member is one operation of
+/// <see cref="MnemosyneErrorCode.Unavailable"/> until the schema is migrated. The store holds at most one
+/// connection at a time from the data source it is given; a prune opens several in sequence. Every public member is one operation of
 /// <see cref="MnemosyneTelemetry.ActivitySourceName"/> and <see cref="MnemosyneTelemetry.MeterName"/>, a failed or
 /// invalid call included, and its signals carry no user data.
 /// </remarks>
