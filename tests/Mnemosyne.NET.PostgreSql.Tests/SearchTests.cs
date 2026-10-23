@@ -102,8 +102,8 @@ public sealed class SearchTests(PgVectorFixture fixture) : IClassFixture<PgVecto
         var (store, scope) = await MigratedAsync();
         var id = await RememberAsync(store, scope, new float[] { 1, 0, 0 }, "measured");
         var bare = await RememberAsync(store, scope, new float[] { 0, 1, 0 }, "bare");
-        var success = (await store.AppendExecutionAsync(scope, id, new ReasonletOutcome(true, TimeSpan.Zero, null), Entries.Provenance(), Ct)).Value;
-        Assert.True((await store.AppendExecutionAsync(scope, id, new ReasonletOutcome(false, TimeSpan.Zero, null), Entries.Provenance(), Ct)).IsSuccess);
+        var success = (await store.AppendExecutionAsync(scope, id, new ReasonletOutcome(true, TimeSpan.Zero, null), Entries.Provenance(), null, Ct)).Value;
+        Assert.True((await store.AppendExecutionAsync(scope, id, new ReasonletOutcome(false, TimeSpan.Zero, null), Entries.Provenance(), null, Ct)).IsSuccess);
 
         // The store never leaves a Reasonlet without a metrics row; search still reads a missing one as no runs.
         await Entries.ExecuteAsync(fixture.DataSource, "DELETE FROM mnemosyne.reasonlet_metrics WHERE reasonlet_id = $1", bare.Value);
@@ -130,7 +130,7 @@ public sealed class SearchTests(PgVectorFixture fixture) : IClassFixture<PgVecto
     {
         var (store, scope) = await MigratedAsync();
         var id = await RememberAsync(store, scope, new float[] { 1, 0, 0 }, "measured");
-        Assert.True((await store.AppendExecutionAsync(scope, id, new ReasonletOutcome(false, TimeSpan.Zero, null), Entries.Provenance(), Ct)).IsSuccess);
+        Assert.True((await store.AppendExecutionAsync(scope, id, new ReasonletOutcome(false, TimeSpan.Zero, null), Entries.Provenance(), null, Ct)).IsSuccess);
 
         var result = await store.SearchAsync(scope, new float[] { 1, 0, 0 }, null, 10, Ct);
 
@@ -144,7 +144,7 @@ public sealed class SearchTests(PgVectorFixture fixture) : IClassFixture<PgVecto
     {
         var (store, scope) = await MigratedAsync();
         var root = await RememberAsync(store, scope, new float[] { 1, 0, 0 }, "root");
-        Assert.True((await store.AppendExecutionAsync(scope, root, new ReasonletOutcome(false, TimeSpan.Zero, null), Entries.Provenance(), Ct)).IsSuccess);
+        Assert.True((await store.AppendExecutionAsync(scope, root, new ReasonletOutcome(false, TimeSpan.Zero, null), Entries.Provenance(), null, Ct)).IsSuccess);
         var child = await store.RememberAsync(
             Entries.Entry(scope, Entries.Graph("child"), root, embedding: new float[] { 0, 1, 0 }), Ct);
         Assert.True(child.IsSuccess);

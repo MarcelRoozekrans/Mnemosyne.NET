@@ -24,7 +24,7 @@ internal sealed class FakeStore : IReasonletStore
     public Result<IReadOnlyList<ReasonletCandidate>, MnemosyneError> SearchResult { get; set; } =
         Result<IReadOnlyList<ReasonletCandidate>, MnemosyneError>.Success([]);
 
-    public (ReasonletScope Scope, ReasonletId Id, ReasonletOutcome Outcome, ReasonletProvenance Provenance, CancellationToken Ct)? Executed { get; private set; }
+    public (ReasonletScope Scope, ReasonletId Id, ReasonletOutcome Outcome, ReasonletProvenance Provenance, ReasonletEvaluation? Evaluation, CancellationToken Ct)? Executed { get; private set; }
 
     public Result<ExecutionId, MnemosyneError> ExecutionResult { get; set; } =
         Result<ExecutionId, MnemosyneError>.Success(ExecutionId.New());
@@ -54,10 +54,10 @@ internal sealed class FakeStore : IReasonletStore
     }
 
     public ValueTask<Result<ExecutionId, MnemosyneError>> AppendExecutionAsync(
-        ReasonletScope scope, ReasonletId id, ReasonletOutcome outcome, ReasonletProvenance provenance, CancellationToken ct)
+        ReasonletScope scope, ReasonletId id, ReasonletOutcome outcome, ReasonletProvenance provenance, ReasonletEvaluation? evaluation, CancellationToken ct)
     {
         Calls++;
-        Executed = (scope, id, outcome, provenance, ct);
+        Executed = (scope, id, outcome, provenance, evaluation, ct);
         return ValueTask.FromResult(ExecutionResult);
     }
 

@@ -278,7 +278,7 @@ public sealed class MigrationTests(PgVectorFixture fixture) : IClassFixture<PgVe
 
         AssertNotMigrated((await store.GetAsync(scope, ReasonletId.New(), Ct)).Error);
         AssertNotMigrated((await store.RememberAsync(Entries.Entry(scope), Ct)).Error);
-        AssertNotMigrated((await store.AppendExecutionAsync(scope, ReasonletId.New(), default, new ReasonletProvenance { Source = "test" }, Ct)).Error);
+        AssertNotMigrated((await store.AppendExecutionAsync(scope, ReasonletId.New(), default, new ReasonletProvenance { Source = "test" }, null, Ct)).Error);
         AssertNotMigrated((await store.AppendFeedbackAsync(scope, ExecutionId.New(), default, Ct)).Error);
         AssertNotMigrated((await store.SearchAsync(scope, new float[] { 1, 0, 0 }, null, 10, Ct)).Error);
         AssertNotMigrated((await store.EraseAsync(new ReasonletErasure(scope, null), Ct)).Error);
@@ -293,7 +293,7 @@ public sealed class MigrationTests(PgVectorFixture fixture) : IClassFixture<PgVe
         await Assert.ThrowsAsync<ArgumentNullException>(async () => await store.RememberAsync(null!, Ct));
         await Assert.ThrowsAsync<ArgumentNullException>(async () => await store.EraseAsync(null!, Ct));
         await Assert.ThrowsAsync<ArgumentNullException>(
-            async () => await store.AppendExecutionAsync(PgVectorFixture.NewScope(), ReasonletId.New(), default, null!, Ct));
+            async () => await store.AppendExecutionAsync(PgVectorFixture.NewScope(), ReasonletId.New(), default, null!, null, Ct));
     }
 
     [Fact]

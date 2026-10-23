@@ -295,7 +295,7 @@ public sealed class RememberTests(PgVectorFixture fixture) : IClassFixture<PgVec
 
         var remember = store.RememberAsync(Entries.Entry(scope, Entries.Graph("next"), p.Id), Ct).AsTask();
         await WaitForLockWaitAsync(holder);
-        var append = store.AppendExecutionAsync(scope, p.Id, new ReasonletOutcome(true, TimeSpan.Zero, null), Entries.Provenance(), Ct).AsTask();
+        var append = store.AppendExecutionAsync(scope, p.Id, new ReasonletOutcome(true, TimeSpan.Zero, null), Entries.Provenance(), null, Ct).AsTask();
         var appended = await Task.WhenAny(append, Task.Delay(TimeSpan.FromSeconds(10), Ct));
         var rememberWaited = !remember.IsCompleted;
         await transaction.CommitAsync(Ct);
@@ -462,6 +462,44 @@ public sealed class RememberTests(PgVectorFixture fixture) : IClassFixture<PgVec
 
         Assert.Equal(MnemosyneErrorCode.Validation, result.Error.Code);
         Assert.Equal("Intent: must not be blank", result.Error.Message);
+    }
+
+    [Fact]
+    public async Task AnEntryWhoseCaptureCarriesAnAnswerIsAValidationErrorAndStoresNothing()
+    {
+        var store = await MigratedStoreAsync();
+        var scope = PgVectorFixture.NewScope();
+        var entry = Entries.Entry(scope);
+        entry = entry with { Capture = entry.Capture with { Answer = "the answer" } };
+
+        var result = await store.RememberAsync(entry, Ct);
+
+        Assert.Equal(MnemosyneErrorCode.Validation, result.Error.Code);
+        Assert.Equal("Capture.Answer: must be null; an answer is never stored", result.Error.Message);
+        Assert.Equal(0L, await CountAsync("SELECT count(*) FROM mnemosyne.reasonlets WHERE scope = $1", scope.Value));
+    }
+
+    [Fact]
+    public async Task AnInvalidEvaluationIsAValidationErrorAndStoresNothing()
+    {
+        var store = await MigratedStoreAsync();
+        var scope = PgVectorFixture.NewScope();
+
+        var result = await store.RememberAsync(Entries.Entry(scope) with { Evaluation = new ReasonletEvaluation(true, 1.5, "judge") }, Ct);
+
+        Assert.Equal(MnemosyneErrorCode.Validation, result.Error.Code);
+        Assert.Equal("Evaluation.Score: must be a finite number between 0 and 1", result.Error.Message);
+        Assert.Equal(0L, await CountAsync("SELECT count(*) FROM mnemosyne.reasonlets WHERE scope = $1", scope.Value));
+    }
+
+    [Fact]
+    public async Task AValidEvaluationIsAccepted()
+    {
+        var store = await MigratedStoreAsync();
+
+        var result = await store.RememberAsync(Entries.Entry(PgVectorFixture.NewScope()) with { Evaluation = new ReasonletEvaluation(false, 0.1, "judge") }, Ct);
+
+        Assert.True(result.IsSuccess);
     }
 
     [Fact]

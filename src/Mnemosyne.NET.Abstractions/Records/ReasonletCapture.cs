@@ -27,6 +27,14 @@ public sealed record ReasonletCapture
     /// <summary>Gets the optional name. When present it must not be blank.</summary>
     public string? Name { get; init; }
 
+    /// <summary>
+    /// Gets the run's optional answer. With a registered evaluator, it lets the run this capture records be judged. It
+    /// reaches the evaluator and nothing else: the facade strips it before the capture reaches the store, so it is never
+    /// stored, and never placed in an error or a telemetry signal. When present it must not be blank or longer than
+    /// 32,000 code points.
+    /// </summary>
+    public string? Answer { get; init; }
+
     /// <summary>Gets the optional parent Reasonlet. When present it must not be the default id.</summary>
     public ReasonletId? ParentId { get; init; }
 
@@ -42,5 +50,6 @@ public sealed record ReasonletCapture
         () => Check.Nested(Provenance.Validate(), nameof(Provenance)),
         () => Intent is null ? UnitResult<MnemosyneError>.Success() : Check.NotBlank(Intent, nameof(Intent)),
         () => Name is null ? UnitResult<MnemosyneError>.Success() : Check.NotBlank(Name, nameof(Name)),
-        () => ParentId is { } parent ? Check.NotDefault(parent, nameof(ParentId)) : UnitResult<MnemosyneError>.Success());
+        () => ParentId is { } parent ? Check.NotDefault(parent, nameof(ParentId)) : UnitResult<MnemosyneError>.Success(),
+        () => ReasonletRun.OptionalText(Answer, nameof(Answer)));
 }

@@ -519,7 +519,7 @@ public sealed class EraseTests(PgVectorFixture fixture) : IClassFixture<PgVector
     private static async Task<ExecutionId> AppendAsync(
         ReasonletPostgreSqlStore store, ReasonletScope scope, ReasonletId id, string? subject, ReasonletOutcome? outcome = null)
     {
-        var result = await store.AppendExecutionAsync(scope, id, outcome ?? Outcome, new ReasonletProvenance { Source = "test", SubjectId = subject }, Ct);
+        var result = await store.AppendExecutionAsync(scope, id, outcome ?? Outcome, new ReasonletProvenance { Source = "test", SubjectId = subject }, null, Ct);
         Assert.True(result.IsSuccess);
         return result.Value;
     }

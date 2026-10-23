@@ -15,6 +15,7 @@ public class ContractShapeTests
         typeof(IReasonletStore),
         typeof(IReasonletSelector),
         typeof(IIntentExtractor),
+        typeof(IReasonletEvaluator),
     ];
 
     [Fact]
@@ -67,6 +68,8 @@ public class ContractShapeTests
     [InlineData(typeof(ReasonletErasureResult))]
     [InlineData(typeof(ReasonletRetention))]
     [InlineData(typeof(ReasonletPruneResult))]
+    [InlineData(typeof(ReasonletRun))]
+    [InlineData(typeof(ReasonletEvaluationRequest))]
     public void GrowableRecordsAreInitOnly(Type record)
     {
         var constructors = record.GetConstructors();
@@ -87,6 +90,117 @@ public class ContractShapeTests
         {
             Assert.Empty(contract.GetProperties());
         }
+    }
+
+    private static string[] Signature(MethodInfo method) =>
+        [.. method.GetParameters().Select(p => p.ParameterType.Name + " " + p.Name)];
+
+    [Fact]
+    public void RecordExecutionTakesOneRun()
+    {
+        var method = typeof(IReasonletMemory).GetMethod("RecordExecutionAsync")!;
+        Assert.Equal(["ReasonletRun run", "CancellationToken ct"], Signature(method));
+        Assert.Equal(typeof(ValueTask<Result<ExecutionId, MnemosyneError>>), method.ReturnType);
+    }
+
+    [Fact]
+    public void AppendExecutionTakesTheEvaluationLast()
+    {
+        var method = typeof(IReasonletStore).GetMethod("AppendExecutionAsync")!;
+        Assert.Equal(
+            [
+                "ReasonletScope scope",
+                "ReasonletId id",
+                "ReasonletOutcome outcome",
+                "ReasonletProvenance provenance",
+                "Nullable`1 evaluation",
+                "CancellationToken ct",
+            ],
+            Signature(method));
+        Assert.Equal(typeof(ReasonletEvaluation?), method.GetParameters()[4].ParameterType);
+        Assert.Equal(typeof(ValueTask<Result<ExecutionId, MnemosyneError>>), method.ReturnType);
+    }
+
+    [Fact]
+    public void AppendFeedbackKeepsItsSignature() =>
+        Assert.Equal(
+            ["ReasonletScope scope", "ExecutionId execution", "ReasonletFeedback feedback", "CancellationToken ct"],
+            Signature(typeof(IReasonletStore).GetMethod("AppendFeedbackAsync")!));
+
+    [Fact]
+    public void TheEvaluatorJudgesOneRequest()
+    {
+        var method = Assert.Single(typeof(IReasonletEvaluator).GetMethods());
+        Assert.Equal("EvaluateAsync", method.Name);
+        Assert.Equal(["ReasonletEvaluationRequest request", "CancellationToken ct"], Signature(method));
+        Assert.Equal(typeof(ValueTask<Result<ReasonletEvaluation, MnemosyneError>>), method.ReturnType);
+        Assert.True(typeof(IReasonletEvaluator).IsPublic);
+        Assert.Equal("Mnemosyne.NET.Abstractions", typeof(IReasonletEvaluator).Namespace);
+    }
+
+    [Fact]
+    public void TheEvaluationRequestCarriesTheRunAndItsProcedure()
+    {
+        var properties = typeof(ReasonletEvaluationRequest).GetProperties()
+            .Select(p => p.PropertyType.Name + " " + p.Name)
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+        Assert.Equal(
+            ["ReasonletGraph Graph", "ReasonletOutcome Outcome", "String Answer", "String Intent", "String Name", "String Question"],
+            properties);
+    }
+
+    [Fact]
+    public void TheEvaluationIsAPositionalValue()
+    {
+        Assert.True(typeof(ReasonletEvaluation).IsValueType);
+        var constructor = Assert.Single(typeof(ReasonletEvaluation).GetConstructors(), c => c.GetParameters().Length > 0);
+        Assert.Equal(["Boolean Success", "Double Score", "String Evaluator"], constructor.GetParameters().Select(p => p.ParameterType.Name + " " + p.Name));
+    }
+
+    [Fact]
+    public void TheRunCarriesAnOptionalQuestionAndAnswer()
+    {
+        var properties = typeof(ReasonletRun).GetProperties()
+            .Select(p => p.PropertyType.Name + " " + p.Name)
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+        Assert.Equal(
+            [
+                "ReasonletId Id",
+                "ReasonletOutcome Outcome",
+                "ReasonletProvenance Provenance",
+                "ReasonletScope Scope",
+                "String Answer",
+                "String Question",
+            ],
+            properties);
+        var run = new ReasonletRun { Scope = new ReasonletScope("s"), Id = ReasonletId.New(), Outcome = default, Provenance = TestData.Provenance() };
+        Assert.Null(run.Question);
+        Assert.Null(run.Answer);
+    }
+
+    [Fact]
+    public void FeedbackTakesAnOptionalWorkedVerdictLast()
+    {
+        var parameters = Assert.Single(typeof(ReasonletFeedback).GetConstructors(), c => c.GetParameters().Length > 0).GetParameters();
+        var worked = parameters[^1];
+        Assert.Equal(4, parameters.Length);
+        Assert.Equal("Worked", worked.Name);
+        Assert.Equal(typeof(bool?), worked.ParameterType);
+        Assert.True(worked.HasDefaultValue);
+        Assert.Null(worked.DefaultValue);
+    }
+
+    [Fact]
+    public void TheStoreEntryTakesAnOptionalEvaluationLast()
+    {
+        var parameters = Assert.Single(typeof(ReasonletStoreEntry).GetConstructors(), c => c.GetParameters().Length > 1).GetParameters();
+        var evaluation = parameters[^1];
+        Assert.Equal("Evaluation", evaluation.Name);
+        Assert.Equal(typeof(ReasonletEvaluation?), evaluation.ParameterType);
+        Assert.True(evaluation.HasDefaultValue);
+        Assert.Null(evaluation.DefaultValue);
     }
 
     [Fact]

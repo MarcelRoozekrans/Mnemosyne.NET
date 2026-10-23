@@ -115,7 +115,8 @@ public sealed class ReasonletMemory : IReasonletMemory
             return embedding.Error;
         }
 
-        var entry = new ReasonletStoreEntry(capture with { Intent = intent.Value, Name = name }, intent.Value, name, embedding.Value);
+        // The answer is for an evaluator alone and is never stored, so it is stripped here, as the entry requires.
+        var entry = new ReasonletStoreEntry(capture with { Intent = intent.Value, Name = name, Answer = null }, intent.Value, name, embedding.Value);
         return await _store.RememberAsync(entry, ct).ConfigureAwait(false);
     }
 
@@ -179,19 +180,15 @@ public sealed class ReasonletMemory : IReasonletMemory
     }
 
     /// <inheritdoc />
-    /// <exception cref="ArgumentNullException"><paramref name="provenance"/> is null.</exception>
-    public ValueTask<Result<ExecutionId, MnemosyneError>> RecordExecutionAsync(
-        ReasonletScope scope, ReasonletId id, ReasonletOutcome outcome, ReasonletProvenance provenance, CancellationToken ct)
+    /// <exception cref="ArgumentNullException"><paramref name="run"/> is null.</exception>
+    public ValueTask<Result<ExecutionId, MnemosyneError>> RecordExecutionAsync(ReasonletRun run, CancellationToken ct)
     {
-        ArgumentNullException.ThrowIfNull(provenance);
-        var valid = Check.All(
-            () => Check.Nested(scope.Validate(), nameof(scope)),
-            () => Check.NotDefault(id, nameof(id)),
-            () => Check.Nested(outcome.Validate(), nameof(outcome)),
-            () => Check.Nested(provenance.Validate(), nameof(provenance)));
+        ArgumentNullException.ThrowIfNull(run);
+        var valid = run.Validate();
         return valid.IsFailure
             ? ValueTask.FromResult(Result<ExecutionId, MnemosyneError>.Failure(valid.Error))
-            : _store.AppendExecutionAsync(scope, id, outcome, provenance, ct);
+            // No evaluator is called yet, so every run is unjudged and the agent's own outcome counts.
+            : _store.AppendExecutionAsync(run.Scope, run.Id, run.Outcome, run.Provenance, evaluation: null, ct);
     }
 
     /// <inheritdoc />

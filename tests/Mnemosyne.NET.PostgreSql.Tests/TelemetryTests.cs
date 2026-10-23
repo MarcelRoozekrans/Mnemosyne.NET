@@ -118,7 +118,7 @@ public sealed class TelemetryTests(PgVectorFixture fixture) : IClassFixture<PgVe
         var receipt = (await store.RememberAsync(Entries.Entry(scope), Ct)).Value;
         using var capture = new TelemetryCapture();
 
-        Assert.True((await store.AppendExecutionAsync(scope, receipt.Id, Success, Entries.Provenance(), Ct)).IsSuccess);
+        Assert.True((await store.AppendExecutionAsync(scope, receipt.Id, Success, Entries.Provenance(), null, Ct)).IsSuccess);
 
         Assert.Empty(AllTags(Single(capture, "mnemosyne.execution.append")));
         AssertOperation(capture, "execution.append", "ok");
@@ -208,7 +208,7 @@ public sealed class TelemetryTests(PgVectorFixture fixture) : IClassFixture<PgVe
         var store = await MigratedStoreAsync();
         var scope = PgVectorFixture.NewScope();
         var receipt = (await store.RememberAsync(Entries.Entry(scope), Ct)).Value;
-        await store.AppendExecutionAsync(scope, receipt.Id, Success, Entries.Provenance(), Ct);
+        await store.AppendExecutionAsync(scope, receipt.Id, Success, Entries.Provenance(), null, Ct);
         using var capture = new TelemetryCapture();
 
         var result = (await store.EraseAsync(new ReasonletErasure(scope, bySubject ? "subject-1" : null), Ct)).Value;
@@ -309,7 +309,7 @@ public sealed class TelemetryTests(PgVectorFixture fixture) : IClassFixture<PgVe
 
         var receipt = (await store.RememberAsync(entry, Ct)).Value;
         Assert.True((await store.GetAsync(scope, receipt.Id, Ct)).IsSuccess);
-        var execution = (await store.AppendExecutionAsync(scope, receipt.Id, Success, provenance, Ct)).Value;
+        var execution = (await store.AppendExecutionAsync(scope, receipt.Id, Success, provenance, null, Ct)).Value;
         Assert.True((await store.AppendFeedbackAsync(scope, execution, Feedback, Ct)).IsSuccess);
         Assert.Single((await store.SearchAsync(scope, entry.Embedding, intent, 5, Ct)).Value);
         Assert.True((await store.EraseAsync(new ReasonletErasure(scope, subject), Ct)).IsSuccess);

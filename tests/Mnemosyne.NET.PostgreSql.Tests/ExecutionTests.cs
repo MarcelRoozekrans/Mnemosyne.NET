@@ -16,7 +16,7 @@ public sealed class ExecutionTests(PgVectorFixture fixture) : IClassFixture<PgVe
         var (store, scope, receipt) = await RememberedAsync();
         var provenance = Entries.Provenance();
 
-        var result = await store.AppendExecutionAsync(scope, receipt.Id, Outcome, provenance, Ct);
+        var result = await store.AppendExecutionAsync(scope, receipt.Id, Outcome, provenance, null, Ct);
 
         Assert.True(result.IsSuccess);
         var id = result.Value;
@@ -43,7 +43,7 @@ public sealed class ExecutionTests(PgVectorFixture fixture) : IClassFixture<PgVe
         var (store, scope, receipt) = await RememberedAsync();
 
         var id = (await store.AppendExecutionAsync(
-            scope, receipt.Id, new ReasonletOutcome(true, TimeSpan.Zero, null), new ReasonletProvenance { Source = "bare" }, Ct)).Value;
+            scope, receipt.Id, new ReasonletOutcome(true, TimeSpan.Zero, null), new ReasonletProvenance { Source = "bare" }, null, Ct)).Value;
 
         Assert.Equal(
             1L,
@@ -53,13 +53,25 @@ public sealed class ExecutionTests(PgVectorFixture fixture) : IClassFixture<PgVe
     }
 
     [Fact]
+    public async Task AValidEvaluationIsAcceptedAndTheAgentsSuccessIsStored()
+    {
+        var (store, scope, receipt) = await RememberedAsync();
+
+        var result = await store.AppendExecutionAsync(scope, receipt.Id, Outcome, Entries.Provenance(), new ReasonletEvaluation(true, 0.9, "judge"), Ct);
+
+        // The verdict is not stored yet, so the agent's own outcome, a failure, still counts.
+        Assert.True(result.IsSuccess);
+        Assert.False(await Entries.ScalarAsync<bool>(fixture.DataSource, "SELECT success FROM mnemosyne.reasonlet_executions WHERE id = $1", result.Value.Value));
+    }
+
+    [Fact]
     public async Task AReasonletThatIsMissingOrInAnotherScopeIsNotFound()
     {
         var (store, scope, receipt) = await RememberedAsync();
         var provenance = Entries.Provenance();
 
-        var missing = await store.AppendExecutionAsync(scope, ReasonletId.New(), Outcome, provenance, Ct);
-        var otherScope = await store.AppendExecutionAsync(PgVectorFixture.NewScope(), receipt.Id, Outcome, provenance, Ct);
+        var missing = await store.AppendExecutionAsync(scope, ReasonletId.New(), Outcome, provenance, null, Ct);
+        var otherScope = await store.AppendExecutionAsync(PgVectorFixture.NewScope(), receipt.Id, Outcome, provenance, null, Ct);
 
         Assert.Equal(MnemosyneErrorCode.NotFound, missing.Error.Code);
         Assert.Equal(MnemosyneErrorCode.NotFound, otherScope.Error.Code);
@@ -72,10 +84,13 @@ public sealed class ExecutionTests(PgVectorFixture fixture) : IClassFixture<PgVe
         var (store, scope, receipt) = await RememberedAsync();
         var provenance = Entries.Provenance();
 
-        AssertValidation("scope.Value: must not be blank", (await store.AppendExecutionAsync(new ReasonletScope(" "), receipt.Id, Outcome, provenance, Ct)).Error);
-        AssertValidation("id: must not be the default id", (await store.AppendExecutionAsync(scope, default, Outcome, provenance, Ct)).Error);
-        AssertValidation("outcome.Duration: must not be negative", (await store.AppendExecutionAsync(scope, receipt.Id, new ReasonletOutcome(true, TimeSpan.FromTicks(-1), null), provenance, Ct)).Error);
-        AssertValidation("provenance.Source: must not be blank", (await store.AppendExecutionAsync(scope, receipt.Id, Outcome, new ReasonletProvenance { Source = " " }, Ct)).Error);
+        AssertValidation("scope.Value: must not be blank", (await store.AppendExecutionAsync(new ReasonletScope(" "), receipt.Id, Outcome, provenance, null, Ct)).Error);
+        AssertValidation("id: must not be the default id", (await store.AppendExecutionAsync(scope, default, Outcome, provenance, null, Ct)).Error);
+        AssertValidation("outcome.Duration: must not be negative", (await store.AppendExecutionAsync(scope, receipt.Id, new ReasonletOutcome(true, TimeSpan.FromTicks(-1), null), provenance, null, Ct)).Error);
+        AssertValidation("provenance.Source: must not be blank", (await store.AppendExecutionAsync(scope, receipt.Id, Outcome, new ReasonletProvenance { Source = " " }, null, Ct)).Error);
+        AssertValidation("evaluation.Score: must be a finite number between 0 and 1", (await store.AppendExecutionAsync(scope, receipt.Id, Outcome, provenance, new ReasonletEvaluation(true, double.NaN, "judge"), Ct)).Error);
+        AssertValidation("evaluation.Evaluator: must not be blank", (await store.AppendExecutionAsync(scope, receipt.Id, Outcome, provenance, new ReasonletEvaluation(true, 0.5, " "), Ct)).Error);
+        AssertValidation("evaluation.Evaluator: must not be longer than 100 code points", (await store.AppendExecutionAsync(scope, receipt.Id, Outcome, provenance, new ReasonletEvaluation(true, 0.5, new string('e', 101)), Ct)).Error);
         Assert.Equal(1L, await CountAsync("SELECT count(*) FROM mnemosyne.reasonlet_executions WHERE reasonlet_id = $1", receipt.Id.Value));
     }
 
@@ -130,7 +145,7 @@ public sealed class ExecutionTests(PgVectorFixture fixture) : IClassFixture<PgVe
         var store = new ReasonletPostgreSqlStore(await fixture.CreateEmptyDatabaseAsync(), new MnemosynePostgreSqlOptions { Dimensions = 3 });
         var scope = PgVectorFixture.NewScope();
 
-        var execution = await store.AppendExecutionAsync(scope, ReasonletId.New(), Outcome, Entries.Provenance(), Ct);
+        var execution = await store.AppendExecutionAsync(scope, ReasonletId.New(), Outcome, Entries.Provenance(), null, Ct);
         var feedback = await store.AppendFeedbackAsync(scope, ExecutionId.New(), default, Ct);
 
         Assert.Equal(MnemosyneErrorCode.Unavailable, execution.Error.Code);
@@ -162,7 +177,7 @@ public sealed class ExecutionTests(PgVectorFixture fixture) : IClassFixture<PgVe
         await cancelled.CancelAsync();
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(
-            async () => await store.AppendExecutionAsync(scope, receipt.Id, Outcome, Entries.Provenance(), cancelled.Token));
+            async () => await store.AppendExecutionAsync(scope, receipt.Id, Outcome, Entries.Provenance(), null, cancelled.Token));
     }
 
     [Fact]
@@ -196,7 +211,7 @@ public sealed class ExecutionTests(PgVectorFixture fixture) : IClassFixture<PgVe
         var (store, scope, receipt) = await RememberedAsync();
         Assert.Equal(await ExecutedAtAsync(receipt.Execution), await LastExecutedAtAsync(receipt.Id));
 
-        var later = (await store.AppendExecutionAsync(scope, receipt.Id, Outcome, Entries.Provenance(), Ct)).Value;
+        var later = (await store.AppendExecutionAsync(scope, receipt.Id, Outcome, Entries.Provenance(), null, Ct)).Value;
 
         var executedAt = await ExecutedAtAsync(later);
         Assert.True(executedAt > await ExecutedAtAsync(receipt.Execution));
@@ -218,8 +233,8 @@ public sealed class ExecutionTests(PgVectorFixture fixture) : IClassFixture<PgVe
             ReasonletCaptureKind.ExecutionOnly,
             (await store.RememberAsync(Entries.Entry(scope, parentId: r.Id, outcome: new ReasonletOutcome(false, TimeSpan.Zero, null), provenance: Subject("a")), Ct)).Value.Kind);
         Assert.Equal((2, 1), await MetricsAsync(r.Id));
-        var bRun = (await store.AppendExecutionAsync(scope, r.Id, new ReasonletOutcome(true, TimeSpan.Zero, null), Subject("b"), Ct)).Value;
-        Assert.True((await store.AppendExecutionAsync(scope, r.Id, new ReasonletOutcome(true, TimeSpan.Zero, null), Subject("a"), Ct)).IsSuccess);
+        var bRun = (await store.AppendExecutionAsync(scope, r.Id, new ReasonletOutcome(true, TimeSpan.Zero, null), Subject("b"), null, Ct)).Value;
+        Assert.True((await store.AppendExecutionAsync(scope, r.Id, new ReasonletOutcome(true, TimeSpan.Zero, null), Subject("a"), null, Ct)).IsSuccess);
         Assert.Equal((4, 3), await MetricsAsync(r.Id));
         var n = (await store.RememberAsync(Entries.Entry(scope, Entries.Graph("n"), r.Id, provenance: Subject("b")), Ct)).Value;
         Assert.Equal((1, 1), await MetricsAsync(n.Id));
@@ -241,7 +256,7 @@ public sealed class ExecutionTests(PgVectorFixture fixture) : IClassFixture<PgVe
         var (store, scope, receipt) = await RememberedAsync();
 
         var results = await Task.WhenAll(Enumerable.Range(0, 50).Select(i => Task.Run(
-            () => store.AppendExecutionAsync(scope, receipt.Id, new ReasonletOutcome(i % 2 == 0, TimeSpan.Zero, null), Entries.Provenance(), Ct).AsTask(),
+            () => store.AppendExecutionAsync(scope, receipt.Id, new ReasonletOutcome(i % 2 == 0, TimeSpan.Zero, null), Entries.Provenance(), null, Ct).AsTask(),
             Ct)));
 
         Assert.All(results, r => Assert.True(r.IsSuccess));
@@ -259,7 +274,7 @@ public sealed class ExecutionTests(PgVectorFixture fixture) : IClassFixture<PgVe
         await using var transaction = await erase.BeginTransactionAsync(Ct);
         await RunAsync(erase, $"DELETE FROM mnemosyne.reasonlets WHERE id = '{receipt.Id.Value}'");
 
-        var append = store.AppendExecutionAsync(scope, receipt.Id, Outcome, Entries.Provenance(), Ct).AsTask();
+        var append = store.AppendExecutionAsync(scope, receipt.Id, Outcome, Entries.Provenance(), null, Ct).AsTask();
         await WaitForLockWaitAsync(erase);
         await transaction.CommitAsync(Ct);
         var result = await append;

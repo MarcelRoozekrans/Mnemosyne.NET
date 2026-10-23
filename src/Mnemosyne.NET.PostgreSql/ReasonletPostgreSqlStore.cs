@@ -179,6 +179,7 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
             return migrated.Error;
         }
 
+        // TODO(phase 2.1, Task 2): store entry.Evaluation with the first run. Validate already checks it, but it is not stored yet.
         var valid = entry.Validate();
         if (valid.IsFailure)
         {
@@ -447,11 +448,11 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
     /// </remarks>
     /// <exception cref="ArgumentNullException"><paramref name="provenance"/> is null.</exception>
     public ValueTask<Result<ExecutionId, MnemosyneError>> AppendExecutionAsync(
-        ReasonletScope scope, ReasonletId id, ReasonletOutcome outcome, ReasonletProvenance provenance, CancellationToken ct) =>
-        StoreTelemetry.RunAsync("execution.append", _ => AppendExecutionOperationAsync(scope, id, outcome, provenance, ct));
+        ReasonletScope scope, ReasonletId id, ReasonletOutcome outcome, ReasonletProvenance provenance, ReasonletEvaluation? evaluation, CancellationToken ct) =>
+        StoreTelemetry.RunAsync("execution.append", _ => AppendExecutionOperationAsync(scope, id, outcome, provenance, evaluation, ct));
 
     private async ValueTask<Result<ExecutionId, MnemosyneError>> AppendExecutionOperationAsync(
-        ReasonletScope scope, ReasonletId id, ReasonletOutcome outcome, ReasonletProvenance provenance, CancellationToken ct)
+        ReasonletScope scope, ReasonletId id, ReasonletOutcome outcome, ReasonletProvenance provenance, ReasonletEvaluation? evaluation, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(provenance);
         var migrated = await EnsureMigratedAsync(ct).ConfigureAwait(false);
@@ -460,12 +461,18 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
             return migrated.Error;
         }
 
-        var invalid = ValidateScope(scope) ?? ValidateId(id) ?? ValidateNested(outcome.Validate(), nameof(outcome)) ?? ValidateNested(provenance.Validate(), nameof(provenance));
+        var invalid = ValidateScope(scope)
+            ?? ValidateId(id)
+            ?? ValidateNested(outcome.Validate(), nameof(outcome))
+            ?? ValidateNested(provenance.Validate(), nameof(provenance))
+            ?? (evaluation is { } verdict ? ValidateNested(verdict.Validate(), nameof(evaluation)) : null);
         if (invalid is { } error)
         {
             return error;
         }
 
+        // TODO(phase 2.1, Task 2): store the evaluation and derive the verdict source and effective success from it.
+        // Until then a valid evaluation is accepted but not stored, and the agent's outcome.Success counts.
         return await GuardAsync(AppendExecutionCoreAsync(scope, id, outcome, provenance, ct)).ConfigureAwait(false);
     }
 

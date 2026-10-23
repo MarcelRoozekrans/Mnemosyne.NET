@@ -666,35 +666,85 @@ public sealed class ReasonletMemoryTests
 
     // ---- Delegation ----
 
+    private static ReasonletRun Run() => new()
+    {
+        Scope = new ReasonletScope("tenant"),
+        Id = ReasonletId.New(),
+        Outcome = new ReasonletOutcome(false, TimeSpan.FromSeconds(2), 0.25),
+        Provenance = TestData.Provenance(),
+    };
+
     [Fact]
     public async Task RecordExecutionReachesTheStoreWithTheSameArguments()
     {
         using var cts = new CancellationTokenSource();
-        var scope = new ReasonletScope("tenant");
-        var id = ReasonletId.New();
-        var outcome = new ReasonletOutcome(false, TimeSpan.FromSeconds(2), 0.25);
-        var provenance = TestData.Provenance();
+        var run = Run();
 
-        var result = await Memory().RecordExecutionAsync(scope, id, outcome, provenance, cts.Token);
+        var result = await Memory().RecordExecutionAsync(run, cts.Token);
 
         Assert.Equal(_store.ExecutionResult.Value, result.Value);
-        Assert.Equal((scope, id, outcome, provenance, cts.Token), _store.Executed);
+        Assert.Equal((run.Scope, run.Id, run.Outcome, run.Provenance, (ReasonletEvaluation?)null, cts.Token), _store.Executed);
+    }
+
+    [Fact]
+    public async Task ARunWithAnAnswerButNoEvaluatorReachesTheStoreUnjudged()
+    {
+        var run = Run() with { Question = "question", Answer = Secret };
+
+        var result = await Memory().RecordExecutionAsync(run, CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Null(_store.Executed!.Value.Evaluation);
+        Assert.Equal(run.Outcome, _store.Executed!.Value.Outcome);
     }
 
     [Fact]
     public async Task AnInvalidExecutionIsRefusedWithoutCallingTheStore()
     {
-        var result = await Memory().RecordExecutionAsync(new ReasonletScope("s"), default, default, TestData.Provenance(), CancellationToken.None);
+        var result = await Memory().RecordExecutionAsync(Run() with { Id = default }, CancellationToken.None);
 
         Assert.Equal(MnemosyneErrorCode.Validation, result.Error.Code);
-        Assert.StartsWith("id:", result.Error.Message);
+        Assert.StartsWith("Id:", result.Error.Message);
         Assert.Equal(0, _store.Calls);
     }
 
     [Fact]
-    public async Task ANullProvenanceIsRefused() =>
-        await Assert.ThrowsAsync<ArgumentNullException>("provenance", async () =>
-            await Memory().RecordExecutionAsync(new ReasonletScope("s"), ReasonletId.New(), default, null!, CancellationToken.None));
+    public async Task AQuestionWithoutAnAnswerIsRefusedWithoutCallingTheStore()
+    {
+        var result = await Memory().RecordExecutionAsync(Run() with { Question = "question" }, CancellationToken.None);
+
+        Assert.Equal(MnemosyneErrorCode.Validation, result.Error.Code);
+        Assert.StartsWith("Answer:", result.Error.Message);
+        Assert.Equal(0, _store.Calls);
+    }
+
+    [Fact]
+    public async Task ANullRunIsRefused() =>
+        await Assert.ThrowsAsync<ArgumentNullException>("run", async () =>
+            await Memory().RecordExecutionAsync(null!, CancellationToken.None));
+
+    [Fact]
+    public async Task ANullProvenanceIsRefusedAsAValidationError()
+    {
+        var result = await Memory().RecordExecutionAsync(Run() with { Provenance = null! }, CancellationToken.None);
+
+        Assert.Equal(MnemosyneErrorCode.Validation, result.Error.Code);
+        Assert.StartsWith("Provenance:", result.Error.Message);
+        Assert.Equal(0, _store.Calls);
+    }
+
+    [Fact]
+    public async Task RememberStripsTheAnswerBeforeTheStoreSeesIt()
+    {
+        var capture = TestData.Capture() with { Answer = Secret };
+
+        var result = await Memory().RememberAsync(capture, CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Null(_store.Remembered!.Capture.Answer);
+        Assert.Null(_store.Remembered!.Evaluation);
+        Assert.Equal(capture.Question, _store.Remembered!.Capture.Question);
+    }
 
     [Fact]
     public async Task RecordFeedbackReachesTheStoreWithTheSameArguments()

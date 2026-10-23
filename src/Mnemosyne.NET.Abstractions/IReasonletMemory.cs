@@ -42,19 +42,18 @@ public interface IReasonletMemory
     /// <returns>The ranked matches, best first.</returns>
     ValueTask<Result<IReadOnlyList<ReasonletMatch>, MnemosyneError>> RecallAsync(ReasonletQuery query, CancellationToken ct);
 
-    /// <summary>Records one execution of an existing Reasonlet.</summary>
+    /// <summary>Records one run of an existing Reasonlet.</summary>
     /// <remarks>
-    /// Error codes: <see cref="MnemosyneErrorCode.Validation"/> when an argument breaks an invariant,
+    /// The run's <see cref="ReasonletRun.Answer"/>, when given with its question, is for an evaluator to judge, and is never
+    /// stored. Without an evaluator, the agent's own <see cref="ReasonletOutcome.Success"/> counts.
+    /// Error codes: <see cref="MnemosyneErrorCode.Validation"/> when the run breaks an invariant,
     /// <see cref="MnemosyneErrorCode.NotFound"/> when the Reasonlet does not exist in the scope (including one that exists only in another scope),
     /// <see cref="MnemosyneErrorCode.Unavailable"/> when the backing store fails.
     /// </remarks>
-    /// <param name="scope">The scope the Reasonlet lives in.</param>
-    /// <param name="id">The Reasonlet that was executed.</param>
-    /// <param name="outcome">The outcome of the execution.</param>
-    /// <param name="provenance">Where the execution came from.</param>
+    /// <param name="run">The run to record.</param>
     /// <param name="ct">The cancellation token.</param>
     /// <returns>The identifier of the recorded execution.</returns>
-    ValueTask<Result<ExecutionId, MnemosyneError>> RecordExecutionAsync(ReasonletScope scope, ReasonletId id, ReasonletOutcome outcome, ReasonletProvenance provenance, CancellationToken ct);
+    ValueTask<Result<ExecutionId, MnemosyneError>> RecordExecutionAsync(ReasonletRun run, CancellationToken ct);
 
     /// <summary>Attaches feedback to a recorded execution.</summary>
     /// <remarks>

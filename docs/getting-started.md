@@ -197,7 +197,8 @@ if (recalled.Value is [var best, ..])
 {
     // The agent runs best.Reasonlet.Graph in its own way, then reports the outcome.
     var outcome = new ReasonletOutcome(Success: true, Duration: TimeSpan.FromSeconds(3), Score: null);
-    var recorded = await memory.RecordExecutionAsync(scope, best.Reasonlet.Id, outcome, provenance, ct);
+    var run = new ReasonletRun { Scope = scope, Id = best.Reasonlet.Id, Outcome = outcome, Provenance = provenance };
+    var recorded = await memory.RecordExecutionAsync(run, ct);
     if (recorded.IsFailure)
     {
         throw new InvalidOperationException($"{recorded.Error.Code}: {recorded.Error.Message}");

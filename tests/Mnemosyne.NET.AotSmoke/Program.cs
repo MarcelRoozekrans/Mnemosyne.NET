@@ -182,7 +182,7 @@ static async Task<int> PostgreSqlSmoke(string connectionString, ReasonletGraph g
     // An erase by subject that keeps the Reasonlet it removes a run from: its arrays go both ways, and the kept
     // Reasonlet's metrics are recounted.
     var run = await store.AppendExecutionAsync(
-        scope, remembered.Value.Id, outcome, new ReasonletProvenance { Source = "aot-smoke", SubjectId = "smoke-erased" }, ct);
+        scope, remembered.Value.Id, outcome, new ReasonletProvenance { Source = "aot-smoke", SubjectId = "smoke-erased" }, null, ct);
     var bySubject = await store.EraseAsync(new ReasonletErasure(scope, "smoke-erased"), ct);
     if (run.IsFailure || bySubject.IsFailure || bySubject.Value.Reasonlets != 0 || bySubject.Value.Executions != 1)
     {

@@ -211,9 +211,10 @@ static async Task<int> Walkthrough(IReasonletMemory memory, ReasonletScope scope
 static async Task RecordRuns(
     IReasonletMemory memory, ReasonletScope scope, ReasonletId id, ReasonletOutcome outcome, int count, ReasonletProvenance provenance, CancellationToken ct)
 {
+    var run = new ReasonletRun { Scope = scope, Id = id, Outcome = outcome, Provenance = provenance };
     for (var i = 0; i < count; i++)
     {
-        Require(await memory.RecordExecutionAsync(scope, id, outcome, provenance, ct), "Record an execution");
+        Require(await memory.RecordExecutionAsync(run, ct), "Record an execution");
     }
 }
 
