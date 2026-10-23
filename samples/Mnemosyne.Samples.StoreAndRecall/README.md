@@ -45,7 +45,7 @@ Recall ranks by 0.5 × similarity + 0.3 × success rate + 0.2 × freshness:
 - **The close match** scores the highest similarity, but its 5-of-10 record ranks it last.
 - **Freshness** is 1.000 because every procedure ran moments ago.
 
-The [Mnemosyne.NET README](../../src/Mnemosyne.NET/README.md#ranking) explains the ranking in full.
+The [Mnemosyne.NET README](https://marcelroozekrans.github.io/Mnemosyne.NET/concepts/ranking) explains the ranking in full.
 
 ## The embedding generator is a stand-in
 
@@ -73,4 +73,4 @@ services.AddSingleton<IEmbeddingGenerator<string, Embedding<float>>>(
 services.AddMnemosynePostgreSql(new MnemosynePostgreSqlOptions { Dimensions = 1536 });
 ```
 
-A real model gives different similarities, so the numbers above change. Tune the similarity cut-off for your model, as the [cut-off section](../../src/Mnemosyne.NET/README.md#the-cut-off) describes. A database migrated with one dimension count cannot take another, so use a new database when you switch.
+A real model gives different similarities, so the numbers above change. Tune the similarity cut-off for your model, as the [cut-off section](https://marcelroozekrans.github.io/Mnemosyne.NET/concepts/ranking#the-cut-off) describes. A database migrated with one dimension count cannot take another, so use a new database when you switch.

@@ -27,7 +27,7 @@ using Npgsql;
 
 // connectionString and embeddingGenerator come from your host. The store's Dimensions must match the
 // generator's output.
-services.AddSingleton(NpgsqlDataSource.Create(connectionString));
+services.AddSingleton(_ => NpgsqlDataSource.Create(connectionString));
 services.AddMnemosynePostgreSql(new MnemosynePostgreSqlOptions { Dimensions = 1536 });
 services.AddSingleton<IEmbeddingGenerator<string, Embedding<float>>>(embeddingGenerator);
 services.AddMnemosyne(new MnemosyneOptions
