@@ -1,3 +1,4 @@
+using System.Text;
 using Mnemosyne.NET.Abstractions.Validation;
 using ZeroAlloc.Results;
 
@@ -30,8 +31,9 @@ public sealed record ReasonletCapture
     /// <summary>
     /// Gets the run's optional answer. With a registered evaluator, it lets the run this capture records be judged. It
     /// reaches the evaluator and nothing else: the facade strips it before the capture reaches the store, so it is never
-    /// stored, and never placed in an error or a telemetry signal. When present it must not be blank or longer than
-    /// 32,000 code points.
+    /// stored, and never placed in an error, a telemetry signal or <see cref="ToString"/>, which shows it as
+    /// <c>[redacted]</c>. When present it must be valid UTF-16. An answer that is blank or longer than 32,000 code points
+    /// is not judged: the run is stored with the agent's own verdict, since an agent's unusable output must not lose its run.
     /// </summary>
     public string? Answer { get; init; }
 
@@ -51,5 +53,20 @@ public sealed record ReasonletCapture
         () => Intent is null ? UnitResult<MnemosyneError>.Success() : Check.NotBlank(Intent, nameof(Intent)),
         () => Name is null ? UnitResult<MnemosyneError>.Success() : Check.NotBlank(Name, nameof(Name)),
         () => ParentId is { } parent ? Check.NotDefault(parent, nameof(ParentId)) : UnitResult<MnemosyneError>.Success(),
-        () => ReasonletRun.OptionalText(Answer, nameof(Answer)));
+        () => Check.ValidUtf16(Answer, nameof(Answer)));
+
+    /// <summary>Prints the members as the compiler would, except that the answer shows only whether it is present.</summary>
+    private bool PrintMembers(StringBuilder builder)
+    {
+        builder.Append("Scope = ").Append(Scope.ToString());
+        builder.Append(", Question = ").Append(Question);
+        builder.Append(", Graph = ").Append(Graph);
+        builder.Append(", Outcome = ").Append(Outcome.ToString());
+        builder.Append(", Provenance = ").Append(Provenance);
+        builder.Append(", Intent = ").Append(Intent);
+        builder.Append(", Name = ").Append(Name);
+        RedactedAnswer.Print(builder, Answer);
+        builder.Append(", ParentId = ").Append(ParentId.ToString());
+        return true;
+    }
 }

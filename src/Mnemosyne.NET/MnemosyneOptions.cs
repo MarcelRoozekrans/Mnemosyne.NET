@@ -10,6 +10,12 @@ public sealed class MnemosyneOptions
     private const int MaxCandidatePool = 200;
 
     /// <summary>
+    /// The longest finite <see cref="EvaluationTimeout"/>, about 49.7 days: the longest delay a
+    /// <see cref="CancellationTokenSource"/> accepts.
+    /// </summary>
+    internal static readonly TimeSpan MaxEvaluationTimeout = TimeSpan.FromMilliseconds(uint.MaxValue - 1.0);
+
+    /// <summary>
     /// Gets how many candidates recall asks the store for before ranking, from 1 to 200. A query whose
     /// <see cref="ReasonletQuery.Top"/> is larger raises it to <see cref="ReasonletQuery.Top"/>. Defaults to 20.
     /// </summary>
@@ -23,6 +29,19 @@ public sealed class MnemosyneOptions
     /// <remarks>A wrong filter hides every right answer, so recall filters only on an intent it is confident about.</remarks>
     public double MinIntentConfidence { get; init; } = 0.7;
 
+    /// <summary>
+    /// Gets how long the facade waits for an <see cref="IReasonletEvaluator"/> before it treats the judge as down.
+    /// Must be positive and at most 4,294,967,294 milliseconds, about 49.7 days, the longest delay a
+    /// <see cref="CancellationTokenSource"/> accepts, or <see cref="Timeout.InfiniteTimeSpan"/> to wait as long as the
+    /// caller's token allows. Defaults to 30 seconds.
+    /// </summary>
+    /// <remarks>
+    /// The facade cancels the token it passes the evaluator when the time is up, so the evaluator must honour that token.
+    /// A judge that times out is down: the run is stored with the agent's own verdict, and the judge call's telemetry shows
+    /// outcome <c>Unavailable</c>. The caller's own cancellation still propagates.
+    /// </remarks>
+    public TimeSpan EvaluationTimeout { get; init; } = TimeSpan.FromSeconds(30);
+
     /// <summary>Gets the settings of the default selector. Must not be null and must be valid.</summary>
     public ReasonletRankingOptions Ranking { get; init; } = new();
 
@@ -31,6 +50,9 @@ public sealed class MnemosyneOptions
     public UnitResult<MnemosyneError> Validate() => Check.All(
         () => Check.Range(CandidatePool, 1, MaxCandidatePool, nameof(CandidatePool)),
         () => Check.UnitInterval(MinIntentConfidence, nameof(MinIntentConfidence)),
+        () => (EvaluationTimeout > TimeSpan.Zero && EvaluationTimeout <= MaxEvaluationTimeout) || EvaluationTimeout == Timeout.InfiniteTimeSpan
+            ? UnitResult<MnemosyneError>.Success()
+            : Check.Fail(nameof(EvaluationTimeout), "must be positive and at most 4294967294 milliseconds, or Timeout.InfiniteTimeSpan"),
         () => Check.NotNull(Ranking, nameof(Ranking)),
         () => Check.Nested(Ranking.Validate(), nameof(Ranking)));
 }

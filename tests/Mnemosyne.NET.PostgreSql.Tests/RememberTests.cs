@@ -501,6 +501,7 @@ public sealed class RememberTests(PgVectorFixture fixture) : IClassFixture<PgVec
         var result = await store.RememberAsync(Entries.Entry(PgVectorFixture.NewScope()) with { Evaluation = new ReasonletEvaluation(false, 0.1, "judge") }, Ct);
 
         Assert.True(result.IsSuccess);
+        Assert.Equal((ReasonletVerdictSource.Evaluator, false), (result.Value.Source, result.Value.Success));
         Assert.Equal(
             "t|f|0.1|judge|f",
             await Entries.ScalarAsync<string>(
@@ -513,6 +514,33 @@ public sealed class RememberTests(PgVectorFixture fixture) : IClassFixture<PgVec
                 fixture.DataSource,
                 "SELECT concat_ws('|', runs, successes, coalesce(last_success_at::text, '-')) FROM mnemosyne.reasonlet_metrics WHERE reasonlet_id = $1",
                 result.Value.Id.Value));
+    }
+
+    [Fact]
+    public async Task EveryKindOfCaptureReturnsTheVerdictOfTheRunItRecords()
+    {
+        var store = await MigratedStoreAsync();
+        var scope = PgVectorFixture.NewScope();
+        var failed = new ReasonletOutcome(false, TimeSpan.Zero, null);
+
+        var created = (await store.RememberAsync(Entries.Entry(scope, outcome: failed), Ct)).Value;
+        var executed = (await store.RememberAsync(
+            Entries.Entry(scope, parentId: created.Id, outcome: failed) with { Evaluation = new ReasonletEvaluation(true, 0.8, "judge") }, Ct)).Value;
+        var versioned = (await store.RememberAsync(
+            Entries.Entry(scope, Entries.Graph("b"), created.Id) with { Evaluation = new ReasonletEvaluation(false, 0.2, "judge") }, Ct)).Value;
+        var unjudgedVersion = (await store.RememberAsync(Entries.Entry(scope, Entries.Graph("c"), created.Id), Ct)).Value;
+
+        Assert.Equal((ReasonletCaptureKind.NewReasonlet, ReasonletVerdictSource.Agent, false), (created.Kind, created.Source, created.Success));
+        Assert.Equal((ReasonletCaptureKind.ExecutionOnly, ReasonletVerdictSource.Evaluator, true), (executed.Kind, executed.Source, executed.Success));
+        Assert.Equal((ReasonletCaptureKind.NewVersion, ReasonletVerdictSource.Evaluator, false), (versioned.Kind, versioned.Source, versioned.Success));
+        Assert.Equal((ReasonletCaptureKind.NewVersion, ReasonletVerdictSource.Agent, true), (unjudgedVersion.Kind, unjudgedVersion.Source, unjudgedVersion.Success));
+        foreach (var receipt in new[] { created, executed, versioned, unjudgedVersion })
+        {
+            // The receipt's success is the stored effective success of the run it names.
+            Assert.Equal(
+                receipt.Success,
+                await Entries.ScalarAsync<bool>(fixture.DataSource, "SELECT success FROM mnemosyne.reasonlet_executions WHERE id = $1", receipt.Execution.Value));
+        }
     }
 
     [Fact]

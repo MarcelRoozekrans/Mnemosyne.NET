@@ -1,3 +1,4 @@
+using System.Text;
 using Mnemosyne.NET.Abstractions.Validation;
 using ZeroAlloc.Results;
 
@@ -27,8 +28,9 @@ public sealed record ReasonletRun
 
     /// <summary>
     /// Gets the run's optional answer. It reaches the evaluator and nothing else: it is never stored, and never placed in an
-    /// error or a telemetry signal. It must be given together with <see cref="Question"/>; when present it must not be blank
-    /// or longer than 32,000 code points.
+    /// error, a telemetry signal or <see cref="ToString"/>, which shows it as <c>[redacted]</c>. It must be given together
+    /// with <see cref="Question"/>, and must be valid UTF-16. An answer that is blank or longer than 32,000 code points
+    /// is not judged: the run is stored with the agent's own verdict, since an agent's unusable output must not lose its run.
     /// </summary>
     public string? Answer { get; init; }
 
@@ -41,7 +43,7 @@ public sealed record ReasonletRun
         () => Check.NotNull(Provenance, nameof(Provenance)),
         () => Check.Nested(Provenance.Validate(), nameof(Provenance)),
         () => OptionalText(Question, nameof(Question)),
-        () => OptionalText(Answer, nameof(Answer)),
+        () => Check.ValidUtf16(Answer, nameof(Answer)),
         () => Question is not null && Answer is null ? Check.Fail(nameof(Answer), "must be set when Question is set") : UnitResult<MnemosyneError>.Success(),
         () => Answer is not null && Question is null ? Check.Fail(nameof(Question), "must be set when Answer is set") : UnitResult<MnemosyneError>.Success());
 
@@ -53,4 +55,16 @@ public sealed record ReasonletRun
                 () => Check.NotBlank(value, path),
                 () => Check.ValidUtf16(value, path),
                 () => Check.MaxLength(value, EvaluationLimits.MaxRunTextLength, path));
+
+    /// <summary>Prints the members as the compiler would, except that the answer shows only whether it is present.</summary>
+    private bool PrintMembers(StringBuilder builder)
+    {
+        builder.Append("Scope = ").Append(Scope.ToString());
+        builder.Append(", Id = ").Append(Id.ToString());
+        builder.Append(", Outcome = ").Append(Outcome.ToString());
+        builder.Append(", Provenance = ").Append(Provenance);
+        builder.Append(", Question = ").Append(Question);
+        RedactedAnswer.Print(builder, Answer);
+        return true;
+    }
 }

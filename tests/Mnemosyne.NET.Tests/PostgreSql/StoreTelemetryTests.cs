@@ -222,6 +222,30 @@ public sealed class StoreTelemetryTests : IAsyncDisposable
     public void ACaptureKindIsTaggedByItsName(ReasonletCaptureKind kind, string name) =>
         Assert.Equal(name, StoreTelemetry.CaptureKindName(kind));
 
+    [Theory]
+    [InlineData(ReasonletVerdictSource.Agent, "agent")]
+    [InlineData(ReasonletVerdictSource.Evaluator, "evaluator")]
+    [InlineData(ReasonletVerdictSource.Feedback, "feedback")]
+    [InlineData((ReasonletVerdictSource)0, "0")]
+    public void AVerdictSourceIsTaggedByItsName(ReasonletVerdictSource source, string name) =>
+        Assert.Equal(name, StoreTelemetry.VerdictSourceName(source));
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void ANewRunWithoutAnEvaluationTakesTheAgentsVerdict(bool agent) =>
+        Assert.Equal(
+            (ReasonletVerdictSource.Agent, agent),
+            ReasonletPostgreSqlStore.Verdict(new ReasonletOutcome(agent, TimeSpan.Zero, null), null));
+
+    [Theory]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    public void ANewRunWithAnEvaluationTakesTheEvaluatorsVerdict(bool agent, bool judged) =>
+        Assert.Equal(
+            (ReasonletVerdictSource.Evaluator, judged),
+            ReasonletPostgreSqlStore.Verdict(new ReasonletOutcome(agent, TimeSpan.Zero, null), new ReasonletEvaluation(judged, 0.5, "judge")));
+
     [Fact]
     public async Task AStoreFailureIsAnOperationWithItsCode()
     {

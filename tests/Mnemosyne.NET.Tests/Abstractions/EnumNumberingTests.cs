@@ -34,6 +34,15 @@ public class EnumNumberingTests
     }
 
     [Fact]
+    public void VerdictSources_HavePinnedValues()
+    {
+        Assert.Equal(1, (int)ReasonletVerdictSource.Agent);
+        Assert.Equal(2, (int)ReasonletVerdictSource.Evaluator);
+        Assert.Equal(3, (int)ReasonletVerdictSource.Feedback);
+        Assert.Equal(3, Enum.GetValues<ReasonletVerdictSource>().Length);
+    }
+
+    [Fact]
     public void DefaultResults_CarryAnUndefinedErrorCode()
     {
         var unit = default(UnitResult<MnemosyneError>);

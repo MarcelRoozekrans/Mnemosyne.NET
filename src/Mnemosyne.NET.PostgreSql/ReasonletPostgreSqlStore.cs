@@ -244,8 +244,9 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
             if (string.Equals(parent.ContentHash, hash, StringComparison.Ordinal))
             {
                 var execution = await InsertExecutionAsync(executions, parent.Id, capture, entry.Evaluation, transaction, ct).ConfigureAwait(false);
+                var (source, success) = Verdict(capture.Outcome, entry.Evaluation);
                 receipt = new ReasonletReceipt(
-                    new ReasonletId(parent.Id), parent.Version, execution, ReasonletCaptureKind.ExecutionOnly, (ReasonletStatus)parent.Status);
+                    new ReasonletId(parent.Id), parent.Version, execution, ReasonletCaptureKind.ExecutionOnly, (ReasonletStatus)parent.Status, source, success);
             }
             else
             {
@@ -348,8 +349,16 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
             transaction,
             ct).ConfigureAwait(false);
         var execution = await InsertExecutionAsync(executions, id.Value, capture, entry.Evaluation, transaction, ct).ConfigureAwait(false);
-        return new ReasonletReceipt(id, version, execution, kind, ReasonletStatus.Active);
+        var (source, success) = Verdict(capture.Outcome, entry.Evaluation);
+        return new ReasonletReceipt(id, version, execution, kind, ReasonletStatus.Active, source, success);
     }
+
+    /// <summary>
+    /// Derives a new run's verdict source and effective success, the rule the schema's check enforces on the row: a new
+    /// run has no feedback yet, so the evaluator's verdict counts when there is one, and the agent's otherwise.
+    /// </summary>
+    internal static (ReasonletVerdictSource Source, bool Success) Verdict(ReasonletOutcome outcome, ReasonletEvaluation? evaluation) =>
+        evaluation is { } verdict ? (ReasonletVerdictSource.Evaluator, verdict.Success) : (ReasonletVerdictSource.Agent, outcome.Success);
 
     /// <summary>
     /// Inserts the capture's execution of a Reasonlet this transaction holds or has just inserted, with the evaluator's
@@ -461,17 +470,18 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
     /// and name when <paramref name="evaluation"/> is given; its effective success is the evaluator's verdict when
     /// there is one and the agent's otherwise, and the metrics count that. The <c>mnemosyne.execution.append</c> activity
     /// carries <c>mnemosyne.verdict_source</c>: <c>evaluator</c> when <paramref name="evaluation"/> is given, else <c>agent</c>.
+    /// The receipt carries the same source and that verdict's success.
     /// </remarks>
     /// <exception cref="ArgumentNullException"><paramref name="provenance"/> is null.</exception>
-    public ValueTask<Result<ExecutionId, MnemosyneError>> AppendExecutionAsync(
+    public ValueTask<Result<ReasonletRunReceipt, MnemosyneError>> AppendExecutionAsync(
         ReasonletScope scope, ReasonletId id, ReasonletOutcome outcome, ReasonletProvenance provenance, ReasonletEvaluation? evaluation, CancellationToken ct) =>
         StoreTelemetry.RunAsync("execution.append", activity =>
         {
-            StoreTelemetry.ExecutionVerdictSource(activity, evaluation is not null);
+            StoreTelemetry.VerdictSource(activity, Verdict(outcome, evaluation).Source);
             return AppendExecutionOperationAsync(scope, id, outcome, provenance, evaluation, ct);
         });
 
-    private async ValueTask<Result<ExecutionId, MnemosyneError>> AppendExecutionOperationAsync(
+    private async ValueTask<Result<ReasonletRunReceipt, MnemosyneError>> AppendExecutionOperationAsync(
         ReasonletScope scope, ReasonletId id, ReasonletOutcome outcome, ReasonletProvenance provenance, ReasonletEvaluation? evaluation, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(provenance);
@@ -494,7 +504,7 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
         return await GuardAsync(AppendExecutionCoreAsync(scope, id, outcome, provenance, evaluation, ct)).ConfigureAwait(false);
     }
 
-    private async Task<Result<ExecutionId, MnemosyneError>> AppendExecutionCoreAsync(
+    private async Task<Result<ReasonletRunReceipt, MnemosyneError>> AppendExecutionCoreAsync(
         ReasonletScope scope, ReasonletId id, ReasonletOutcome outcome, ReasonletProvenance provenance, ReasonletEvaluation? evaluation, CancellationToken ct)
     {
         var executionId = ExecutionId.New();
@@ -519,7 +529,8 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
             return new MnemosyneError(MnemosyneErrorCode.NotFound, "The Reasonlet does not exist in the scope.");
         }
 
-        return executionId;
+        var (source, success) = Verdict(outcome, evaluation);
+        return new ReasonletRunReceipt(executionId, source, success);
     }
 
     /// <inheritdoc />
@@ -603,7 +614,7 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
 
         if (feedback.Worked is not null)
         {
-            StoreTelemetry.FeedbackVerdictSource(activity);
+            StoreTelemetry.VerdictSource(activity, ReasonletVerdictSource.Feedback);
         }
 
         return UnitResult<MnemosyneError>.Success();

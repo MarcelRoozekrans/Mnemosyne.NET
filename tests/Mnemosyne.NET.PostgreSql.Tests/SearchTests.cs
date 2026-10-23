@@ -102,7 +102,7 @@ public sealed class SearchTests(PgVectorFixture fixture) : IClassFixture<PgVecto
         var (store, scope) = await MigratedAsync();
         var id = await RememberAsync(store, scope, new float[] { 1, 0, 0 }, "measured");
         var bare = await RememberAsync(store, scope, new float[] { 0, 1, 0 }, "bare");
-        var success = (await store.AppendExecutionAsync(scope, id, new ReasonletOutcome(true, TimeSpan.Zero, null), Entries.Provenance(), null, Ct)).Value;
+        var success = (await store.AppendExecutionAsync(scope, id, new ReasonletOutcome(true, TimeSpan.Zero, null), Entries.Provenance(), null, Ct)).Value.Execution;
         Assert.True((await store.AppendExecutionAsync(scope, id, new ReasonletOutcome(false, TimeSpan.Zero, null), Entries.Provenance(), null, Ct)).IsSuccess);
 
         // The store never leaves a Reasonlet without a metrics row; search still reads a missing one as no runs.

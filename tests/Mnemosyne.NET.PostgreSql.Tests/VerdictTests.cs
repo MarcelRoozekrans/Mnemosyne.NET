@@ -562,7 +562,7 @@ public sealed class VerdictTests(PgVectorFixture fixture) : IClassFixture<PgVect
         var result = await store.AppendExecutionAsync(
             scope, id, new ReasonletOutcome(agent, TimeSpan.Zero, null), new ReasonletProvenance { Source = "test", SubjectId = subject }, evaluation, Ct);
         Assert.True(result.IsSuccess);
-        return result.Value;
+        return result.Value.Execution;
     }
 
     private Task BackdateAsync(params ExecutionId[] runs) => Entries.ExecuteAsync(

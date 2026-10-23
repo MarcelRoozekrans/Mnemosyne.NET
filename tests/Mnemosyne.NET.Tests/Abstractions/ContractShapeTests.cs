@@ -100,7 +100,34 @@ public class ContractShapeTests
     {
         var method = typeof(IReasonletMemory).GetMethod("RecordExecutionAsync")!;
         Assert.Equal(["ReasonletRun run", "CancellationToken ct"], Signature(method));
-        Assert.Equal(typeof(ValueTask<Result<ExecutionId, MnemosyneError>>), method.ReturnType);
+        Assert.Equal(typeof(ValueTask<Result<ReasonletRunReceipt, MnemosyneError>>), method.ReturnType);
+    }
+
+    [Fact]
+    public void TheRunReceiptIsAPositionalRecordOfTheExecutionAndItsVerdict()
+    {
+        Assert.False(typeof(ReasonletRunReceipt).IsValueType);
+        var constructor = Assert.Single(typeof(ReasonletRunReceipt).GetConstructors(), c => c.GetParameters().Length > 1);
+        Assert.Equal(
+            ["ExecutionId Execution", "ReasonletVerdictSource Source", "Boolean Success"],
+            constructor.GetParameters().Select(p => p.ParameterType.Name + " " + p.Name));
+    }
+
+    [Fact]
+    public void TheReceiptEndsWithTheVerdictOfItsRun()
+    {
+        var constructor = Assert.Single(typeof(ReasonletReceipt).GetConstructors(), c => c.GetParameters().Length > 1);
+        Assert.Equal(
+            [
+                "ReasonletId Id",
+                "String Version",
+                "ExecutionId Execution",
+                "ReasonletCaptureKind Kind",
+                "ReasonletStatus Status",
+                "ReasonletVerdictSource Source",
+                "Boolean Success",
+            ],
+            constructor.GetParameters().Select(p => p.ParameterType.Name + " " + p.Name));
     }
 
     [Fact]
@@ -118,7 +145,7 @@ public class ContractShapeTests
             ],
             Signature(method));
         Assert.Equal(typeof(ReasonletEvaluation?), method.GetParameters()[4].ParameterType);
-        Assert.Equal(typeof(ValueTask<Result<ExecutionId, MnemosyneError>>), method.ReturnType);
+        Assert.Equal(typeof(ValueTask<Result<ReasonletRunReceipt, MnemosyneError>>), method.ReturnType);
     }
 
     [Fact]

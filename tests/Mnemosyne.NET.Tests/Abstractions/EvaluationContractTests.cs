@@ -84,16 +84,16 @@ public class EvaluationContractTests
     [Theory]
     [InlineData("")]
     [InlineData(" ")]
-    public void Run_BlankAnswer_Fails(string answer) =>
-        AssertInvalid((Run() with { Question = "q", Answer = answer }).Validate(), "Answer");
+    public void Run_BlankAnswer_Passes(string answer) =>
+        Assert.True((Run() with { Question = "q", Answer = answer }).Validate().IsSuccess);
 
     [Fact]
     public void Run_QuestionTooLong_Fails() =>
         AssertInvalid((Run() with { Question = new string('x', MaxText + 1), Answer = "a" }).Validate(), "Question");
 
     [Fact]
-    public void Run_AnswerTooLong_Fails() =>
-        AssertInvalid((Run() with { Question = "q", Answer = new string('x', MaxText + 1) }).Validate(), "Answer");
+    public void Run_AnswerTooLong_Passes() =>
+        Assert.True((Run() with { Question = "q", Answer = new string('x', MaxText + 1) }).Validate().IsSuccess);
 
     [Fact]
     public void Run_QuestionWithALoneSurrogate_Fails() =>
@@ -114,8 +114,12 @@ public class EvaluationContractTests
     [Fact]
     public void Run_TheErrorNeverQuotesTheText()
     {
-        var result = (Run() with { Question = "q", Answer = "SECRET " + new string('x', MaxText) }).Validate();
+        var result = (Run() with { Question = "SECRET " + new string('x', MaxText), Answer = "a" }).Validate();
+        Assert.True(result.IsFailure);
         Assert.DoesNotContain("SECRET", result.Error.Message, StringComparison.Ordinal);
+        var surrogate = (Run() with { Question = "q", Answer = "SECRET " + LoneSurrogate }).Validate();
+        Assert.True(surrogate.IsFailure);
+        Assert.DoesNotContain("SECRET", surrogate.Error.Message, StringComparison.Ordinal);
     }
 
     // ---- ReasonletEvaluationRequest ----
@@ -229,12 +233,12 @@ public class EvaluationContractTests
     [Theory]
     [InlineData("")]
     [InlineData(" ")]
-    public void Capture_BlankAnswer_Fails(string answer) =>
-        AssertInvalid((TestData.Capture() with { Answer = answer }).Validate(), "Answer");
+    public void Capture_BlankAnswer_Passes(string answer) =>
+        Assert.True((TestData.Capture() with { Answer = answer }).Validate().IsSuccess);
 
     [Fact]
-    public void Capture_AnswerTooLong_Fails() =>
-        AssertInvalid((TestData.Capture() with { Answer = new string('x', MaxText + 1) }).Validate(), "Answer");
+    public void Capture_AnswerTooLong_Passes() =>
+        Assert.True((TestData.Capture() with { Answer = new string('x', MaxText + 1) }).Validate().IsSuccess);
 
     [Fact]
     public void Capture_AnswerAtTheCap_Passes() =>
@@ -243,6 +247,66 @@ public class EvaluationContractTests
     [Fact]
     public void Capture_AnswerWithALoneSurrogate_Fails() =>
         AssertInvalid((TestData.Capture() with { Answer = LoneSurrogate }).Validate(), "Answer");
+
+    // ---- Redacted ToString ----
+
+    private const string AnswerSentinel = "answer sentinel 9c1e";
+
+    public static TheoryData<string> Redactable() => ["run", "capture", "request"];
+
+    private static object WithAnswer(string record, string? answer) => record switch
+    {
+        "run" => Run() with { Question = "the question", Answer = answer },
+        "capture" => TestData.Capture() with { Question = "the question", Answer = answer },
+        _ => Request() with { Question = "the question", Answer = answer! },
+    };
+
+    [Theory]
+    [MemberData(nameof(Redactable))]
+    public void ToString_NeverShowsTheAnswer(string record)
+    {
+        var text = WithAnswer(record, AnswerSentinel).ToString()!;
+
+        Assert.DoesNotContain(AnswerSentinel, text, StringComparison.Ordinal);
+        Assert.Contains("Answer = [redacted]", text, StringComparison.Ordinal);
+        Assert.Contains("Question = the question", text, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("run")]
+    [InlineData("capture")]
+    public void ToString_ShowsAMissingAnswerAsNull(string record) =>
+        Assert.Contains("Answer = null", WithAnswer(record, null).ToString()!, StringComparison.Ordinal);
+
+    [Fact]
+    public void ToString_PrintsEveryOtherMemberOfTheRun()
+    {
+        var run = Run() with { Question = "q", Answer = AnswerSentinel };
+        Assert.Equal(
+            $"ReasonletRun {{ Scope = {run.Scope}, Id = {run.Id}, Outcome = {run.Outcome}, Provenance = {run.Provenance}, Question = q, Answer = [redacted] }}",
+            run.ToString());
+    }
+
+    [Fact]
+    public void ToString_PrintsEveryOtherMemberOfTheCapture()
+    {
+        var parent = ReasonletId.New();
+        var capture = TestData.Capture() with { Intent = "i", Name = "n", Answer = AnswerSentinel, ParentId = parent };
+        Assert.Equal(
+            $"ReasonletCapture {{ Scope = {capture.Scope}, Question = {capture.Question}, Graph = {capture.Graph}, Outcome = {capture.Outcome}, "
+            + $"Provenance = {capture.Provenance}, Intent = i, Name = n, Answer = [redacted], ParentId = {parent} }}",
+            capture.ToString());
+    }
+
+    [Fact]
+    public void ToString_PrintsEveryOtherMemberOfTheRequest()
+    {
+        var request = Request() with { Answer = AnswerSentinel };
+        Assert.Equal(
+            $"ReasonletEvaluationRequest {{ Graph = {request.Graph}, Name = {request.Name}, Intent = {request.Intent}, "
+            + $"Question = {request.Question}, Answer = [redacted], Outcome = {request.Outcome} }}",
+            request.ToString());
+    }
 
     // ---- ReasonletFeedback.Worked ----
 

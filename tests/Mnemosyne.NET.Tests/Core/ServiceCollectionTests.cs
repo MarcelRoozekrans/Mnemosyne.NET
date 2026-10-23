@@ -134,6 +134,22 @@ public sealed class ServiceCollectionTests
     }
 
     [Fact]
+    public async Task TheRegisteredClockTimesTheJudge()
+    {
+        var clock = new ManualTimeProvider();
+        var services = Services();
+        services.AddSingleton<TimeProvider>(clock);
+        services.AddSingleton<IReasonletEvaluator>(new WaitingEvaluator(clock.Fire));
+        using var provider = services.AddMnemosyne(new MnemosyneOptions { EvaluationTimeout = TimeSpan.FromSeconds(3) }).BuildServiceProvider();
+
+        var result = await provider.GetRequiredService<IReasonletMemory>().RecordExecutionAsync(JudgeableRun(), CancellationToken.None);
+
+        Assert.Equal(ReasonletVerdictSource.Agent, result.Value.Source);
+        Assert.Contains(TimeSpan.FromSeconds(3), clock.DueTimes);
+        Assert.Null(_store.Executed!.Value.Evaluation);
+    }
+
+    [Fact]
     public async Task AMissingEvaluatorLeavesRunsUnjudged()
     {
         using var provider = Services().AddMnemosyne().BuildServiceProvider();

@@ -521,7 +521,7 @@ public sealed class EraseTests(PgVectorFixture fixture) : IClassFixture<PgVector
     {
         var result = await store.AppendExecutionAsync(scope, id, outcome ?? Outcome, new ReasonletProvenance { Source = "test", SubjectId = subject }, null, Ct);
         Assert.True(result.IsSuccess);
-        return result.Value;
+        return result.Value.Execution;
     }
 
     /// <summary>Counts a scope's Reasonlets, executions and feedback.</summary>

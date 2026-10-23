@@ -151,6 +151,69 @@ public sealed class EvaluationTelemetryTests
         AssertMeasurements(capture, "exception", evaluator: null);
     }
 
+    [Theory]
+    [MemberData(nameof(Paths))]
+    public async Task AnExpiredTimeoutIsOutcomeUnavailable(string path)
+    {
+        var clock = new ManualTimeProvider();
+        var memory = new ReasonletMemory(_store, _selector, _generator, null, new WaitingEvaluator(clock.Fire), new MnemosyneOptions(), clock);
+        using var capture = new TelemetryCapture();
+
+        var succeeded = path == "record"
+            ? (await memory.RecordExecutionAsync(Run() with { Question = "question", Answer = "answer" }, Ct)).IsSuccess
+            : (await memory.RememberAsync(TestData.Capture() with { Answer = "answer" }, Ct)).IsSuccess;
+
+        Assert.True(succeeded);
+        var activity = Single(capture);
+        Assert.Equal(ActivityStatusCode.Error, activity.Status);
+        Assert.Equal([new("error.type", "Unavailable")], AllTags(activity));
+        Assert.Empty(activity.Events);
+        AssertMeasurements(capture, "Unavailable", evaluator: null);
+    }
+
+    public static TheoryData<string, string> UnusableAnswers() => new()
+    {
+        { "record", "blank" },
+        { "record", "oversized" },
+        { "remember", "blank" },
+        { "remember", "oversized" },
+    };
+
+    [Theory]
+    [MemberData(nameof(UnusableAnswers))]
+    public async Task AnUnusableAnswerCountsASkipAndStartsNoEvaluation(string path, string answer)
+    {
+        const string Sentinel = "skipped answer sentinel";
+        var text = answer == "blank" ? "   " : Sentinel + new string('a', ReasonletMemory.MaxAnswerLength);
+        var evaluator = new FakeEvaluator();
+        var memory = Memory(evaluator);
+        using var capture = new TelemetryCapture();
+
+        var succeeded = path == "record"
+            ? (await memory.RecordExecutionAsync(Run() with { Question = "question", Answer = text }, Ct)).IsSuccess
+            : (await memory.RememberAsync(TestData.Capture() with { Answer = text }, Ct)).IsSuccess;
+
+        Assert.True(succeeded);
+        Assert.Empty(evaluator.Requests);
+        Assert.Empty(capture.Activities);
+        var skipped = Assert.Single(capture.Measurements);
+        Assert.Equal("mnemosyne.evaluations", skipped.Instrument);
+        Assert.Equal(1, skipped.Value);
+        Assert.Equal([new KeyValuePair<string, object?>("mnemosyne.outcome", "skipped")], skipped.Tags);
+        Assert.All(skipped.Tags, tag => Assert.DoesNotContain(Sentinel, tag.Value?.ToString() ?? string.Empty, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task AnUnusableAnswerWithoutAnEvaluatorCountsNothing()
+    {
+        using var capture = new TelemetryCapture();
+
+        var memory = new ReasonletMemory(_store, _selector, _generator, null, null, new MnemosyneOptions());
+        Assert.True((await memory.RecordExecutionAsync(Run() with { Question = "question", Answer = " " }, Ct)).IsSuccess);
+
+        Assert.Empty(capture.Measurements);
+    }
+
     [Fact]
     public async Task ARunThatIsNotJudgedEmitsNoEvaluation()
     {

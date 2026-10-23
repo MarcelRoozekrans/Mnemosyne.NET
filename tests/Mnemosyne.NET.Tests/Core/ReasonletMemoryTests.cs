@@ -16,8 +16,9 @@ public sealed class ReasonletMemoryTests
 
     private const string AnswerSentinel = "answer sentinel 7f3a";
 
-    private ReasonletMemory Memory(IIntentExtractor? extractor = null, MnemosyneOptions? options = null, IReasonletEvaluator? evaluator = null) =>
-        new(_store, _selector, _generator, extractor, evaluator, options ?? new MnemosyneOptions());
+    private ReasonletMemory Memory(
+        IIntentExtractor? extractor = null, MnemosyneOptions? options = null, IReasonletEvaluator? evaluator = null, TimeProvider? clock = null) =>
+        new(_store, _selector, _generator, extractor, evaluator, options ?? new MnemosyneOptions(), clock);
 
     private static ReasonletCandidate Candidate(double similarity = 0.9) =>
         new(TestData.Definition(), similarity, new ReasonletMetrics(0, 0, null, DateTimeOffset.UnixEpoch));
@@ -437,7 +438,7 @@ public sealed class ReasonletMemoryTests
 
         var result = await Memory().RememberAsync(capture, CancellationToken.None);
 
-        Assert.Same(FakeStore.Receipt, result.Value);
+        Assert.Equal(FakeStore.Receipt, result.Value);
         var entry = _store.Remembered!;
         Assert.True(entry.Validate().IsSuccess);
         Assert.Equal("caller intent", entry.Intent);
@@ -682,10 +683,21 @@ public sealed class ReasonletMemoryTests
         using var cts = new CancellationTokenSource();
         var run = Run();
 
+        var receipt = new ReasonletRunReceipt(ExecutionId.New(), ReasonletVerdictSource.Agent, false);
+        _store.ExecutionResult = receipt;
+
         var result = await Memory().RecordExecutionAsync(run, cts.Token);
 
-        Assert.Equal(_store.ExecutionResult.Value, result.Value);
+        Assert.Same(receipt, result.Value);
         Assert.Equal((run.Scope, run.Id, run.Outcome, run.Provenance, (ReasonletEvaluation?)null, cts.Token), _store.Executed);
+    }
+
+    [Fact]
+    public async Task RecordReturnsTheAgentsVerdictWithoutAnEvaluator()
+    {
+        var result = await Memory().RecordExecutionAsync(Run() with { Question = "question", Answer = AnswerSentinel }, CancellationToken.None);
+
+        Assert.Equal(new ReasonletRunReceipt(FakeStore.ExecutionIdentifier, ReasonletVerdictSource.Agent, false), result.Value);
     }
 
     [Fact]
@@ -830,7 +842,8 @@ public sealed class ReasonletMemoryTests
 
         var result = await Memory(evaluator: evaluator).RecordExecutionAsync(run, cts.Token);
 
-        Assert.Equal(_store.ExecutionResult.Value, result.Value);
+        // The judge says it worked, though the agent said it did not, and the receipt carries the judge's verdict.
+        Assert.Equal(new ReasonletRunReceipt(FakeStore.ExecutionIdentifier, ReasonletVerdictSource.Evaluator, true), result.Value);
         Assert.Equal((run.Scope, run.Id, cts.Token), _store.Got);
         var request = Assert.Single(evaluator.Requests);
         Assert.Same(definition.Graph, request.Graph);
@@ -886,7 +899,7 @@ public sealed class ReasonletMemoryTests
     }
 
     [Fact]
-    public async Task RememberJudgesAfterResolvingTheIntentAndNameAndBeforeEmbedding()
+    public async Task RememberJudgesAfterResolvingTheIntentAndNameAndEmbedding()
     {
         var extractor = FakeIntentExtractor.Answering("extracted", 0.1);
         int? embeddingsAtJudging = null;
@@ -901,7 +914,7 @@ public sealed class ReasonletMemoryTests
         var result = await Memory(extractor, evaluator: evaluator).RememberAsync(capture, CancellationToken.None);
 
         Assert.True(result.IsSuccess);
-        Assert.Equal(0, embeddingsAtJudging);
+        Assert.Equal(1, embeddingsAtJudging);
         Assert.Equal(1, _generator.Calls);
         var request = Assert.Single(evaluator.Requests);
         Assert.Same(capture.Graph, request.Graph);
@@ -912,6 +925,112 @@ public sealed class ReasonletMemoryTests
         Assert.Equal(capture.Outcome, request.Outcome);
         Assert.Equal(FakeEvaluator.Verdict, _store.Remembered!.Evaluation);
         Assert.Null(_store.Remembered!.Capture.Answer);
+        Assert.Equal((ReasonletVerdictSource.Evaluator, true), (result.Value.Source, result.Value.Success));
+    }
+
+    [Fact]
+    public async Task RememberPassesTheStoresReceiptThroughUnchanged()
+    {
+        var receipt = FakeStore.Receipt with { Source = ReasonletVerdictSource.Evaluator, Success = false };
+        _store.RememberResult = receipt;
+
+        var result = await Memory(evaluator: new FakeEvaluator()).RememberAsync(TestData.Capture() with { Answer = AnswerSentinel }, CancellationToken.None);
+
+        Assert.Same(receipt, result.Value);
+    }
+
+    [Fact]
+    public async Task RememberReturnsTheAgentsVerdictWithoutAnEvaluator()
+    {
+        var capture = TestData.Capture() with { Answer = AnswerSentinel };
+
+        var result = await Memory().RememberAsync(capture, CancellationToken.None);
+
+        Assert.Equal((ReasonletVerdictSource.Agent, capture.Outcome.Success), (result.Value.Source, result.Value.Success));
+    }
+
+    [Fact]
+    public async Task RememberWithTheGeneratorDownFailsAndNeverCallsTheJudge()
+    {
+        var evaluator = new FakeEvaluator();
+        _generator.Respond = () => throw new HttpRequestException(Secret);
+
+        var result = await Memory(evaluator: evaluator).RememberAsync(TestData.Capture() with { Answer = AnswerSentinel }, CancellationToken.None);
+
+        AssertUnavailableWithoutMessage(result.Error, nameof(HttpRequestException));
+        Assert.Empty(evaluator.Requests);
+        Assert.Equal(0, _store.Calls);
+    }
+
+    public static TheoryData<string, string> UnusableAnswers() => new()
+    {
+        { "record", "blank" },
+        { "record", "oversized" },
+        { "remember", "blank" },
+        { "remember", "oversized" },
+    };
+
+    [Theory]
+    [MemberData(nameof(UnusableAnswers))]
+    public async Task AnUnusableAnswerStoresTheRunUnjudgedWithTheAgentsVerdict(string path, string answer)
+    {
+        var evaluator = new FakeEvaluator();
+        var text = answer == "blank" ? " \t\n" : new string('a', ReasonletMemory.MaxAnswerLength + 1);
+
+        ReasonletVerdictSource source;
+        bool success;
+        if (path == "record")
+        {
+            var run = Run() with { Question = "question", Answer = text };
+            var result = await Memory(evaluator: evaluator).RecordExecutionAsync(run, CancellationToken.None);
+            (source, success) = (result.Value.Source, result.Value.Success);
+            Assert.Null(_store.Executed!.Value.Evaluation);
+            Assert.Equal(run.Outcome.Success, success);
+            Assert.Null(_store.Got);
+        }
+        else
+        {
+            var capture = TestData.Capture() with { Answer = text };
+            var result = await Memory(evaluator: evaluator).RememberAsync(capture, CancellationToken.None);
+            (source, success) = (result.Value.Source, result.Value.Success);
+            Assert.Null(_store.Remembered!.Evaluation);
+            Assert.Null(_store.Remembered!.Capture.Answer);
+            Assert.Equal(capture.Outcome.Success, success);
+        }
+
+        Assert.Equal(ReasonletVerdictSource.Agent, source);
+        Assert.Empty(evaluator.Requests);
+    }
+
+    [Fact]
+    public void TheJudgeableCapIsTheRequestsCap() =>
+        Assert.Equal(Mnemosyne.NET.Abstractions.EvaluationLimits.MaxRunTextLength, ReasonletMemory.MaxAnswerLength);
+
+    [Fact]
+    public void AnAnswerIsJudgeableUpToTheCapInCodePoints()
+    {
+        Assert.False(ReasonletMemory.IsJudgeable(""));
+        Assert.False(ReasonletMemory.IsJudgeable(" \u00a0\t"));
+        Assert.True(ReasonletMemory.IsJudgeable("a"));
+        Assert.True(ReasonletMemory.IsJudgeable(new string('a', ReasonletMemory.MaxAnswerLength)));
+        Assert.False(ReasonletMemory.IsJudgeable(new string('a', ReasonletMemory.MaxAnswerLength + 1)));
+
+        // A surrogate pair is one code point, so twice the cap in UTF-16 units is still judgeable.
+        var pairs = string.Concat(Enumerable.Repeat("\U0001F600", ReasonletMemory.MaxAnswerLength));
+        Assert.True(ReasonletMemory.IsJudgeable(pairs));
+        Assert.False(ReasonletMemory.IsJudgeable(pairs + "a"));
+    }
+
+    [Fact]
+    public async Task AnInvalidUtf16AnswerIsStillRefused()
+    {
+        var evaluator = new FakeEvaluator();
+
+        var result = await Memory(evaluator: evaluator).RecordExecutionAsync(Run() with { Question = "question", Answer = "\ud800" }, CancellationToken.None);
+
+        Assert.Equal(MnemosyneErrorCode.Validation, result.Error.Code);
+        Assert.Equal("Answer: must be valid UTF-16", result.Error.Message);
+        Assert.Equal(0, _store.Calls);
     }
 
     [Fact]
@@ -1033,15 +1152,98 @@ public sealed class ReasonletMemoryTests
 
     [Theory]
     [MemberData(nameof(Paths))]
-    public async Task TheCallersTokenReachesTheJudge(string path)
+    public async Task TheCallersCancellationReachesTheJudgesToken(string path)
     {
         using var cts = new CancellationTokenSource();
         var evaluator = new FakeEvaluator();
+        var seen = false;
+        evaluator.Respond = () =>
+        {
+            cts.Cancel();
+            seen = evaluator.Tokens[^1].IsCancellationRequested;
+            return FakeEvaluator.Verdict;
+        };
 
-        var succeeded = await JudgeThroughAsync(path, evaluator, cts.Token);
+        Assert.True(await JudgeThroughAsync(path, evaluator, cts.Token));
+
+        Assert.True(seen);
+        Assert.NotEqual(cts.Token, Assert.Single(evaluator.Tokens));
+    }
+
+    [Theory]
+    [MemberData(nameof(Paths))]
+    public async Task AnExpiredTimeoutStoresTheRunWithTheAgentsVerdict(string path)
+    {
+        var clock = new ManualTimeProvider();
+        var evaluator = new WaitingEvaluator(clock.Fire);
+        var memory = Memory(evaluator: evaluator, clock: clock, options: new MnemosyneOptions { EvaluationTimeout = TimeSpan.FromSeconds(7) });
+
+        ReasonletVerdictSource source;
+        if (path == "record")
+        {
+            var result = await memory.RecordExecutionAsync(Run() with { Question = "question", Answer = AnswerSentinel }, CancellationToken.None);
+            source = result.Value.Source;
+        }
+        else
+        {
+            var result = await memory.RememberAsync(TestData.Capture() with { Answer = AnswerSentinel }, CancellationToken.None);
+            source = result.Value.Source;
+        }
+
+        Assert.Equal(ReasonletVerdictSource.Agent, source);
+        Assert.Null(StoredEvaluation(path));
+        Assert.Contains(TimeSpan.FromSeconds(7), clock.DueTimes);
+        Assert.True(Assert.Single(evaluator.Tokens).IsCancellationRequested);
+    }
+
+    [Theory]
+    [MemberData(nameof(Paths))]
+    public async Task TheCallersCancellationStillThrowsWhileTheJudgeWaits(string path)
+    {
+        using var cts = new CancellationTokenSource();
+        var clock = new ManualTimeProvider();
+        var evaluator = new WaitingEvaluator(cts.Cancel);
+        var memory = Memory(evaluator: evaluator, clock: clock);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
+        {
+            if (path == "record")
+            {
+                await memory.RecordExecutionAsync(Run() with { Question = "question", Answer = AnswerSentinel }, cts.Token);
+            }
+            else
+            {
+                await memory.RememberAsync(TestData.Capture() with { Answer = AnswerSentinel }, cts.Token);
+            }
+        });
+
+        Assert.False(Stored(path));
+        Assert.Contains(TimeSpan.FromSeconds(30), clock.DueTimes);
+    }
+
+    [Theory]
+    [MemberData(nameof(Paths))]
+    public async Task AnInfiniteTimeoutNeverTimesOut(string path)
+    {
+        using var cts = new CancellationTokenSource();
+        var clock = new ManualTimeProvider();
+        var evaluator = new FakeEvaluator();
+        evaluator.Respond = () =>
+        {
+            // Firing the clock while the judge works must not cancel anything: no timer is ever set.
+            clock.Fire();
+            return FakeEvaluator.Verdict;
+        };
+        var memory = Memory(evaluator: evaluator, clock: clock, options: new MnemosyneOptions { EvaluationTimeout = Timeout.InfiniteTimeSpan });
+
+        var succeeded = path == "record"
+            ? (await memory.RecordExecutionAsync(Run() with { Question = "question", Answer = AnswerSentinel }, cts.Token)).IsSuccess
+            : (await memory.RememberAsync(TestData.Capture() with { Answer = AnswerSentinel }, cts.Token)).IsSuccess;
 
         Assert.True(succeeded);
+        Assert.Empty(clock.DueTimes);
         Assert.Equal(cts.Token, Assert.Single(evaluator.Tokens));
+        Assert.Equal(FakeEvaluator.Verdict, StoredEvaluation(path));
     }
 
     /// <summary>Every text a store argument carries, field by field, so a leak nested in a graph or a provenance shows.</summary>

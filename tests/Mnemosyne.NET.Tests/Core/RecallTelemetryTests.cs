@@ -533,7 +533,7 @@ public sealed class RecallTelemetryTests
         public ValueTask<Result<ReasonletDefinition, MnemosyneError>> GetAsync(ReasonletScope scope, ReasonletId id, CancellationToken ct) =>
             throw new NotSupportedException();
 
-        public ValueTask<Result<ExecutionId, MnemosyneError>> AppendExecutionAsync(
+        public ValueTask<Result<ReasonletRunReceipt, MnemosyneError>> AppendExecutionAsync(
             ReasonletScope scope, ReasonletId id, ReasonletOutcome outcome, ReasonletProvenance provenance, ReasonletEvaluation? evaluation, CancellationToken ct) =>
             throw new NotSupportedException();
 

@@ -1,3 +1,4 @@
+using System.Text;
 using Mnemosyne.NET.Abstractions.Validation;
 using ZeroAlloc.Results;
 
@@ -23,7 +24,10 @@ public sealed record ReasonletEvaluationRequest
     /// <summary>Gets the run's question. Must not be blank.</summary>
     public required string Question { get; init; }
 
-    /// <summary>Gets the run's answer. Must not be blank and must not be longer than 32,000 code points. It is never stored.</summary>
+    /// <summary>
+    /// Gets the run's answer. Must not be blank and must not be longer than 32,000 code points: the facade judges only a
+    /// usable answer. It is never stored, and <see cref="ToString"/> shows it as <c>[redacted]</c>.
+    /// </summary>
     public required string Answer { get; init; }
 
     /// <summary>Gets the agent's own view of the run.</summary>
@@ -41,4 +45,16 @@ public sealed record ReasonletEvaluationRequest
         () => Check.ValidUtf16(Answer, nameof(Answer)),
         () => Check.MaxLength(Answer, EvaluationLimits.MaxRunTextLength, nameof(Answer)),
         () => Check.Nested(Outcome.Validate(), nameof(Outcome)));
+
+    /// <summary>Prints the members as the compiler would, except that the answer shows only whether it is present.</summary>
+    private bool PrintMembers(StringBuilder builder)
+    {
+        builder.Append("Graph = ").Append(Graph);
+        builder.Append(", Name = ").Append(Name);
+        builder.Append(", Intent = ").Append(Intent);
+        builder.Append(", Question = ").Append(Question);
+        RedactedAnswer.Print(builder, Answer);
+        builder.Append(", Outcome = ").Append(Outcome.ToString());
+        return true;
+    }
 }

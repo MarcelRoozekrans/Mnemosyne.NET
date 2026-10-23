@@ -25,6 +25,10 @@ namespace Mnemosyne.NET;
 /// evaluation, has no name to tag, so its activity, its <c>mnemosyne.evaluations</c> count and its
 /// <c>mnemosyne.evaluation.duration</c> carry no <c>mnemosyne.evaluator</c> tag.
 /// </para>
+/// <para>
+/// A run whose answer is blank or longer than 32,000 code points is not judged. <see cref="Skipped"/> counts it once on
+/// <c>mnemosyne.evaluations</c> with outcome <c>skipped</c>, and starts nothing else.
+/// </para>
 /// </remarks>
 internal sealed class EvaluationTelemetry : IDisposable
 {
@@ -33,6 +37,9 @@ internal sealed class EvaluationTelemetry : IDisposable
     private const string EvaluatorTag = "mnemosyne.evaluator";
     private const string SuccessTag = "mnemosyne.evaluation.success";
     private const string ScoreTag = "mnemosyne.evaluation.score";
+
+    /// <summary>The outcome of a run whose answer was not judged because it is unusable.</summary>
+    internal const string SkippedOutcome = "skipped";
 
     private static readonly Counter<long> Evaluations =
         RecallTelemetry.Meter.CreateCounter<long>("mnemosyne.evaluations", "{evaluation}", "Judge calls, by evaluator and outcome.");
@@ -50,6 +57,14 @@ internal sealed class EvaluationTelemetry : IDisposable
         _activity = activity;
         _started = started;
     }
+
+    /// <summary>
+    /// Counts a run whose answer was not judged because it is blank or too long: one <c>mnemosyne.evaluations</c> count
+    /// with outcome <c>skipped</c> and no <c>mnemosyne.evaluator</c> tag. No judge was called, so no activity starts, no
+    /// duration is recorded and no <c>evaluate</c> operation is counted.
+    /// </summary>
+    internal static void Skipped() =>
+        Evaluations.Add(1, new TagList { { RecallTelemetry.OutcomeTag, SkippedOutcome } });
 
     /// <summary>Starts the <c>mnemosyne.evaluate</c> activity, null when no one listens, and the clock.</summary>
     internal static EvaluationTelemetry Start() =>

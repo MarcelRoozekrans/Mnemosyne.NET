@@ -68,6 +68,37 @@ public sealed class TelemetryTests(PgVectorFixture fixture) : IClassFixture<PgVe
     }
 
     [Fact]
+    public async Task RememberTagsTheVerdictSourceOfTheRunItRecords()
+    {
+        var store = await MigratedStoreAsync();
+        var scope = PgVectorFixture.NewScope();
+        var evaluation = new ReasonletEvaluation(true, 0.5, "judge");
+        using var capture = new TelemetryCapture();
+
+        var created = (await store.RememberAsync(Entries.Entry(scope) with { Evaluation = evaluation }, Ct)).Value;
+        var executed = (await store.RememberAsync(Entries.Entry(scope, parentId: created.Id) with { Evaluation = evaluation }, Ct)).Value;
+        var versioned = (await store.RememberAsync(Entries.Entry(scope, Entries.Graph("b"), created.Id) with { Evaluation = evaluation }, Ct)).Value;
+
+        var activities = capture.Activities;
+        Assert.Equal(3, activities.Count);
+        AssertRemembered(activities[0], "NewReasonlet", created, "evaluator");
+        AssertRemembered(activities[1], "ExecutionOnly", executed, "evaluator");
+        AssertRemembered(activities[2], "NewVersion", versioned, "evaluator");
+    }
+
+    [Fact]
+    public async Task AFailedRememberHasNoVerdictSource()
+    {
+        var store = await MigratedStoreAsync();
+        using var capture = new TelemetryCapture();
+
+        var missing = await store.RememberAsync(Entries.Entry(PgVectorFixture.NewScope(), parentId: ReasonletId.New()), Ct);
+
+        Assert.Equal(MnemosyneErrorCode.NotFound, missing.Error.Code);
+        Assert.Null(Single(capture, "mnemosyne.remember").GetTagItem("mnemosyne.verdict_source"));
+    }
+
+    [Fact]
     public async Task AFailedRememberCarriesTheErrorAndNoReceipt()
     {
         var store = await MigratedStoreAsync();
@@ -367,7 +398,7 @@ public sealed class TelemetryTests(PgVectorFixture fixture) : IClassFixture<PgVe
 
         var receipt = (await store.RememberAsync(entry, Ct)).Value;
         Assert.True((await store.GetAsync(scope, receipt.Id, Ct)).IsSuccess);
-        var execution = (await store.AppendExecutionAsync(scope, receipt.Id, Success, provenance, null, Ct)).Value;
+        var execution = (await store.AppendExecutionAsync(scope, receipt.Id, Success, provenance, null, Ct)).Value.Execution;
         Assert.True((await store.AppendFeedbackAsync(scope, execution, Feedback, Ct)).IsSuccess);
         Assert.Single((await store.SearchAsync(scope, entry.Embedding, intent, 5, Ct)).Value);
         Assert.True((await store.EraseAsync(new ReasonletErasure(scope, subject), Ct)).IsSuccess);
@@ -512,11 +543,16 @@ public sealed class TelemetryTests(PgVectorFixture fixture) : IClassFixture<PgVe
     private static KeyValuePair<string, object?>[] MnemosyneTags(Activity activity) =>
         [.. AllTags(activity).Where(tag => tag.Key.StartsWith("mnemosyne.", StringComparison.Ordinal))];
 
-    private static void AssertRemembered(Activity activity, string kind, ReasonletReceipt receipt)
+    private static void AssertRemembered(Activity activity, string kind, ReasonletReceipt receipt, string source = "agent")
     {
         Assert.Equal(ActivityStatusCode.Unset, activity.Status);
         Assert.Equal(
-            [new("mnemosyne.capture_kind", kind), new("mnemosyne.reasonlet.id", receipt.Id.Value.ToString()), new("mnemosyne.reasonlet.version", receipt.Version)],
+            [
+                new("mnemosyne.capture_kind", kind),
+                new("mnemosyne.reasonlet.id", receipt.Id.Value.ToString()),
+                new("mnemosyne.reasonlet.version", receipt.Version),
+                new("mnemosyne.verdict_source", source),
+            ],
             AllTags(activity));
     }
 

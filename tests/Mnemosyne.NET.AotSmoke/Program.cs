@@ -193,7 +193,8 @@ static async Task<int> PostgreSqlSmoke(string connectionString, ReasonletGraph g
     var run = await store.AppendExecutionAsync(
         scope, remembered.Value.Id, outcome, new ReasonletProvenance { Source = "aot-smoke", SubjectId = "smoke-erased" }, null, ct);
     var bySubject = await store.EraseAsync(new ReasonletErasure(scope, "smoke-erased"), ct);
-    if (run.IsFailure || bySubject.IsFailure || bySubject.Value.Reasonlets != 0 || bySubject.Value.Executions != 1)
+    if (run.IsFailure || run.Value.Source != ReasonletVerdictSource.Agent
+        || bySubject.IsFailure || bySubject.Value.Reasonlets != 0 || bySubject.Value.Executions != 1)
     {
         Console.Error.WriteLine($"Subject erase failed: {(bySubject.IsFailure ? bySubject.Error.Message : $"{bySubject.Value.Reasonlets} Reasonlets, {bySubject.Value.Executions} executions")}");
         return 19;
@@ -301,9 +302,12 @@ static async Task<int> FacadeSmoke(NpgsqlDataSource dataSource, ReasonletGraph g
             Provenance = new ReasonletProvenance { Source = "aot-smoke" },
         },
         ct);
-    if (remembered.IsFailure || remembered.Value.Kind != ReasonletCaptureKind.NewReasonlet)
+    if (remembered.IsFailure
+        || remembered.Value.Kind != ReasonletCaptureKind.NewReasonlet
+        || remembered.Value.Source != ReasonletVerdictSource.Agent
+        || !remembered.Value.Success)
     {
-        Console.Error.WriteLine($"Remember through the facade failed: {(remembered.IsFailure ? remembered.Error.Message : remembered.Value.Kind.ToString())}");
+        Console.Error.WriteLine($"Remember through the facade failed: {(remembered.IsFailure ? remembered.Error.Message : remembered.Value.ToString())}");
         return 24;
     }
 
@@ -314,8 +318,8 @@ static async Task<int> FacadeSmoke(NpgsqlDataSource dataSource, ReasonletGraph g
         return 25;
     }
 
-    // The agent says the run failed and the judge says it worked, so the judge's verdict counts. The answer is never
-    // stored, so the stored columns are all there is to read: the store exposes no verdict, so the smoke reads it in SQL.
+    // The agent says the run failed and the judge says it worked, so the judge's verdict counts, and the receipt says so.
+    // The answer is never stored, and the store reads no verdict back, so the smoke checks the stored columns in SQL.
     var judged = await memory.RecordExecutionAsync(
         new ReasonletRun
         {
@@ -327,13 +331,13 @@ static async Task<int> FacadeSmoke(NpgsqlDataSource dataSource, ReasonletGraph g
             Answer = "Search with the search tool.",
         },
         ct);
-    if (judged.IsFailure)
+    if (judged.IsFailure || judged.Value.Source != ReasonletVerdictSource.Evaluator || !judged.Value.Success)
     {
-        Console.Error.WriteLine($"Recording a judged run failed: {judged.Error.Message}");
+        Console.Error.WriteLine($"Recording a judged run failed: {(judged.IsFailure ? judged.Error.Message : judged.Value.ToString())}");
         return 28;
     }
 
-    var verdict = await ReadVerdictAsync(dataSource, judged.Value, ct);
+    var verdict = await ReadVerdictAsync(dataSource, judged.Value.Execution, ct);
     if (verdict != (false, true, ApprovingEvaluator.Name, 0.75, null, true))
     {
         Console.Error.WriteLine($"The judged run stored {verdict}");
@@ -341,14 +345,14 @@ static async Task<int> FacadeSmoke(NpgsqlDataSource dataSource, ReasonletGraph g
     }
 
     // A human's verdict overrides the judge's.
-    var feedback = await memory.RecordFeedbackAsync(scope, judged.Value, new ReasonletFeedback(0.2, 0.2, 0.2, Worked: false), ct);
+    var feedback = await memory.RecordFeedbackAsync(scope, judged.Value.Execution, new ReasonletFeedback(0.2, 0.2, 0.2, Worked: false), ct);
     if (feedback.IsFailure)
     {
         Console.Error.WriteLine($"Feedback with a verdict failed: {feedback.Error.Message}");
         return 30;
     }
 
-    verdict = await ReadVerdictAsync(dataSource, judged.Value, ct);
+    verdict = await ReadVerdictAsync(dataSource, judged.Value.Execution, ct);
     if (verdict != (false, true, ApprovingEvaluator.Name, 0.75, false, false))
     {
         Console.Error.WriteLine($"The run after feedback stored {verdict}");

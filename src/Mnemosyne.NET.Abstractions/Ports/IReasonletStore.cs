@@ -22,7 +22,10 @@ public interface IReasonletStore
     /// </remarks>
     /// <param name="entry">The entry to store.</param>
     /// <param name="ct">The cancellation token.</param>
-    /// <returns>The receipt describing what was stored.</returns>
+    /// <returns>
+    /// The receipt describing what was stored, with the verdict source and effective success of the run it recorded, derived
+    /// as <see cref="AppendExecutionAsync"/> derives them, from <see cref="ReasonletStoreEntry.Evaluation"/>.
+    /// </returns>
     ValueTask<Result<ReasonletReceipt, MnemosyneError>> RememberAsync(ReasonletStoreEntry entry, CancellationToken ct);
 
     /// <summary>Gets a Reasonlet definition.</summary>
@@ -53,8 +56,12 @@ public interface IReasonletStore
     /// <param name="provenance">Where the execution came from.</param>
     /// <param name="evaluation">The evaluator's verdict on the run, or null when no evaluator judged it.</param>
     /// <param name="ct">The cancellation token.</param>
-    /// <returns>The identifier of the appended execution.</returns>
-    ValueTask<Result<ExecutionId, MnemosyneError>> AppendExecutionAsync(ReasonletScope scope, ReasonletId id, ReasonletOutcome outcome, ReasonletProvenance provenance, ReasonletEvaluation? evaluation, CancellationToken ct);
+    /// <returns>
+    /// The receipt of the appended run: its execution identifier, the verdict source the store derived,
+    /// <see cref="ReasonletVerdictSource.Evaluator"/> when <paramref name="evaluation"/> is given and
+    /// <see cref="ReasonletVerdictSource.Agent"/> otherwise, and that verdict's success.
+    /// </returns>
+    ValueTask<Result<ReasonletRunReceipt, MnemosyneError>> AppendExecutionAsync(ReasonletScope scope, ReasonletId id, ReasonletOutcome outcome, ReasonletProvenance provenance, ReasonletEvaluation? evaluation, CancellationToken ct);
 
     /// <summary>Appends feedback to an execution.</summary>
     /// <remarks>

@@ -794,7 +794,7 @@ public sealed class PruneTests(PgVectorFixture fixture) : IClassFixture<PgVector
     {
         var result = await store.AppendExecutionAsync(scope, id, outcome ?? Success, new ReasonletProvenance { Source = "test", SubjectId = subject }, null, Ct);
         Assert.True(result.IsSuccess);
-        return result.Value;
+        return result.Value.Execution;
     }
 
     private static Task BackdateAsync(NpgsqlDataSource dataSource, params ExecutionId[] executions) => Entries.ExecuteAsync(

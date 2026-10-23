@@ -19,8 +19,9 @@ public sealed class ExecutionTests(PgVectorFixture fixture) : IClassFixture<PgVe
         var result = await store.AppendExecutionAsync(scope, receipt.Id, Outcome, provenance, null, Ct);
 
         Assert.True(result.IsSuccess);
-        var id = result.Value;
+        var id = result.Value.Execution;
         Assert.False(id.IsDefault);
+        Assert.Equal((ReasonletVerdictSource.Agent, false), (result.Value.Source, result.Value.Success));
         Assert.NotEqual(receipt.Execution, id);
         Assert.Equal(2L, await CountAsync("SELECT count(*) FROM mnemosyne.reasonlet_executions WHERE reasonlet_id = $1", receipt.Id.Value));
         Assert.Equal(
@@ -43,7 +44,7 @@ public sealed class ExecutionTests(PgVectorFixture fixture) : IClassFixture<PgVe
         var (store, scope, receipt) = await RememberedAsync();
 
         var id = (await store.AppendExecutionAsync(
-            scope, receipt.Id, new ReasonletOutcome(true, TimeSpan.Zero, null), new ReasonletProvenance { Source = "bare" }, null, Ct)).Value;
+            scope, receipt.Id, new ReasonletOutcome(true, TimeSpan.Zero, null), new ReasonletProvenance { Source = "bare" }, null, Ct)).Value.Execution;
 
         Assert.Equal(
             1L,
@@ -61,15 +62,35 @@ public sealed class ExecutionTests(PgVectorFixture fixture) : IClassFixture<PgVe
 
         // The agent said it failed and the judge said it worked: the judge's verdict is the effective success.
         Assert.True(result.IsSuccess);
+        Assert.Equal((ReasonletVerdictSource.Evaluator, true), (result.Value.Source, result.Value.Success));
         Assert.Equal(
             "f|t|0.9|judge|t|-",
             await Entries.ScalarAsync<string>(
                 fixture.DataSource,
                 "SELECT concat_ws('|', agent_success, evaluated_success, evaluation_score, evaluator, success, coalesce(feedback_worked::text, '-')) "
                 + "FROM mnemosyne.reasonlet_executions WHERE id = $1",
-                result.Value.Value));
+                result.Value.Execution.Value));
         Assert.Equal((2, 2), await MetricsAsync(receipt.Id));
         await AssertMetricsMatchTheExecutionsAsync(scope);
+    }
+
+    [Theory]
+    [InlineData(true, null)]
+    [InlineData(false, null)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    public async Task TheReceiptCarriesTheStoredVerdict(bool agent, bool? judged)
+    {
+        var (store, scope, receipt) = await RememberedAsync();
+        var evaluation = judged is { } verdict ? new ReasonletEvaluation(verdict, 0.5, "judge") : (ReasonletEvaluation?)null;
+
+        var result = (await store.AppendExecutionAsync(scope, receipt.Id, new ReasonletOutcome(agent, TimeSpan.Zero, null), Entries.Provenance(), evaluation, Ct)).Value;
+
+        Assert.Equal(judged is null ? ReasonletVerdictSource.Agent : ReasonletVerdictSource.Evaluator, result.Source);
+        Assert.Equal(judged ?? agent, result.Success);
+        Assert.Equal(
+            result.Success,
+            await Entries.ScalarAsync<bool>(fixture.DataSource, "SELECT success FROM mnemosyne.reasonlet_executions WHERE id = $1", result.Execution.Value));
     }
 
     [Fact]
@@ -219,7 +240,7 @@ public sealed class ExecutionTests(PgVectorFixture fixture) : IClassFixture<PgVe
         var (store, scope, receipt) = await RememberedAsync();
         Assert.Equal(await ExecutedAtAsync(receipt.Execution), await LastExecutedAtAsync(receipt.Id));
 
-        var later = (await store.AppendExecutionAsync(scope, receipt.Id, Outcome, Entries.Provenance(), null, Ct)).Value;
+        var later = (await store.AppendExecutionAsync(scope, receipt.Id, Outcome, Entries.Provenance(), null, Ct)).Value.Execution;
 
         var executedAt = await ExecutedAtAsync(later);
         Assert.True(executedAt > await ExecutedAtAsync(receipt.Execution));
@@ -241,7 +262,7 @@ public sealed class ExecutionTests(PgVectorFixture fixture) : IClassFixture<PgVe
             ReasonletCaptureKind.ExecutionOnly,
             (await store.RememberAsync(Entries.Entry(scope, parentId: r.Id, outcome: new ReasonletOutcome(false, TimeSpan.Zero, null), provenance: Subject("a")), Ct)).Value.Kind);
         Assert.Equal((2, 1), await MetricsAsync(r.Id));
-        var bRun = (await store.AppendExecutionAsync(scope, r.Id, new ReasonletOutcome(true, TimeSpan.Zero, null), Subject("b"), null, Ct)).Value;
+        var bRun = (await store.AppendExecutionAsync(scope, r.Id, new ReasonletOutcome(true, TimeSpan.Zero, null), Subject("b"), null, Ct)).Value.Execution;
         Assert.True((await store.AppendExecutionAsync(scope, r.Id, new ReasonletOutcome(true, TimeSpan.Zero, null), Subject("a"), null, Ct)).IsSuccess);
         Assert.Equal((4, 3), await MetricsAsync(r.Id));
         var n = (await store.RememberAsync(Entries.Entry(scope, Entries.Graph("n"), r.Id, provenance: Subject("b")), Ct)).Value;
