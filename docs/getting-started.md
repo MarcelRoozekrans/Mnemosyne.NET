@@ -98,7 +98,7 @@ Mnemosyne reports expected failures as results rather than exceptions. Check a r
 
 ## 5. Remember a procedure
 
-After your agent solves a problem, remember how it did so. The procedure is a graph of steps that ends in an answer.
+After your agent solves a problem, remember how it did so. The procedure is a graph of steps that typically ends in an answer.
 
 ```csharp
 var memory = provider.GetRequiredService<IReasonletMemory>();

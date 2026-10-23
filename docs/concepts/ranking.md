@@ -131,7 +131,13 @@ Recall returns a result, and fails only for a real problem:
 | The intent extractor is down | no error: recall searches every intent instead |
 | Your cancellation token fires | `OperationCanceledException` is thrown |
 
-When the embedding generator or the intent extractor fails, the error never quotes the question or the exception's message, because either could hold user data. Its detail names only the exception type. A store error is different: its detail can carry the database's error message, a SQLSTATE code and the server's message text. That text doesn't include row values unless the host turns on Npgsql's `IncludeErrorDetail` connection setting.
+No error from the facade's own dependencies quotes the question or an exception's message, because either could hold user data:
+
+- **The embedding generator.** If it throws or times out, the error's detail names only the exception type. If it returns no embedding, there is no detail. If its embedding is unusable, the detail gives only the reason, such as a wrong length.
+- **The intent extractor at recall.** A failure is not surfaced at all, because recall searches without an intent filter instead.
+- **The intent extractor at remember.** If it throws or times out, the remember answers `Unavailable` and the detail names only the exception type. If it answers `Unavailable` itself, the remember answers `Unavailable` with no detail, so none of the extractor's own text is passed on.
+
+A store error is different: its detail can carry the database's error message, a SQLSTATE code and the server's message text. That text doesn't include row values unless the host turns on Npgsql's `IncludeErrorDetail` connection setting.
 
 ## Settings
 
