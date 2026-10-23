@@ -149,7 +149,11 @@ The two cases that throw are bugs in an adapter, not runtime conditions. The ext
 
 Remember fails the same way for an invalid capture, for an embedding problem and for an extractor bug. Unlike recall, it has no fallback when the intent extractor is needed and is down: it answers `Unavailable`, so a guessed intent is never stored. Store errors, `Validation` included, come back from both unchanged.
 
-Remember and `RecordExecutionAsync` call the evaluator, when one is registered and the run carries an answer. A judge that is down doesn't fail either call: the run is stored with the agent's own verdict. Any other error code from the judge, or an invalid verdict, is a bug in the adapter, and `InvalidOperationException` is thrown.
+Remember and `RecordExecutionAsync` call the evaluator, when one is registered and the run carries an answer. A judge that is down doesn't fail either call: the run is stored with the agent's own verdict. A judge that takes longer than `MnemosyneOptions.EvaluationTimeout`, 30 seconds by default, is down: the facade cancels the token it passed the judge, so an evaluator must honour it. Any other error code from the judge, or an invalid verdict, is a bug in the adapter, and `InvalidOperationException` is thrown.
+
+An answer that is blank or longer than 32,000 Unicode code points is not judged. It is the agent's own output, so it doesn't fail the call either: the run is stored with the agent's verdict. Remember embeds the question before it calls the judge, so a remember that fails on the embedding never pays for a judge call.
+
+Both calls return the verdict that counted when the run was stored. `RecordExecutionAsync` returns a `ReasonletRunReceipt`, and the receipt from remember carries the same two fields for the run it records: `Source` is `Evaluator` when the judge answered and `Agent` otherwise, and `Success` is that verdict. It is never `Feedback`, because feedback comes later.
 
 No error from the facade's own dependencies quotes the question or an exception's message, because either could hold user data:
 
@@ -162,7 +166,7 @@ A store error is different: its detail can carry the database's error message, a
 
 ## Settings
 
-The ranking settings live in `ReasonletRankingOptions`, set through `MnemosyneOptions.Ranking`. The pool and the intent threshold are on `MnemosyneOptions` itself.
+The ranking settings live in `ReasonletRankingOptions`, set through `MnemosyneOptions.Ranking`. The pool, the intent threshold and the judge's timeout are on `MnemosyneOptions` itself.
 
 ```csharp
 services.AddMnemosyne(new MnemosyneOptions
@@ -182,6 +186,7 @@ services.AddMnemosyne(new MnemosyneOptions
 | `Ranking.FreshnessHalfLife` | 30 days | positive |
 | `CandidatePool` | 20 | 1 to 200 |
 | `MinIntentConfidence` | 0.7 | 0 to 1 |
+| `EvaluationTimeout` | 30 seconds | positive and at most about 49.7 days, or `Timeout.InfiniteTimeSpan` for none |
 
 The three weights must add up to 1, within 1e-9. `AddMnemosyne` checks the options when you register them and throws `ArgumentException` for an invalid value.
 

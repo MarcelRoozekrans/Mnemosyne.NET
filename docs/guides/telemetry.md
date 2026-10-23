@@ -56,7 +56,7 @@ There is one activity per operation, with these tags:
 | Activity | Tags |
 |---|---|
 | `mnemosyne.migrate` | none |
-| `mnemosyne.remember` | on success: `mnemosyne.capture_kind` (`NewReasonlet`, `ExecutionOnly` or `NewVersion`), `mnemosyne.reasonlet.id`, `mnemosyne.reasonlet.version` |
+| `mnemosyne.remember` | on success: `mnemosyne.capture_kind` (`NewReasonlet`, `ExecutionOnly` or `NewVersion`), `mnemosyne.reasonlet.id`, `mnemosyne.reasonlet.version`, and `mnemosyne.verdict_source` of the run it records: `evaluator` when the capture comes with an evaluator's verdict, else `agent` |
 | `mnemosyne.get` | none |
 | `mnemosyne.execution.append` | `mnemosyne.verdict_source`, always: `evaluator` when the run comes with an evaluator's verdict, else `agent` |
 | `mnemosyne.feedback.append` | on success, when the feedback gives a `Worked` verdict: `mnemosyne.verdict_source` `feedback`, whether or not it changes the run's verdict |
@@ -89,7 +89,9 @@ The candidate and returned counts show how much the [cut-off](../concepts/rankin
 | `mnemosyne.evaluation.success` | the judge answered with a valid verdict: its success, a bool |
 | `mnemosyne.evaluation.score` | the judge answered with a valid verdict: its score |
 
-The activity records how the judge call itself ended. A judge that is down, because it threw, timed out or answered `Unavailable`, shows as a failure here, even though the remember or the run record then succeeds with the agent's verdict. A timeout is reported as `Unavailable`. A failed judge call has no verdict to name a judge from, so it carries no `mnemosyne.evaluator` tag, on the activity or on the metrics.
+The activity records how the judge call itself ended. A judge that is down, because it threw, timed out or answered `Unavailable`, shows as a failure here, even though the remember or the run record then succeeds with the agent's verdict. A timeout, whether the judge's own or `MnemosyneOptions.EvaluationTimeout`, is reported as `Unavailable`. A failed judge call has no verdict to name a judge from, so it carries no `mnemosyne.evaluator` tag, on the activity or on the metrics.
+
+An answer that is blank or longer than 32,000 code points is not judged, so no `mnemosyne.evaluate` activity starts for it. With an evaluator registered, it counts once on `mnemosyne.evaluations` with outcome `skipped` and no other tag, and nothing else: no duration and no `evaluate` operation.
 
 ### Failures on an activity
 
@@ -111,7 +113,7 @@ The activity records how the judge call itself ended. A judge that is down, beca
 | `mnemosyne.pruned.executions` | counter, `{execution}` | none | store, for each committed prune batch |
 | `mnemosyne.recall.returned` | histogram, `{match}` | none | facade, on each successful recall |
 | `mnemosyne.recall.empty` | counter, `{recall}` | none | facade, on each successful recall that returned nothing |
-| `mnemosyne.evaluations` | counter, `{evaluation}` | `mnemosyne.evaluator` when the judge answered, `mnemosyne.outcome` | facade, on each judge call |
+| `mnemosyne.evaluations` | counter, `{evaluation}` | `mnemosyne.evaluator` when the judge answered, `mnemosyne.outcome` | facade, on each judge call, and on each answer it skips as unusable |
 | `mnemosyne.evaluation.duration` | histogram, seconds | `mnemosyne.evaluator` when the judge answered | facade, on each judge call |
 
 `mnemosyne.operations` and `mnemosyne.operation.duration` come from both the store and the facade. The two meters share one name and the instruments match exactly, so each aggregates as one instrument, and `recall` and `evaluate` sit next to the store's operations.
@@ -125,6 +127,7 @@ The activity records how the judge call itself ended. A judge that is down, beca
 | `ok` | The operation succeeded. |
 | `Validation`, `NotFound`, `Conflict` or `Unavailable` | The operation answered a failure result with that error code. |
 | `exception` | An exception propagated, cancellation included. |
+| `skipped` | On `mnemosyne.evaluations` only: the answer was blank or too long, so the judge was not called and the run kept the agent's verdict. |
 
 A rising `Conflict` count on `erase` or `prune` means concurrent writes are colliding; both are safe to retry. A rising `Unavailable` count means the database can't serve. On `evaluate`, a rising `Unavailable` or `exception` count means the judge is failing; while it is down, runs are stored with the agent's verdict. A `Validation`, `NotFound` or `Conflict` outcome on `evaluate` means the evaluator adapter has a bug: the facade throws `InvalidOperationException` for it. [Data lifecycle](data-lifecycle.md) and [the store's errors](postgresql.md#errors) explain when each happens.
 

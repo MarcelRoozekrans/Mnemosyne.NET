@@ -49,7 +49,7 @@ Each row of `mnemosyne.reasonlet_executions` keeps every input to the run's verd
 
 A database `CHECK` holds that rule, so `success` can't drift from its inputs. The success counters that ranking reads count the effective success, and feedback that changes it moves them in the same transaction. The run's answer, which only the evaluator sees, is never stored.
 
-The `mnemosyne.execution.append` activity carries `mnemosyne.verdict_source`, `evaluator` or `agent`, and a successful `mnemosyne.feedback.append` that gives a `Worked` verdict carries it as `feedback`.
+The `mnemosyne.execution.append` activity carries `mnemosyne.verdict_source`, `evaluator` or `agent`, and so does a successful `mnemosyne.remember`, for the run it records. A successful `mnemosyne.feedback.append` that gives a `Worked` verdict carries it as `feedback`. The receipts of `AppendExecutionAsync` and `RememberAsync` carry the same source as a `ReasonletVerdictSource`, with the run's effective success.
 
 This package depends on `Mnemosyne.NET.Abstractions` only, so it does not bring in recall. To recall and rank through `IReasonletMemory`, add the core `Mnemosyne.NET` package as well.
 

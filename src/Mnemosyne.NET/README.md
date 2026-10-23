@@ -51,7 +51,7 @@ if (recalled.IsSuccess)
 
 ## Judging runs
 
-By default a run counts as a success when the agent says it worked. Register an `IReasonletEvaluator` and give the run its question and answer, and the evaluator's verdict counts instead. The answer goes to the evaluator and is never stored. A judge that is down doesn't fail the call: the run is stored with the agent's verdict. A person's verdict, recorded with feedback, overrides both.
+By default a run counts as a success when the agent says it worked. Register an `IReasonletEvaluator` and give the run its question and answer, and the evaluator's verdict counts instead. The answer goes to the evaluator and is never stored. A judge that is down, or slower than `MnemosyneOptions.EvaluationTimeout` (30 seconds by default), doesn't fail the call: the run is stored with the agent's verdict. So is a run whose answer is blank or longer than 32,000 code points, which is not judged. The receipt says which verdict counted. A person's verdict, recorded with feedback, overrides both.
 
 ```csharp
 // myEvaluator is your IReasonletEvaluator; register it as a singleton.
@@ -70,10 +70,18 @@ var recorded = await memory.RecordExecutionAsync(
     },
     ct);
 
-// Later, when a person says whether it worked:
 if (recorded.IsSuccess)
 {
-    await memory.RecordFeedbackAsync(scope, recorded.Value, new ReasonletFeedback(Utility: 0.2, Correctness: 0.1, Reusability: 0.5, Worked: false), ct);
+    // Evaluator when the judge answered; Agent when it was down or the answer was not usable.
+    Console.WriteLine($"Run {recorded.Value.Execution}: {recorded.Value.Source} says {recorded.Value.Success}");
+
+    // Later, when a person says whether it worked:
+    var feedback = await memory.RecordFeedbackAsync(
+        scope, recorded.Value.Execution, new ReasonletFeedback(Utility: 0.2, Correctness: 0.1, Reusability: 0.5, Worked: false), ct);
+    if (feedback.IsFailure)
+    {
+        Console.Error.WriteLine($"Feedback failed: {feedback.Error.Code}: {feedback.Error.Message}");
+    }
 }
 ```
 

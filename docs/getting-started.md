@@ -203,10 +203,13 @@ if (recalled.Value is [var best, ..])
     {
         throw new InvalidOperationException($"{recorded.Error.Code}: {recorded.Error.Message}");
     }
+
+    // No evaluator is registered, so the agent's own verdict counts: Source is Agent.
+    Console.WriteLine($"Recorded run {recorded.Value.Execution}: {recorded.Value.Source} says {recorded.Value.Success}");
 }
 ```
 
-The outcome is the agent's own view of the run. To have an `IReasonletEvaluator` judge the run instead, register one and set the run's `Question` and `Answer`. The answer goes to the evaluator and is never stored. A judge that is down doesn't fail the call: the agent's verdict counts. When a person later says whether the run worked, record it with `RecordFeedbackAsync` and `Worked`, which overrides both.
+The outcome is the agent's own view of the run. The result is a receipt: the run's execution id, which feedback needs, and the verdict that counted, its `Source` and `Success`. To have an `IReasonletEvaluator` judge the run instead, register one and set the run's `Question` and `Answer`. The answer goes to the evaluator and is never stored. A judge that is down or times out, or an answer that is blank or longer than 32,000 code points, doesn't fail the call: the agent's verdict counts, and the receipt's `Source` is `Agent`. When a person later says whether the run worked, record it with `RecordFeedbackAsync` and `Worked`, which overrides both.
 
 If the agent changed the procedure and the new one worked better, remember it with `ParentId` set to the recalled Reasonlet's id instead. That stores a new version, which [Versions and lineage](concepts/versions.md) describes.
 
@@ -216,7 +219,7 @@ If the agent changed the procedure and the new one worked better, remember it wi
 dotnet run
 ```
 
-The output shows the stored Reasonlet, then the match with its score. Its similarity depends on the model. Its success rate is 0.583, from one successful run smoothed toward a neutral 0.5, and its freshness is close to 1 because it ran moments ago.
+The output shows the stored Reasonlet, then the match with its score, then the recorded run with the verdict that counted, `Agent` here. Its similarity depends on the model. Its success rate is 0.583, from one successful run smoothed toward a neutral 0.5, and its freshness is close to 1 because it ran moments ago.
 
 Run it a second time and the remember stores another Reasonlet, so recall returns two matches: without a `ParentId`, every capture is a new one.
 
