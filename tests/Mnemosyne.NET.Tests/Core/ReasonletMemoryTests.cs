@@ -15,7 +15,7 @@ public sealed class ReasonletMemoryTests
     private readonly FakeEmbeddingGenerator _generator = new();
 
     private ReasonletMemory Memory(IIntentExtractor? extractor = null, MnemosyneOptions? options = null) =>
-        new(_store, _selector, _generator, extractor, options ?? new MnemosyneOptions(), TimeProvider.System);
+        new(_store, _selector, _generator, extractor, options ?? new MnemosyneOptions());
 
     private static ReasonletCandidate Candidate(double similarity = 0.9) =>
         new(TestData.Definition(), similarity, new ReasonletMetrics(0, 0, null, DateTimeOffset.UnixEpoch));
@@ -36,11 +36,10 @@ public sealed class ReasonletMemoryTests
     public void NullRequiredArgumentsAreRefused()
     {
         var options = new MnemosyneOptions();
-        Assert.Throws<ArgumentNullException>("store", () => new ReasonletMemory(null!, _selector, _generator, null, options, TimeProvider.System));
-        Assert.Throws<ArgumentNullException>("selector", () => new ReasonletMemory(_store, null!, _generator, null, options, TimeProvider.System));
-        Assert.Throws<ArgumentNullException>("embeddings", () => new ReasonletMemory(_store, _selector, null!, null, options, TimeProvider.System));
-        Assert.Throws<ArgumentNullException>("options", () => new ReasonletMemory(_store, _selector, _generator, null, null!, TimeProvider.System));
-        Assert.Throws<ArgumentNullException>("time", () => new ReasonletMemory(_store, _selector, _generator, null, options, null!));
+        Assert.Throws<ArgumentNullException>("store", () => new ReasonletMemory(null!, _selector, _generator, null, options));
+        Assert.Throws<ArgumentNullException>("selector", () => new ReasonletMemory(_store, null!, _generator, null, options));
+        Assert.Throws<ArgumentNullException>("embeddings", () => new ReasonletMemory(_store, _selector, null!, null, options));
+        Assert.Throws<ArgumentNullException>("options", () => new ReasonletMemory(_store, _selector, _generator, null, null!));
     }
 
     [Fact]
@@ -249,19 +248,45 @@ public sealed class ReasonletMemoryTests
     }
 
     [Fact]
-    public async Task GeneratorCancellationAtRecallPropagates()
+    public async Task GeneratorCancellationAtRecallPropagatesWhenTheTokenIsCancelled()
     {
-        _generator.Respond = () => throw new OperationCanceledException();
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
+        _generator.Respond = () => throw new OperationCanceledException(cts.Token);
 
-        await Assert.ThrowsAsync<OperationCanceledException>(async () => await Memory().RecallAsync(TestData.Query(), CancellationToken.None));
+        await Assert.ThrowsAsync<OperationCanceledException>(async () => await Memory().RecallAsync(TestData.Query(), cts.Token));
     }
 
     [Fact]
-    public async Task ExtractorCancellationAtRecallPropagates()
+    public async Task AGeneratorTimeoutAtRecallIsUnavailableWithoutItsMessage()
     {
+        _generator.Respond = () => throw new TaskCanceledException(Secret);
+
+        var result = await Memory().RecallAsync(TestData.Query() with { Question = Secret }, CancellationToken.None);
+
+        AssertUnavailableWithoutMessage(result.Error, nameof(TaskCanceledException));
+        Assert.Equal(0, _store.Calls);
+    }
+
+    [Fact]
+    public async Task ExtractorCancellationAtRecallPropagatesWhenTheTokenIsCancelled()
+    {
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
         var extractor = new FakeIntentExtractor { Respond = () => throw new TaskCanceledException() };
 
-        await Assert.ThrowsAsync<TaskCanceledException>(async () => await Memory(extractor).RecallAsync(TestData.Query(), CancellationToken.None));
+        await Assert.ThrowsAsync<TaskCanceledException>(async () => await Memory(extractor).RecallAsync(TestData.Query(), cts.Token));
+    }
+
+    [Fact]
+    public async Task AnExtractorTimeoutAtRecallIsUnavailableWithoutItsMessage()
+    {
+        var extractor = new FakeIntentExtractor { Respond = () => throw new TaskCanceledException(Secret) };
+
+        var result = await Memory(extractor).RecallAsync(TestData.Query() with { Question = Secret }, CancellationToken.None);
+
+        AssertUnavailableWithoutMessage(result.Error, nameof(TaskCanceledException));
+        Assert.Equal(0, _generator.Calls);
     }
 
     [Fact]
@@ -452,19 +477,45 @@ public sealed class ReasonletMemoryTests
     }
 
     [Fact]
-    public async Task GeneratorCancellationAtRememberPropagates()
+    public async Task GeneratorCancellationAtRememberPropagatesWhenTheTokenIsCancelled()
     {
-        _generator.Respond = () => throw new OperationCanceledException();
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
+        _generator.Respond = () => throw new OperationCanceledException(cts.Token);
 
-        await Assert.ThrowsAsync<OperationCanceledException>(async () => await Memory().RememberAsync(TestData.Capture(), CancellationToken.None));
+        await Assert.ThrowsAsync<OperationCanceledException>(async () => await Memory().RememberAsync(TestData.Capture(), cts.Token));
     }
 
     [Fact]
-    public async Task ExtractorCancellationAtRememberPropagates()
+    public async Task AGeneratorTimeoutAtRememberIsUnavailableWithoutItsMessage()
     {
-        var extractor = new FakeIntentExtractor { Respond = () => throw new OperationCanceledException() };
+        _generator.Respond = () => throw new TaskCanceledException(Secret);
 
-        await Assert.ThrowsAsync<OperationCanceledException>(async () => await Memory(extractor).RememberAsync(TestData.Capture(), CancellationToken.None));
+        var result = await Memory().RememberAsync(TestData.Capture() with { Question = Secret }, CancellationToken.None);
+
+        AssertUnavailableWithoutMessage(result.Error, nameof(TaskCanceledException));
+        Assert.Equal(0, _store.Calls);
+    }
+
+    [Fact]
+    public async Task ExtractorCancellationAtRememberPropagatesWhenTheTokenIsCancelled()
+    {
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
+        var extractor = new FakeIntentExtractor { Respond = () => throw new OperationCanceledException(cts.Token) };
+
+        await Assert.ThrowsAsync<OperationCanceledException>(async () => await Memory(extractor).RememberAsync(TestData.Capture(), cts.Token));
+    }
+
+    [Fact]
+    public async Task AnExtractorTimeoutAtRememberIsUnavailableWithoutItsMessage()
+    {
+        var extractor = new FakeIntentExtractor { Respond = () => throw new TaskCanceledException(Secret) };
+
+        var result = await Memory(extractor).RememberAsync(TestData.Capture() with { Question = Secret }, CancellationToken.None);
+
+        AssertUnavailableWithoutMessage(result.Error, nameof(TaskCanceledException));
+        Assert.Equal(0, _generator.Calls);
     }
 
     [Fact]

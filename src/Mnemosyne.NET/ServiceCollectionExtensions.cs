@@ -45,8 +45,7 @@ public static class ServiceCollectionExtensions
             provider.GetRequiredService<IReasonletSelector>(),
             provider.GetRequiredService<IEmbeddingGenerator<string, Embedding<float>>>(),
             provider.GetService<IIntentExtractor>(),
-            options,
-            provider.GetRequiredService<TimeProvider>()));
+            options));
         return services;
     }
 }

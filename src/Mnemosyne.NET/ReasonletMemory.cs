@@ -11,9 +11,10 @@ namespace Mnemosyne.NET;
 /// <see cref="IReasonletSelector"/>.
 /// </summary>
 /// <remarks>
-/// An exception from the embedding generator or the intent extractor, other than <see cref="OperationCanceledException"/>,
-/// answers <see cref="MnemosyneErrorCode.Unavailable"/>. The error's detail names the exception type but never holds
-/// its message, which can contain the question.
+/// An exception from the embedding generator or the intent extractor answers <see cref="MnemosyneErrorCode.Unavailable"/>,
+/// unless it is an <see cref="OperationCanceledException"/> while the caller's token is cancelled, which propagates. A
+/// cancellation exception while the token is not cancelled is a timeout and answers Unavailable too. The error's detail
+/// names the exception type but never holds its message, which can contain the question.
 /// </remarks>
 public sealed class ReasonletMemory : IReasonletMemory
 {
@@ -40,7 +41,6 @@ public sealed class ReasonletMemory : IReasonletMemory
     /// <param name="embeddings">The generator that embeds questions. It must be the one that made the stored embeddings.</param>
     /// <param name="extractor">The optional intent extractor. Without one, recall searches every intent and remember stores <c>unspecified</c>.</param>
     /// <param name="options">The facade settings. Must be valid.</param>
-    /// <param name="time">The clock, reserved for timing recalls. The facade does not read it yet.</param>
     /// <exception cref="ArgumentNullException">A required argument is null.</exception>
     /// <exception cref="ArgumentException">The options are invalid.</exception>
     public ReasonletMemory(
@@ -48,14 +48,12 @@ public sealed class ReasonletMemory : IReasonletMemory
         IReasonletSelector selector,
         IEmbeddingGenerator<string, Embedding<float>> embeddings,
         IIntentExtractor? extractor,
-        MnemosyneOptions options,
-        TimeProvider time)
+        MnemosyneOptions options)
     {
         ArgumentNullException.ThrowIfNull(store);
         ArgumentNullException.ThrowIfNull(selector);
         ArgumentNullException.ThrowIfNull(embeddings);
         ArgumentNullException.ThrowIfNull(options);
-        ArgumentNullException.ThrowIfNull(time);
         var validation = options.Validate();
         if (validation.IsFailure)
         {
@@ -248,7 +246,7 @@ public sealed class ReasonletMemory : IReasonletMemory
         {
             extracted = await extractor.ExtractAsync(question, ct).ConfigureAwait(false);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex) when (!IsCallerCancellation(ex, ct))
         {
             return DependencyFailed("The intent extractor failed.", ex);
         }
@@ -268,7 +266,7 @@ public sealed class ReasonletMemory : IReasonletMemory
         {
             embeddings = await _embeddings.GenerateAsync([text], options: null, ct).ConfigureAwait(false);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex) when (!IsCallerCancellation(ex, ct))
         {
             return DependencyFailed("The embedding generator failed.", ex);
         }
@@ -295,6 +293,14 @@ public sealed class ReasonletMemory : IReasonletMemory
             }
         }
     }
+
+    /// <summary>
+    /// Returns whether an exception is the caller's cancellation, which propagates. An
+    /// <see cref="OperationCanceledException"/> while <paramref name="ct"/> is not cancelled is a dependency timeout,
+    /// such as <see cref="HttpClient"/>'s <see cref="TaskCanceledException"/>, and maps to Unavailable instead.
+    /// </summary>
+    private static bool IsCallerCancellation(Exception ex, CancellationToken ct) =>
+        ex is OperationCanceledException && ct.IsCancellationRequested;
 
     /// <summary>Maps a dependency's exception to Unavailable, naming its type but dropping its message, which can hold the question.</summary>
     private static MnemosyneError DependencyFailed(string message, Exception ex) =>
