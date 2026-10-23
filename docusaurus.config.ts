@@ -18,6 +18,7 @@ const config: Config = {
   // A broken link is a build failure. Never relax this to 'warn': a green build over broken links
   // is the defect the docs check exists to catch.
   onBrokenLinks: 'throw',
+  onBrokenAnchors: 'throw',
 
   markdown: {
     mermaid: true,

@@ -3,7 +3,7 @@ name: Docs
 # Builds the documentation site on every pull request. A broken link or a dependency drift becomes
 # a red check on the change that caused it, instead of a discovery months later.
 #
-# Publishing happens only on a push to main, to https://marcelroozekrans.github.io/Mnemosyne.NET/.
+# Publishing happens only from main, on a push or a manual run, to https://marcelroozekrans.github.io/Mnemosyne.NET/.
 # A pull request still gets the build as a check, and neither uploads an artifact nor deploys,
 # otherwise any PR could stage what gets published.
 #
@@ -55,11 +55,12 @@ on:
   # commits, so this lets a re-run happen after a flake or a runner outage without an empty commit.
   workflow_dispatch:
 
-# Same shape as ci.yml: without cancel-in-progress, three pushes to a branch queue three complete
-# builds, and the first two are already irrelevant before they start.
+# Pull requests cancel superseded runs: three pushes to a branch would otherwise queue three complete
+# builds, and the first two are already irrelevant. A run on main is never cancelled, so a deploy
+# that has started always finishes.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # This job reads the repository and nothing else. The default is repository-configurable and
 # therefore not a default at all, so it is stated here, the same rule ci.yml follows.
@@ -99,10 +100,10 @@ jobs:
       - name: Build
         run: npm run build
 
-      # Only on a push to main. A pull request build is a check, not a publication: uploading its
+      # On main, for a push or a manual run. A pull request build is a check, not a publication: uploading its
       # output would let any PR stage what the deploy job then publishes.
       - name: Upload the built site
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
         uses: actions/upload-pages-artifact@v5
         with:
           path: build
@@ -111,7 +112,7 @@ jobs:
   # what lets the permissions above stay narrow and what gives GitHub the deployment record.
   deploy:
     needs: build
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
