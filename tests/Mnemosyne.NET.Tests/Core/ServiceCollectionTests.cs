@@ -109,6 +109,22 @@ public sealed class ServiceCollectionTests
     }
 
     [Fact]
+    public async Task RegisteringTwiceGivesTheSelectorAndTheFacadeTheSameOptions()
+    {
+        // The first options would cut a 0.5 match and ask for 5 candidates; the second keep it and ask for 9.
+        var first = new MnemosyneOptions { CandidatePool = 5, Ranking = new ReasonletRankingOptions { MinSimilarity = 0.9 } };
+        var second = new MnemosyneOptions { CandidatePool = 9, Ranking = new ReasonletRankingOptions { MinSimilarity = 0.1 } };
+        _store.SearchResult = ZeroAlloc.Results.Result<IReadOnlyList<ReasonletCandidate>, MnemosyneError>.Success(
+            [new ReasonletCandidate(TestData.Definition(), 0.5, new ReasonletMetrics(0, 0, null, DateTimeOffset.UnixEpoch))]);
+        using var provider = Services().AddMnemosyne(first).AddMnemosyne(second).BuildServiceProvider();
+
+        var result = await provider.GetRequiredService<IReasonletMemory>().RecallAsync(TestData.Query(), CancellationToken.None);
+
+        Assert.Equal(9, _store.Searched!.Value.Limit);
+        Assert.Single(result.Value);
+    }
+
+    [Fact]
     public void InvalidOptionsThrowAtRegistration()
     {
         var error = Assert.Throws<ArgumentException>(

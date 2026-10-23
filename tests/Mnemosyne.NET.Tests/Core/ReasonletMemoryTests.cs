@@ -30,6 +30,16 @@ public sealed class ReasonletMemoryTests
         Assert.DoesNotContain("secret", error.Detail ?? string.Empty, StringComparison.OrdinalIgnoreCase);
     }
 
+    private static MnemosyneError SentinelError(MnemosyneErrorCode code) => new(code, $"extractor said: {Secret}", $"detail: {Secret}");
+
+    private static void AssertRewrappedExtractorFailure(MnemosyneError error)
+    {
+        Assert.Equal(MnemosyneErrorCode.Unavailable, error.Code);
+        Assert.Equal("The intent extractor failed.", error.Message);
+        Assert.DoesNotContain("secret", error.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("secret", error.Detail ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+    }
+
     // ---- Construction ----
 
     [Fact]
@@ -228,13 +238,28 @@ public sealed class ReasonletMemoryTests
     }
 
     [Fact]
-    public async Task AnExtractorErrorAtRecallPassesThrough()
+    public async Task AnUnavailableExtractorAtRecallIsRewrappedWithoutItsText()
     {
-        var extractor = new FakeIntentExtractor { Respond = () => Result<ReasonletIntent, MnemosyneError>.Failure(Unavailable()) };
+        var extractor = new FakeIntentExtractor { Respond = () => Result<ReasonletIntent, MnemosyneError>.Failure(SentinelError(MnemosyneErrorCode.Unavailable)) };
 
         var result = await Memory(extractor).RecallAsync(TestData.Query(), CancellationToken.None);
 
-        Assert.Equal(Unavailable(), result.Error);
+        AssertRewrappedExtractorFailure(result.Error);
+        Assert.Equal(0, _generator.Calls);
+    }
+
+    [Theory]
+    [InlineData(MnemosyneErrorCode.Validation)]
+    [InlineData(MnemosyneErrorCode.NotFound)]
+    [InlineData(MnemosyneErrorCode.Conflict)]
+    public async Task AnyOtherExtractorErrorAtRecallThrows(MnemosyneErrorCode code)
+    {
+        var extractor = new FakeIntentExtractor { Respond = () => Result<ReasonletIntent, MnemosyneError>.Failure(SentinelError(code)) };
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(async () => await Memory(extractor).RecallAsync(TestData.Query(), CancellationToken.None));
+
+        Assert.Contains(code.ToString(), error.Message);
+        Assert.DoesNotContain("secret", error.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(0, _generator.Calls);
     }
 
@@ -399,6 +424,10 @@ public sealed class ReasonletMemoryTests
     }
 
     [Fact]
+    public void ACutThatEndsInWhitespaceIsTrimmed() =>
+        Assert.Equal(new string('a', 199), ReasonletMemory.DefaultName(new string('a', 199) + " b"));
+
+    [Fact]
     public void ALoneSurrogateCountsAsOneCodePoint()
     {
         var name = ReasonletMemory.DefaultName(new string('a', 199) + "\uD800" + "b");
@@ -457,13 +486,28 @@ public sealed class ReasonletMemoryTests
     }
 
     [Fact]
-    public async Task AnExtractorErrorAtRememberPassesThrough()
+    public async Task AnUnavailableExtractorAtRememberIsRewrappedWithoutItsText()
     {
-        var extractor = new FakeIntentExtractor { Respond = () => Result<ReasonletIntent, MnemosyneError>.Failure(Unavailable()) };
+        var extractor = new FakeIntentExtractor { Respond = () => Result<ReasonletIntent, MnemosyneError>.Failure(SentinelError(MnemosyneErrorCode.Unavailable)) };
 
         var result = await Memory(extractor).RememberAsync(TestData.Capture(), CancellationToken.None);
 
-        Assert.Equal(Unavailable(), result.Error);
+        AssertRewrappedExtractorFailure(result.Error);
+        Assert.Equal(0, _store.Calls);
+    }
+
+    [Theory]
+    [InlineData(MnemosyneErrorCode.Validation)]
+    [InlineData(MnemosyneErrorCode.NotFound)]
+    [InlineData(MnemosyneErrorCode.Conflict)]
+    public async Task AnyOtherExtractorErrorAtRememberThrows(MnemosyneErrorCode code)
+    {
+        var extractor = new FakeIntentExtractor { Respond = () => Result<ReasonletIntent, MnemosyneError>.Failure(SentinelError(code)) };
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(async () => await Memory(extractor).RememberAsync(TestData.Capture(), CancellationToken.None));
+
+        Assert.Contains(code.ToString(), error.Message);
+        Assert.DoesNotContain("secret", error.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(0, _store.Calls);
     }
 

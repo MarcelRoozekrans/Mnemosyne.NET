@@ -15,7 +15,7 @@ public interface IReasonletMemory
     /// <item><term>ParentId set and the graph different</term><description>A new version, as a child with lineage. Kind <see cref="ReasonletCaptureKind.NewVersion"/>.</description></item>
     /// </list>
     /// Two concurrent captures with the same parent but different graphs create sibling versions.
-    /// Error codes: <see cref="MnemosyneErrorCode.Validation"/> when the capture breaks an invariant,
+    /// Error codes: <see cref="MnemosyneErrorCode.Validation"/> when the capture breaks an invariant, or when the store rejects the embedding, for example for its length,
     /// <see cref="MnemosyneErrorCode.NotFound"/> when the parent does not exist in the capture's scope (including a parent that exists only in another scope),
     /// <see cref="MnemosyneErrorCode.Conflict"/> when the write loses a race the store detects, such as the parent being erased between lookup and insert,
     /// <see cref="MnemosyneErrorCode.Unavailable"/> when the backing store, the embedding generator or the intent extractor fails.
@@ -29,7 +29,7 @@ public interface IReasonletMemory
     /// <remarks>
     /// A match must have a similarity of at least <see cref="ReasonletQuery.MinSimilarity"/> when that is set.
     /// The result is empty, and still a success, when nothing passes.
-    /// Error codes: <see cref="MnemosyneErrorCode.Validation"/> when the query breaks an invariant,
+    /// Error codes: <see cref="MnemosyneErrorCode.Validation"/> when the query breaks an invariant, or when the store rejects the embedding, for example for its length,
     /// <see cref="MnemosyneErrorCode.Unavailable"/> when the backing store, the embedding generator, the intent extractor or the selector fails.
     /// </remarks>
     /// <param name="query">The query.</param>

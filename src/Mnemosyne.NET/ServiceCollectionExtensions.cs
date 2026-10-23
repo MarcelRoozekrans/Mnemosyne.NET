@@ -38,14 +38,16 @@ public static class ServiceCollectionExtensions
 
         services.AddSingleton(options);
         services.TryAddSingleton(TimeProvider.System);
+        // Both factories resolve the options rather than capture them, so a second AddMnemosyne, whose selector
+        // registration TryAdd skips, cannot leave the selector and the facade with different options.
         services.TryAddSingleton<IReasonletSelector>(provider =>
-            new ReasonletSelector(options.Ranking, provider.GetRequiredService<TimeProvider>()));
+            new ReasonletSelector(provider.GetRequiredService<MnemosyneOptions>().Ranking, provider.GetRequiredService<TimeProvider>()));
         services.AddSingleton<IReasonletMemory>(provider => new ReasonletMemory(
             provider.GetRequiredService<IReasonletStore>(),
             provider.GetRequiredService<IReasonletSelector>(),
             provider.GetRequiredService<IEmbeddingGenerator<string, Embedding<float>>>(),
             provider.GetService<IIntentExtractor>(),
-            options));
+            provider.GetRequiredService<MnemosyneOptions>()));
         return services;
     }
 }

@@ -14,7 +14,9 @@ namespace Mnemosyne.NET;
 /// An exception from the embedding generator or the intent extractor answers <see cref="MnemosyneErrorCode.Unavailable"/>,
 /// unless it is an <see cref="OperationCanceledException"/> while the caller's token is cancelled, which propagates. A
 /// cancellation exception while the token is not cancelled is a timeout and answers Unavailable too. The error's detail
-/// names the exception type but never holds its message, which can contain the question.
+/// names the exception type but never holds its message, which can contain the question. An Unavailable result from the
+/// extractor is rewrapped with a fixed message for the same reason, and any other error code from it throws
+/// <see cref="InvalidOperationException"/>, as an invalid intent does.
 /// </remarks>
 public sealed class ReasonletMemory : IReasonletMemory
 {
@@ -23,6 +25,8 @@ public sealed class ReasonletMemory : IReasonletMemory
 
     /// <summary>The most code points of a name that remember derives from the question.</summary>
     internal const int MaxDefaultNameLength = 200;
+
+    private const string ExtractorFailed = "The intent extractor failed.";
 
     /// <summary>The most candidates recall asks the store for, the upper bound of <see cref="MnemosyneOptions.CandidatePool"/>.</summary>
     private const int MaxSearchLimit = 200;
@@ -74,7 +78,7 @@ public sealed class ReasonletMemory : IReasonletMemory
     /// carries the same resolved intent and name.
     /// </remarks>
     /// <exception cref="ArgumentNullException"><paramref name="capture"/> is null.</exception>
-    /// <exception cref="InvalidOperationException">The intent extractor answered with an invalid intent.</exception>
+    /// <exception cref="InvalidOperationException">The intent extractor answered with an invalid intent or an error code other than Unavailable.</exception>
     public async ValueTask<Result<ReasonletReceipt, MnemosyneError>> RememberAsync(ReasonletCapture capture, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(capture);
@@ -109,7 +113,7 @@ public sealed class ReasonletMemory : IReasonletMemory
     /// larger, and the selector ranks them. A store or selector error is returned unchanged.
     /// </remarks>
     /// <exception cref="ArgumentNullException"><paramref name="query"/> is null.</exception>
-    /// <exception cref="InvalidOperationException">The intent extractor answered with an invalid intent, or the store returned an invalid candidate.</exception>
+    /// <exception cref="InvalidOperationException">The intent extractor answered with an invalid intent or an error code other than Unavailable, or the store returned an invalid candidate.</exception>
     public async ValueTask<Result<IReadOnlyList<ReasonletMatch>, MnemosyneError>> RecallAsync(ReasonletQuery query, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(query);
@@ -182,7 +186,7 @@ public sealed class ReasonletMemory : IReasonletMemory
 
     /// <summary>
     /// Derives a name from a question: its first line that is not blank, trimmed and cut to
-    /// <see cref="MaxDefaultNameLength"/> code points. A cut never splits a surrogate pair.
+    /// <see cref="MaxDefaultNameLength"/> code points, then trimmed again. A cut never splits a surrogate pair.
     /// </summary>
     /// <param name="question">The question. Must not be blank.</param>
     /// <returns>The name, which is never blank.</returns>
@@ -199,7 +203,8 @@ public sealed class ReasonletMemory : IReasonletMemory
             end += consumed;
         }
 
-        return line[..end];
+        // A cut can land just after a space; the trimmed line itself never ends in one.
+        return line[..end].TrimEnd();
     }
 
     private async ValueTask<Result<string?, MnemosyneError>> ResolveRecallIntentAsync(ReasonletQuery query, CancellationToken ct)
@@ -248,10 +253,23 @@ public sealed class ReasonletMemory : IReasonletMemory
         }
         catch (Exception ex) when (!IsCallerCancellation(ex, ct))
         {
-            return DependencyFailed("The intent extractor failed.", ex);
+            return DependencyFailed(ExtractorFailed, ex);
         }
 
-        if (extracted.IsSuccess && extracted.Value.Validate() is { IsFailure: true } invalid)
+        if (extracted.IsFailure)
+        {
+            // The extractor's own text can quote the question, so only its code is kept. The question is valid, so any
+            // code but Unavailable is an adapter bug, and passing it on would pass for an invalid query or capture.
+            if (extracted.Error.Code != MnemosyneErrorCode.Unavailable)
+            {
+                throw new InvalidOperationException(
+                    $"The intent extractor failed with {extracted.Error.Code}; an extractor given a valid question may only fail with {nameof(MnemosyneErrorCode.Unavailable)}.");
+            }
+
+            return new MnemosyneError(MnemosyneErrorCode.Unavailable, ExtractorFailed);
+        }
+
+        if (extracted.Value.Validate() is { IsFailure: true } invalid)
         {
             throw new InvalidOperationException($"The intent extractor returned an invalid intent: {invalid.Error.Message}");
         }
