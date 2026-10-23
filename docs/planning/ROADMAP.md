@@ -71,13 +71,13 @@ Design: [roadmap design](../superpowers/specs/2026-10-21-roadmap-design.md), bui
 **Goal:** `IReasonletEvaluator` and an explicit feedback API that takes precedence over automatic scoring.
 **Surface:** Backend
 **HelpWanted:** no
-**Plan:** _to be written_
+**Plan:** `docs/superpowers/plans/2026-10-23-phase-2.1-evaluator-contract.md`
 
 ### Phase 2.2: Minos.NET evaluator [status: active]
 **Goal:** The default evaluator: it judges question, procedure and answer through Minos.NET's typed, calibrated decision questions, so a verdict needs no reply parsing. Decided 2026-10-23: Minos first, the chat judge after.
 **Surface:** Backend
 **HelpWanted:** no
-**Plan:** _to be written_
+**Plan:** `docs/superpowers/plans/2026-10-23-phase-2.2-minos-evaluator.md`
 
 ### Phase 2.3: LLM-as-judge evaluator [status: pending]
 **Goal:** An evaluator that judges through an `IChatClient`, for hosts without a decision-model provider. A reply it can't parse counts as the judge being down.
