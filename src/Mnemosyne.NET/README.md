@@ -39,7 +39,9 @@ The host still runs `MigrateAsync` on the store at startup; see the [PostgreSQL 
 - the default `IReasonletSelector`, built from `MnemosyneOptions.Ranking`;
 - `TimeProvider.System`.
 
-`AddMnemosyne` does not register a store or an embedding generator: the container must also hold an `IReasonletStore` and an `IEmbeddingGenerator<string, Embedding<float>>`, or the first resolve of `IReasonletMemory` throws `InvalidOperationException`. The selector and the clock are added only when the host has not registered its own, so you can replace either. An `IIntentExtractor` is optional: register one and the facade uses it. Call `AddMnemosyne()` with no argument for the defaults.
+`AddMnemosyne` does not register a store or an embedding generator: the container must also hold an `IReasonletStore` and an `IEmbeddingGenerator<string, Embedding<float>>`, or the first resolve of `IReasonletMemory` throws `InvalidOperationException`.
+
+**Register them as singletons.** The facade is a singleton, and it resolves the store, the embedding generator, the intent extractor and any selector you register into itself once, for the life of the container. A scoped registration of any of them fails under scope validation, which ASP.NET Core turns on in Development, and a transient one is captured for good anyway. The selector and the clock are added only when the host has not registered its own, so you can replace either. An `IIntentExtractor` is optional: register one and the facade uses it. Call `AddMnemosyne()` with no argument for the defaults.
 
 The options are passed as an object, not a configure delegate, because their members are init-only. They are validated when you register, and `AddMnemosyne` throws `ArgumentException` for a bad value.
 

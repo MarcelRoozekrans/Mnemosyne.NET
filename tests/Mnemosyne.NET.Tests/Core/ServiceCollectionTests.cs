@@ -125,6 +125,42 @@ public sealed class ServiceCollectionTests
     }
 
     [Fact]
+    public void AMissingStoreThrowsOnResolve()
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton<IEmbeddingGenerator<string, Embedding<float>>>(new FakeEmbeddingGenerator());
+        using var provider = services.AddMnemosyne().BuildServiceProvider();
+
+        var error = Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<IReasonletMemory>());
+
+        Assert.Contains(nameof(IReasonletStore), error.Message);
+    }
+
+    [Fact]
+    public void AMissingEmbeddingGeneratorThrowsOnResolve()
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton<IReasonletStore>(_store);
+        using var provider = services.AddMnemosyne().BuildServiceProvider();
+
+        var error = Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<IReasonletMemory>());
+
+        Assert.Contains("IEmbeddingGenerator", error.Message);
+    }
+
+    [Fact]
+    public void AScopedEmbeddingGeneratorFailsUnderScopeValidation()
+    {
+        // The facade is a singleton, so whatever it resolves must be one too.
+        var services = new ServiceCollection();
+        services.AddSingleton<IReasonletStore>(_store);
+        services.AddScoped<IEmbeddingGenerator<string, Embedding<float>>, FakeEmbeddingGenerator>();
+        using var provider = services.AddMnemosyne().BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
+
+        Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<IReasonletMemory>());
+    }
+
+    [Fact]
     public void InvalidOptionsThrowAtRegistration()
     {
         var error = Assert.Throws<ArgumentException>(
