@@ -102,8 +102,9 @@ public sealed class ReasonletSelectorTests
     [Fact]
     public async Task EqualTotalsFallBackToSimilarity()
     {
-        // total = 1.0 * successRate-free weights: similarity 0.5 / freshness 0.5, stale (similarity 1.0, freshness 0.5)
-        // = 0.75 against fresh (similarity 0.5, freshness 1.0) = 0.75.
+        // The success rate has no weight here, so only similarity and freshness count, each at 0.5.
+        // The stale candidate scores 0.5 * 1.0 + 0.5 * 0.5 = 0.75 (one half-life old, so freshness 0.5).
+        // The fresh candidate scores 0.5 * 0.5 + 0.5 * 1.0 = 0.75. The totals tie, so higher similarity wins.
         var options = new ReasonletRankingOptions { SimilarityWeight = 0.5, SuccessRateWeight = 0.0, FreshnessWeight = 0.5 };
         var stale = Candidate(1.0, Metrics(0, 0, Now - TimeSpan.FromDays(30)));
         var fresh = Candidate(0.5, Metrics(0, 0, Now));
