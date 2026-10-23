@@ -25,7 +25,7 @@ Question → Procedure → Answer
 | **Status** | `Active` or `PendingReview`. |
 | **Runs** | How often it ran and how often that succeeded, and when it last ran. |
 
-You don't build a Reasonlet directly. You hand `RememberAsync` a `ReasonletCapture`, which holds the scope, question, graph, the outcome of the run and the provenance, and optionally a name, an intent and a parent. Mnemosyne fills in the rest and returns a receipt with the Reasonlet's id, its version and what the capture produced.
+You don't build a Reasonlet directly. You hand `RememberAsync` a `ReasonletCapture`, which holds the scope, question, graph, the outcome of the run and the provenance, and optionally a name, an intent, a parent and an answer. The answer, the run's final reply, is there only so a registered `IReasonletEvaluator` can judge the run the capture records; it is never stored. Mnemosyne fills in the rest and returns a receipt with the Reasonlet's id, its version and what the capture produced.
 
 ## The graph
 

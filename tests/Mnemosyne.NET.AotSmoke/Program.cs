@@ -243,13 +243,19 @@ static async Task<int> PostgreSqlSmoke(string connectionString, ReasonletGraph g
         return 27;
     }
 
+    if (!activityNames.Contains("mnemosyne.evaluate"))
+    {
+        Console.Error.WriteLine("No activity was captured for: mnemosyne.evaluate");
+        return 32;
+    }
+
     // The judged run and the human verdict on it, as the store tagged them.
     string[] expectedSources = ["mnemosyne.execution.append=evaluator", "mnemosyne.feedback.append=feedback"];
     var missingSources = expectedSources.Where(source => !verdictSources.Contains(source)).ToArray();
-    if (!activityNames.Contains("mnemosyne.evaluate") || missingSources.Length > 0)
+    if (missingSources.Length > 0)
     {
-        Console.Error.WriteLine($"Evaluation telemetry is missing: evaluate activity {activityNames.Contains("mnemosyne.evaluate")}, verdict sources {string.Join(", ", missingSources)}");
-        return 32;
+        Console.Error.WriteLine($"No verdict source tag was captured for: {string.Join(", ", missingSources)}");
+        return 33;
     }
 
     if (Volatile.Read(ref measurements) == 0)

@@ -54,7 +54,7 @@ if (recalled.IsSuccess)
 By default a run counts as a success when the agent says it worked. Register an `IReasonletEvaluator` and give the run its question and answer, and the evaluator's verdict counts instead. The answer goes to the evaluator and is never stored. A judge that is down doesn't fail the call: the run is stored with the agent's verdict. A person's verdict, recorded with feedback, overrides both.
 
 ```csharp
-// myEvaluator is your IReasonletEvaluator, registered as a singleton like the facade.
+// myEvaluator is your IReasonletEvaluator; register it as a singleton.
 services.AddSingleton<IReasonletEvaluator>(myEvaluator);
 
 // After the agent follows a recalled Reasonlet:

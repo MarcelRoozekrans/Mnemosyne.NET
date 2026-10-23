@@ -126,7 +126,7 @@ The activity records how the judge call itself ended. A judge that is down, beca
 | `Validation`, `NotFound`, `Conflict` or `Unavailable` | The operation answered a failure result with that error code. |
 | `exception` | An exception propagated, cancellation included. |
 
-A rising `Conflict` count on `erase` or `prune` means concurrent writes are colliding; both are safe to retry. A rising `Unavailable` count means the database can't serve. On `evaluate`, a rising `Unavailable` or `exception` count means the judge is failing; while it is down, runs are stored with the agent's verdict. [Data lifecycle](data-lifecycle.md) and [the store's errors](postgresql.md#errors) explain when each happens.
+A rising `Conflict` count on `erase` or `prune` means concurrent writes are colliding; both are safe to retry. A rising `Unavailable` count means the database can't serve. On `evaluate`, a rising `Unavailable` or `exception` count means the judge is failing; while it is down, runs are stored with the agent's verdict. A `Validation`, `NotFound` or `Conflict` outcome on `evaluate` means the evaluator adapter has a bug: the facade throws `InvalidOperationException` for it. [Data lifecycle](data-lifecycle.md) and [the store's errors](postgresql.md#errors) explain when each happens.
 
 ## Privacy
 
