@@ -531,9 +531,10 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
     /// flips, the Reasonlet's counters follow in the same transaction: <c>successes</c> moves by one, a raised success
     /// moves <c>last_success_at</c> forward to the run's time when that is later, and a lost success that held
     /// <c>last_success_at</c> recomputes it from the remaining successes, or clears it when none remains. Pruned runs
-    /// stay in <c>successes</c>, so <c>last_success_at</c> can be null while <c>successes</c> is above zero. Feedback that
-    /// flips the effective success tags its <c>mnemosyne.feedback.append</c> activity with <c>mnemosyne.verdict_source</c>
-    /// <c>feedback</c>.
+    /// stay in <c>successes</c>, so <c>last_success_at</c> can be null while <c>successes</c> is above zero. Recorded feedback
+    /// that gives a <c>Worked</c> verdict tags its <c>mnemosyne.feedback.append</c> activity with
+    /// <c>mnemosyne.verdict_source</c> <c>feedback</c>, whether or not it flips the effective success, so a human override
+    /// that agrees with the judge shows too; feedback with <c>Worked</c> null, or that fails, is not tagged.
     /// </para>
     /// <para>
     /// One READ COMMITTED transaction of separate statements, so each step sees what committed while an earlier one
@@ -594,13 +595,13 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
             return error;
         }
 
-        var changed = await GuardAsync(AppendFeedbackCoreAsync(scope, execution, feedback, ct)).ConfigureAwait(false);
-        if (changed.IsFailure)
+        var recorded = await GuardAsync(AppendFeedbackCoreAsync(scope, execution, feedback, ct)).ConfigureAwait(false);
+        if (recorded.IsFailure)
         {
-            return changed.Error;
+            return recorded.Error;
         }
 
-        if (changed.Value)
+        if (feedback.Worked is not null)
         {
             StoreTelemetry.FeedbackVerdictSource(activity);
         }
@@ -608,7 +609,6 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
         return UnitResult<MnemosyneError>.Success();
     }
 
-    /// <summary>Records the feedback and answers whether it changed the run's effective success.</summary>
     private async Task<Result<bool, MnemosyneError>> AppendFeedbackCoreAsync(
         ReasonletScope scope, ExecutionId execution, ReasonletFeedback feedback, CancellationToken ct)
     {
@@ -639,7 +639,7 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
         }
 
         await transaction.CommitAsync(ct).ConfigureAwait(false);
-        return after != before;
+        return true;
     }
 
     private static MnemosyneError? ValidateScope(ReasonletScope scope) => ValidateNested(scope.Validate(), nameof(scope));

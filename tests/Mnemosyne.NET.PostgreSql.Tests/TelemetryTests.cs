@@ -156,25 +156,30 @@ public sealed class TelemetryTests(PgVectorFixture fixture) : IClassFixture<PgVe
     }
 
     [Fact]
-    public async Task FeedbackThatChangesTheVerdictHasVerdictSourceFeedback()
+    public async Task FeedbackThatGivesAVerdictHasVerdictSourceFeedback()
     {
         var store = await MigratedStoreAsync();
         var scope = PgVectorFixture.NewScope();
         var receipt = (await store.RememberAsync(Entries.Entry(scope), Ct)).Value;
         using var capture = new TelemetryCapture();
 
-        // The run succeeded, so agreeing with it changes nothing, overruling it does, and repeating that changes nothing.
+        // The run succeeded. Agreeing with it, overruling it and repeating the overrule each give a verdict, so each is
+        // tagged whether or not it flips the effective success; a scores-only update and a failed call give none.
         Assert.True((await store.AppendFeedbackAsync(scope, receipt.Execution, Feedback with { Worked = true }, Ct)).IsSuccess);
         Assert.True((await store.AppendFeedbackAsync(scope, receipt.Execution, Feedback with { Worked = false }, Ct)).IsSuccess);
         Assert.True((await store.AppendFeedbackAsync(scope, receipt.Execution, Feedback with { Worked = false }, Ct)).IsSuccess);
         Assert.True((await store.AppendFeedbackAsync(scope, receipt.Execution, Feedback, Ct)).IsSuccess);
+        var missing = await store.AppendFeedbackAsync(scope, ExecutionId.New(), Feedback with { Worked = true }, Ct);
 
+        Assert.Equal(MnemosyneErrorCode.NotFound, missing.Error.Code);
         var activities = capture.Activities;
-        Assert.Equal(4, activities.Count);
-        Assert.Empty(AllTags(activities[0]));
-        Assert.Equal([new("mnemosyne.verdict_source", "feedback")], AllTags(activities[1]));
-        Assert.Empty(AllTags(activities[2]));
+        Assert.Equal(5, activities.Count);
+        KeyValuePair<string, object?>[] tagged = [new("mnemosyne.verdict_source", "feedback")];
+        Assert.Equal(tagged, AllTags(activities[0]));
+        Assert.Equal(tagged, AllTags(activities[1]));
+        Assert.Equal(tagged, AllTags(activities[2]));
         Assert.Empty(AllTags(activities[3]));
+        Assert.Equal([new("error.type", "NotFound")], AllTags(activities[4]));
     }
 
     [Fact]

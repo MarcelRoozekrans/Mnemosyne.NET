@@ -169,7 +169,10 @@ internal static class StoreTelemetry
     internal static void ExecutionVerdictSource(Activity? activity, bool evaluated) =>
         activity?.SetTag(VerdictSourceTag, evaluated ? "evaluator" : "agent");
 
-    /// <summary>Tags feedback that changed the run's effective success with verdict source <c>feedback</c>.</summary>
+    /// <summary>
+    /// Tags recorded feedback that gave a <c>Worked</c> verdict with verdict source <c>feedback</c>, whether or not it
+    /// flipped the run's effective success.
+    /// </summary>
     internal static void FeedbackVerdictSource(Activity? activity) => activity?.SetTag(VerdictSourceTag, "feedback");
 
     /// <summary>Tags a search with its limit, before it runs, so a failed search has it too.</summary>

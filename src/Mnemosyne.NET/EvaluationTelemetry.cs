@@ -20,7 +20,10 @@ namespace Mnemosyne.NET;
 /// </para>
 /// <para>
 /// No signal carries the question, the answer, or any error or exception message. The judge's name, which the
-/// evaluator contract limits to naming the judge, is tagged only from an evaluation that passed validation.
+/// evaluator contract limits to naming the judge, is tagged only from an evaluation that passed validation. A failed
+/// judge call, whether it was unavailable, timed out, threw, answered another error code or returned an invalid
+/// evaluation, has no name to tag, so its activity, its <c>mnemosyne.evaluations</c> count and its
+/// <c>mnemosyne.evaluation.duration</c> carry no <c>mnemosyne.evaluator</c> tag.
 /// </para>
 /// </remarks>
 internal sealed class EvaluationTelemetry : IDisposable

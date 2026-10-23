@@ -38,7 +38,8 @@ namespace Mnemosyne.NET;
 /// <para>
 /// Each judge call emits a <c>mnemosyne.evaluate</c> activity, tagged with the judge's name, success and score when it
 /// answered, and counts and times itself on <c>mnemosyne.evaluations</c> and <c>mnemosyne.evaluation.duration</c> and
-/// under operation <c>evaluate</c>. A judge that is down shows there as a failure, though the call itself succeeds.
+/// under operation <c>evaluate</c>. A judge that is down shows there as a failure, though the call itself succeeds. A
+/// failed judge call has no name to tag, so its signals carry no <c>mnemosyne.evaluator</c> tag.
 /// </para>
 /// </remarks>
 public sealed class ReasonletMemory : IReasonletMemory
