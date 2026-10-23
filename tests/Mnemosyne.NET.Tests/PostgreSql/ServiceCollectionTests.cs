@@ -3,6 +3,7 @@ using Mnemosyne.NET.Abstractions;
 using Mnemosyne.NET.PostgreSql;
 using Npgsql;
 using Xunit;
+using PostgreSqlRegistration = Mnemosyne.NET.PostgreSql.ServiceCollectionExtensions;
 
 namespace Mnemosyne.NET.Tests.PostgreSql;
 
@@ -41,7 +42,7 @@ public sealed class ServiceCollectionTests : IAsyncDisposable
     [Fact]
     public void NullArgumentsAreRefused()
     {
-        Assert.Throws<ArgumentNullException>(() => ServiceCollectionExtensions.AddMnemosynePostgreSql(null!, new MnemosynePostgreSqlOptions { Dimensions = 3 }));
+        Assert.Throws<ArgumentNullException>(() => PostgreSqlRegistration.AddMnemosynePostgreSql(null!, new MnemosynePostgreSqlOptions { Dimensions = 3 }));
         Assert.Throws<ArgumentNullException>(() => new ServiceCollection().AddMnemosynePostgreSql(null!));
     }
 

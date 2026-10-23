@@ -18,7 +18,7 @@ public interface IReasonletMemory
     /// Error codes: <see cref="MnemosyneErrorCode.Validation"/> when the capture breaks an invariant,
     /// <see cref="MnemosyneErrorCode.NotFound"/> when the parent does not exist in the capture's scope (including a parent that exists only in another scope),
     /// <see cref="MnemosyneErrorCode.Conflict"/> when the write loses a race the store detects, such as the parent being erased between lookup and insert,
-    /// <see cref="MnemosyneErrorCode.Unavailable"/> when the backing store or the embedding generator fails.
+    /// <see cref="MnemosyneErrorCode.Unavailable"/> when the backing store, the embedding generator or the intent extractor fails.
     /// </remarks>
     /// <param name="capture">The capture to store.</param>
     /// <param name="ct">The cancellation token.</param>
