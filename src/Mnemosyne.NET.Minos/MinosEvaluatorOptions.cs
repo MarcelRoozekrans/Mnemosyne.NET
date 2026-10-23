@@ -9,8 +9,6 @@ namespace Mnemosyne.NET.Minos;
 /// <summary>Settings for <see cref="MinosReasonletEvaluator"/>.</summary>
 public sealed class MinosEvaluatorOptions
 {
-    private const int MaxEvaluatorNameLength = 100;
-
     /// <summary>
     /// Gets the probability from which a run counts as a success, in [0, 1]. Defaults to 0.5, the cut-off of Minos's own
     /// <c>Noul.Value</c>.
@@ -39,7 +37,7 @@ public sealed class MinosEvaluatorOptions
         () => CodePoints(EvaluatorName) switch
         {
             < 0 => Check.Fail(nameof(EvaluatorName), "must be valid UTF-16"),
-            > MaxEvaluatorNameLength => Check.Fail(nameof(EvaluatorName), $"must not be longer than {MaxEvaluatorNameLength} code points"),
+            > EvaluationLimits.MaxEvaluatorLength => Check.Fail(nameof(EvaluatorName), $"must not be longer than {EvaluationLimits.MaxEvaluatorLength} code points"),
             _ => UnitResult<MnemosyneError>.Success(),
         });
 

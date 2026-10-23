@@ -1,7 +1,7 @@
 namespace Mnemosyne.NET.Abstractions;
 
-/// <summary>The size limits of the text an evaluator judges and of the verdict it returns.</summary>
-internal static class EvaluationLimits
+/// <summary>The size limits of the text an evaluator judges and of the verdict it returns, public so an evaluator package can validate against the same bounds.</summary>
+public static class EvaluationLimits
 {
     /// <summary>
     /// The most code points a run's question may hold, and an answer may hold to be judged: a longer answer is stored
