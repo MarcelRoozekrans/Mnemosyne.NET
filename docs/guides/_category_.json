@@ -3,6 +3,6 @@
   "position": 5,
   "link": {
     "type": "generated-index",
-    "description": "Running Mnemosyne in production: setting up the PostgreSQL store, erasing and pruning data, and wiring up telemetry."
+    "description": "Running Mnemosyne in production: setting up the PostgreSQL store, erasing and pruning data, judging runs with Minos, and wiring up telemetry."
   }
 }

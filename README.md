@@ -2,6 +2,7 @@
 
 [![NuGet](https://img.shields.io/nuget/v/Mnemosyne.NET.svg?logo=nuget&label=Mnemosyne.NET)](https://www.nuget.org/packages/Mnemosyne.NET)
 [![CI](https://img.shields.io/github/actions/workflow/status/MarcelRoozekrans/Mnemosyne.NET/ci.yml?branch=main&logo=github&label=build)](https://github.com/MarcelRoozekrans/Mnemosyne.NET/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/MarcelRoozekrans/Mnemosyne.NET/graph/badge.svg)](https://codecov.io/gh/MarcelRoozekrans/Mnemosyne.NET)
 [![Docs](https://img.shields.io/github/actions/workflow/status/MarcelRoozekrans/Mnemosyne.NET/docs.yml?branch=main&logo=readthedocs&label=docs)](https://marcelroozekrans.github.io/Mnemosyne.NET/)
 [![License](https://img.shields.io/github/license/MarcelRoozekrans/Mnemosyne.NET)](LICENSE)
 
@@ -12,13 +13,14 @@ Documentation: <https://marcelroozekrans.github.io/Mnemosyne.NET/>
 
 - [Getting started](https://marcelroozekrans.github.io/Mnemosyne.NET/getting-started) and the [store-and-recall sample](https://marcelroozekrans.github.io/Mnemosyne.NET/samples)
 - [Concepts](https://marcelroozekrans.github.io/Mnemosyne.NET/category/concepts): Reasonlets, versions, scopes and subjects, ranking
-- [Guides](https://marcelroozekrans.github.io/Mnemosyne.NET/category/guides): the PostgreSQL store, data lifecycle, telemetry
+- [Guides](https://marcelroozekrans.github.io/Mnemosyne.NET/category/guides): the PostgreSQL store, data lifecycle, judging runs with Minos, telemetry
 
 | Package | What it holds |
 |---|---|
 | [`Mnemosyne.NET.Abstractions`](src/Mnemosyne.NET.Abstractions/README.md) | The records and the interfaces |
 | [`Mnemosyne.NET`](src/Mnemosyne.NET/README.md) | The default facade and ranking |
 | [`Mnemosyne.NET.PostgreSql`](src/Mnemosyne.NET.PostgreSql/README.md) | The PostgreSQL and pgvector store |
+| [`Mnemosyne.NET.Minos`](src/Mnemosyne.NET.Minos/README.md) | A run evaluator that asks a Minos.NET decision model |
 
 Part of the same family as [Minos.NET](https://github.com/MarcelRoozekrans/Minos.NET)
 (decisions), [Rag.NET](https://github.com/MarcelRoozekrans/Rag.NET) (knowledge),
