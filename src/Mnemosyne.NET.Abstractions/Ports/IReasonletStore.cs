@@ -62,6 +62,10 @@ public interface IReasonletStore
     /// Returns only <see cref="ReasonletStatus.Active"/> Reasonlets, never <see cref="ReasonletStatus.PendingReview"/> ones.
     /// Each candidate's <see cref="ReasonletCandidate.Similarity"/> must be <c>max(0, 1 - cosine distance)</c>,
     /// which is in [0, 1] and matches pgvector's <c>&lt;=&gt;</c> cosine distance operator.
+    /// Each candidate must also carry <see cref="ReasonletMetrics.LastExecutedAt"/> in its <see cref="ReasonletCandidate.Metrics"/>,
+    /// and <see cref="ReasonletCandidate.ParentMetrics"/> when the Reasonlet has a parent in its scope, null otherwise.
+    /// The default selector ranks on both: a store that leaves <c>ParentMetrics</c> null disables inheritance, and one that
+    /// leaves <c>LastExecutedAt</c> at its default makes every candidate's freshness zero.
     /// Error codes: <see cref="MnemosyneErrorCode.Validation"/> when the limit is not positive or an argument breaks another invariant, such as a <c>default</c> scope,
     /// <see cref="MnemosyneErrorCode.Unavailable"/> when the backing store fails.
     /// </remarks>
