@@ -1,5 +1,8 @@
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
+using Microsoft.Extensions.AI;
+using Microsoft.Extensions.DependencyInjection;
+using Mnemosyne.NET;
 using Mnemosyne.NET.Abstractions;
 using Mnemosyne.NET.PostgreSql;
 using Npgsql;
@@ -210,6 +213,12 @@ static async Task<int> PostgreSqlSmoke(string connectionString, ReasonletGraph g
         }
     }
 
+    var facade = await FacadeSmoke(dataSource, graph, ct);
+    if (facade != 0)
+    {
+        return facade;
+    }
+
     // Every operation above stopped an activity, and the prune and erase among them: check the names, not just a count.
     string[] expected = ["mnemosyne.migrate", "mnemosyne.remember", "mnemosyne.search", "mnemosyne.erase", "mnemosyne.prune"];
     var missing = expected.Where(name => !activityNames.Contains(name)).ToArray();
@@ -217,6 +226,12 @@ static async Task<int> PostgreSqlSmoke(string connectionString, ReasonletGraph g
     {
         Console.Error.WriteLine($"No activity was captured for: {string.Join(", ", missing)}");
         return 21;
+    }
+
+    if (!activityNames.Contains("mnemosyne.recall"))
+    {
+        Console.Error.WriteLine("No activity was captured for: mnemosyne.recall");
+        return 27;
     }
 
     if (Volatile.Read(ref measurements) == 0)
@@ -227,4 +242,72 @@ static async Task<int> PostgreSqlSmoke(string connectionString, ReasonletGraph g
 
     Console.WriteLine($"PostgreSQL smoke passed ({activityNames.Count} activities, {measurements} measurements captured).");
     return 0;
+}
+
+// The facade as a host wires it: the store from AddMnemosynePostgreSql, an embedding generator, and AddMnemosyne, all
+// resolved from a container under native AOT. It remembers, recalls the same question and erases its own scope.
+static async Task<int> FacadeSmoke(NpgsqlDataSource dataSource, ReasonletGraph graph, CancellationToken ct)
+{
+    var services = new ServiceCollection();
+    services.AddSingleton(dataSource);
+    services.AddSingleton<IEmbeddingGenerator<string, Embedding<float>>>(new FixedEmbeddingGenerator());
+    services.AddMnemosynePostgreSql(new MnemosynePostgreSqlOptions { Dimensions = 3 });
+    services.AddMnemosyne();
+    await using var provider = services.BuildServiceProvider();
+
+    var migrated = await provider.GetRequiredService<ReasonletPostgreSqlStore>().MigrateAsync(ct);
+    if (migrated.IsFailure)
+    {
+        Console.Error.WriteLine($"Migrate through the container failed: {migrated.Error.Message}");
+        return 23;
+    }
+
+    var memory = provider.GetRequiredService<IReasonletMemory>();
+    var scope = new ReasonletScope($"aot-facade-{Guid.NewGuid():N}");
+    const string question = "How do I search through the facade?";
+    var remembered = await memory.RememberAsync(
+        new ReasonletCapture
+        {
+            Scope = scope,
+            Question = question,
+            Graph = graph,
+            Outcome = new ReasonletOutcome(true, TimeSpan.FromMilliseconds(5), null),
+            Provenance = new ReasonletProvenance { Source = "aot-smoke" },
+        },
+        ct);
+    if (remembered.IsFailure || remembered.Value.Kind != ReasonletCaptureKind.NewReasonlet)
+    {
+        Console.Error.WriteLine($"Remember through the facade failed: {(remembered.IsFailure ? remembered.Error.Message : remembered.Value.Kind.ToString())}");
+        return 24;
+    }
+
+    var recalled = await memory.RecallAsync(new ReasonletQuery { Scope = scope, Question = question }, ct);
+    if (recalled.IsFailure || recalled.Value.Count != 1 || recalled.Value[0].Reasonlet.Id != remembered.Value.Id)
+    {
+        Console.Error.WriteLine($"Recall did not return the remembered Reasonlet: {(recalled.IsFailure ? recalled.Error.Message : $"{recalled.Value.Count} matches")}");
+        return 25;
+    }
+
+    var erased = await memory.EraseAsync(new ReasonletErasure(scope, null), ct);
+    if (erased.IsFailure || erased.Value.Reasonlets != 1 || erased.Value.Executions != 1)
+    {
+        Console.Error.WriteLine($"Erase through the facade failed: {(erased.IsFailure ? erased.Error.Message : $"{erased.Value.Reasonlets} Reasonlets, {erased.Value.Executions} executions deleted")}");
+        return 26;
+    }
+
+    return 0;
+}
+
+/// <summary>An embedding generator that embeds every text as the same 3-dimension vector.</summary>
+internal sealed class FixedEmbeddingGenerator : IEmbeddingGenerator<string, Embedding<float>>
+{
+    public Task<GeneratedEmbeddings<Embedding<float>>> GenerateAsync(
+        IEnumerable<string> values, EmbeddingGenerationOptions? options = null, CancellationToken cancellationToken = default) =>
+        Task.FromResult(new GeneratedEmbeddings<Embedding<float>>(values.Select(_ => new Embedding<float>(new float[] { 1f, 0f, 0f }))));
+
+    public object? GetService(Type serviceType, object? serviceKey = null) => null;
+
+    public void Dispose()
+    {
+    }
 }
