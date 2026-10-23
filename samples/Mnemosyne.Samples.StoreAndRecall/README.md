@@ -42,7 +42,7 @@ Recall ranks by 0.5 × similarity + 0.3 × success rate + 0.2 × freshness:
 
 - **Success rate** is smoothed: (successes + 5 × prior) / (runs + 5). The original's prior is 0.5, so 20 of 20 gives 22.5 / 25 = 0.900.
 - **A new version inherits its parent's record** as its prior: max(0.900, 0.5) = 0.900. Its one successful run gives (1 + 4.5) / 6 = 0.917, so it ranks just above the original it refines.
-- **The close match** shares the most words with the question, but its 5-of-10 record ranks it last.
+- **The close match** scores the highest similarity, but its 5-of-10 record ranks it last.
 - **Freshness** is 1.000 because every procedure ran moments ago.
 
 The [Mnemosyne.NET README](../../src/Mnemosyne.NET/README.md#ranking) explains the ranking in full.
@@ -51,20 +51,25 @@ The [Mnemosyne.NET README](../../src/Mnemosyne.NET/README.md#ranking) explains t
 
 `HashingEmbeddingGenerator` lets the sample run offline. It lowercases the text, splits it into words, hashes each word into one of 256 buckets and normalises the result. It is deterministic, so the ranking check is stable, but **it is not a real model**: it sees only shared words. "Refund an order" and "return a purchase" look unrelated to it. Do not judge recall quality by it.
 
-In an application, register a real model through Microsoft.Extensions.AI and set `Dimensions` to the model's output size. With [Ollama](https://ollama.com) and the OllamaSharp package:
+In an application, register a real model through Microsoft.Extensions.AI and set `Dimensions` to the model's output size. With [Ollama](https://ollama.com) and the OllamaSharp package, whose `OllamaApiClient` is an embedding generator:
 
 ```csharp
+using OllamaSharp;
+
 // ollama pull nomic-embed-text; it returns 768 dimensions.
 services.AddSingleton<IEmbeddingGenerator<string, Embedding<float>>>(
     new OllamaApiClient(new Uri("http://localhost:11434"), "nomic-embed-text"));
 services.AddMnemosynePostgreSql(new MnemosynePostgreSqlOptions { Dimensions = 768 });
 ```
 
-With OpenAI and the Microsoft.Extensions.AI.OpenAI package:
+With OpenAI and the Microsoft.Extensions.AI.OpenAI package, whose `AsIEmbeddingGenerator` adapts the OpenAI client:
 
 ```csharp
+using OpenAI;
+
 // text-embedding-3-small returns 1536 dimensions.
-services.AddSingleton(new OpenAIClient(apiKey).GetEmbeddingClient("text-embedding-3-small").AsIEmbeddingGenerator());
+services.AddSingleton<IEmbeddingGenerator<string, Embedding<float>>>(
+    new OpenAIClient(apiKey).GetEmbeddingClient("text-embedding-3-small").AsIEmbeddingGenerator());
 services.AddMnemosynePostgreSql(new MnemosynePostgreSqlOptions { Dimensions = 1536 });
 ```
 

@@ -256,6 +256,7 @@ jobs:
 
       # The store-and-recall sample checks the ranking the docs describe and exits 1 when it differs. It gets a
       # database of its own: the smoke above migrated the postgres database with 3 dimensions, the sample uses 256.
+      # It gates publish-nuget through aot-publish on purpose: a release must not ship docs whose sample fails.
       - name: Create the sample's database
         env:
           PGPASSWORD: postgres

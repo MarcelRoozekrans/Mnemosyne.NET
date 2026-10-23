@@ -63,6 +63,19 @@ public sealed class HashingEmbeddingGeneratorTests
     }
 
     [Fact]
+    public async Task TheHashIsTheSameInEveryProcess()
+    {
+        // FNV-1a 32 of "a" is 0xE40C292C, and 0xE40C292C mod 256 is 44. A per-process hash such as
+        // string.GetHashCode would move the word to another bucket on the next run.
+        using var generator = new HashingEmbeddingGenerator();
+
+        var vector = await Embed(generator, "a");
+
+        Assert.Equal(1f, vector[44]);
+        Assert.Equal(1f, vector.Sum());
+    }
+
+    [Fact]
     public async Task TheOutputHasTheDeclaredDimensions()
     {
         using var generator = new HashingEmbeddingGenerator();

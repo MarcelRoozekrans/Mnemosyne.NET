@@ -34,6 +34,11 @@ catch (SampleFailure failure)
     Console.Error.WriteLine($"FAILED: {failure.Message}");
     return 1;
 }
+catch (OperationCanceledException) when (cts.IsCancellationRequested)
+{
+    Console.Error.WriteLine("FAILED: the sample did not finish within 2 minutes.");
+    return 1;
+}
 
 static async Task<int> Run(string connectionString, CancellationToken ct)
 {
@@ -54,15 +59,44 @@ static async Task<int> Run(string connectionString, CancellationToken ct)
     var scope = new ReasonletScope($"sample-{Guid.NewGuid():N}");
     Console.WriteLine($"Working in scope {scope.Value}.");
 
+    var exitCode = 1;
     try
     {
-        return await Walkthrough(memory, scope, ct);
+        exitCode = await Walkthrough(memory, scope, ct);
     }
     finally
     {
-        // 5. Erase the scope, whatever happened above, so a run leaves no Reasonlets behind.
-        var erased = Require(await memory.EraseAsync(new ReasonletErasure(scope, null), CancellationToken.None), "Erase");
-        Console.WriteLine($"Erased the scope: {erased.Reasonlets} Reasonlets and {erased.Executions} executions deleted.");
+        // 5. Erase the scope, whatever happened above, so a run leaves no Reasonlets behind. A failed erase is
+        // reported but never replaces a failure that is already on its way out.
+        if (!await TryErase(memory, scope))
+        {
+            exitCode = 1;
+        }
+    }
+
+    return exitCode;
+}
+
+// Runs in a finally block, so it must not throw: an exception here would hide the one that got the sample there.
+// The erase does not take the run's token, so a timed-out run still cleans up.
+static async Task<bool> TryErase(IReasonletMemory memory, ReasonletScope scope)
+{
+    try
+    {
+        var erased = await memory.EraseAsync(new ReasonletErasure(scope, null), CancellationToken.None);
+        if (erased.IsFailure)
+        {
+            Console.Error.WriteLine($"Erase failed: {erased.Error.Code}: {erased.Error.Message}");
+            return false;
+        }
+
+        Console.WriteLine($"Erased the scope: {erased.Value.Reasonlets} Reasonlets and {erased.Value.Executions} executions deleted.");
+        return true;
+    }
+    catch (Exception ex)
+    {
+        Console.Error.WriteLine($"Erase threw {ex.GetType().Name}: {ex.Message}");
+        return false;
     }
 }
 
@@ -146,7 +180,7 @@ static async Task<int> Walkthrough(IReasonletMemory memory, ReasonletScope scope
     Console.WriteLine();
     if (matches.Any(m => m.Reasonlet.Id == closeMatch.Id))
     {
-        Console.WriteLine("The close match shares the most words with the question, but its 5-of-10 record ranks it below both refund versions.");
+        Console.WriteLine("The close match scores the highest similarity, but its 5-of-10 record ranks it below both refund versions.");
     }
     else
     {

@@ -9,7 +9,6 @@
       <Exclude>
         <ModulePath>.*Tests\.dll$</ModulePath>
         <ModulePath>.*AotSmoke\.dll$</ModulePath>
-        <ModulePath>.*Samples.*\.dll$</ModulePath>
       </Exclude>
     </ModulePaths>
     <!-- Generated code says nothing about test quality. CompilerGeneratedAttribute is deliberately NOT
