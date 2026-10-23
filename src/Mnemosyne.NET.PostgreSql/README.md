@@ -37,7 +37,9 @@ if (migrated.IsFailure)
 }
 ```
 
-`IReasonletStore` resolves to the same singleton. The options are passed as an object, not a configure delegate, because their members are `required`. They are validated when you register, and `AddMnemosynePostgreSql` throws `ArgumentOutOfRangeException` for a bad value.
+`IReasonletStore` resolves to the same singleton. To recall and rank through `IReasonletMemory`, also register an embedding generator and call `AddMnemosyne` from the core package; see the [Mnemosyne.NET README](https://github.com/MarcelRoozekrans/Mnemosyne.NET/tree/main/src/Mnemosyne.NET#readme).
+
+The store options are passed as an object, not a configure delegate, because their members are `required`. They are validated when you register, and `AddMnemosynePostgreSql` throws `ArgumentOutOfRangeException` for a bad value.
 
 ### Slim and native AOT hosts
 
