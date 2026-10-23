@@ -32,7 +32,8 @@ namespace Mnemosyne.NET;
 /// The evaluator follows the same rules, except that a judge that is down never fails the call: the run is stored
 /// unjudged, and the agent's own outcome counts. A judge that throws, times out or answers Unavailable is down. It times
 /// out when it outlasts <see cref="MnemosyneOptions.EvaluationTimeout"/>: the facade cancels the token it passes the
-/// judge, so an evaluator must honour that token. Any other error code from it, or an invalid evaluation, throws
+/// judge and stops waiting, even for a judge that ignores the token, whose abandoned call is left to finish on its own
+/// with its outcome discarded. Any other error code from it, or an invalid evaluation, throws
 /// <see cref="InvalidOperationException"/>, whose message names only the code or the failing path. The run's answer
 /// reaches the evaluator and nothing else: it is never passed to the store, nor placed in an error, an exception message
 /// or a signal. An answer that is blank or longer than 32,000 code points is not judged at all: the run is stored with
@@ -487,8 +488,9 @@ public sealed class ReasonletMemory : IReasonletMemory
     /// is down, with the detail naming an exception's type. An error code other than Unavailable or an invalid
     /// evaluation is an adapter bug and throws, and the caller's own cancellation propagates. The judge gets the caller's
     /// token linked with one that <paramref name="timeProvider"/> cancels after <paramref name="timeout"/>, unless that is
-    /// <see cref="Timeout.InfiniteTimeSpan"/>; a cancellation that is not the caller's is a timeout. The activity records
-    /// how the judge call ended, a judge that is down included.
+    /// <see cref="Timeout.InfiniteTimeSpan"/>, and stops waiting once that token is cancelled, whether or not the judge
+    /// honours it; a cancellation that is not the caller's is a timeout. The activity records how the judge call ended, a
+    /// judge that is down included.
     /// </summary>
     private static async ValueTask<Result<ReasonletEvaluation, MnemosyneError>> EvaluateAsync(
         IReasonletEvaluator evaluator, ReasonletEvaluationRequest request, TimeSpan timeout, TimeProvider timeProvider, CancellationToken ct)
@@ -496,19 +498,33 @@ public sealed class ReasonletMemory : IReasonletMemory
         using var telemetry = EvaluationTelemetry.Start();
         using var timer = timeout == Timeout.InfiniteTimeSpan ? null : new CancellationTokenSource(timeout, timeProvider);
         using var linked = timer is null ? null : CancellationTokenSource.CreateLinkedTokenSource(ct, timer.Token);
+        var token = linked?.Token ?? ct;
+        Task<Result<ReasonletEvaluation, MnemosyneError>>? pending = null;
         Result<ReasonletEvaluation, MnemosyneError> evaluated;
         try
         {
-            evaluated = await evaluator.EvaluateAsync(request, linked?.Token ?? ct).ConfigureAwait(false);
+            if (token.CanBeCanceled)
+            {
+                // A hard stop: the wait ends when the token is cancelled, by the timeout or by the caller, even when
+                // the judge ignores the token it was given. A judge that honours it stops early too.
+                pending = evaluator.EvaluateAsync(request, token).AsTask();
+                evaluated = await pending.WaitAsync(token).ConfigureAwait(false);
+            }
+            else
+            {
+                evaluated = await evaluator.EvaluateAsync(request, token).ConfigureAwait(false);
+            }
         }
         catch (Exception ex) when (IsCallerCancellation(ex, ct))
         {
+            Abandon(pending);
             telemetry.Threw(ex);
             throw;
         }
         catch (OperationCanceledException ex)
         {
             // Not the caller's cancellation, so a timeout, which counts as the judge being down.
+            Abandon(pending);
             telemetry.Failed(MnemosyneErrorCode.Unavailable);
             return DependencyFailed(EvaluatorFailed, ex);
         }
@@ -542,6 +558,23 @@ public sealed class ReasonletMemory : IReasonletMemory
 
         telemetry.Judged(evaluated.Value);
         return evaluated;
+    }
+
+    /// <summary>
+    /// Lets a judge call the facade stopped waiting for run on unobserved: when it ends, a continuation reads its
+    /// exception, so a later failure is never an unobserved task exception, and does nothing else. It never touches the
+    /// store, the telemetry or the caller, whose call has already returned.
+    /// </summary>
+    private static void Abandon(Task<Result<ReasonletEvaluation, MnemosyneError>>? pending)
+    {
+        if (pending is { IsCompleted: false })
+        {
+            _ = pending.ContinueWith(
+                static task => _ = task.Exception,
+                CancellationToken.None,
+                TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+                TaskScheduler.Default);
+        }
     }
 
     private async ValueTask<Result<ReadOnlyMemory<float>, MnemosyneError>> EmbedAsync(string text, CancellationToken ct)

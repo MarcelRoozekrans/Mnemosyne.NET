@@ -36,7 +36,8 @@ public sealed class MnemosyneOptions
     /// caller's token allows. Defaults to 30 seconds.
     /// </summary>
     /// <remarks>
-    /// The facade cancels the token it passes the evaluator when the time is up, so the evaluator must honour that token.
+    /// When the time is up, the facade cancels the token it passes the evaluator and stops waiting, even for an evaluator
+    /// that ignores the token. That call is abandoned: it may run on, but its outcome is discarded.
     /// A judge that times out is down: the run is stored with the agent's own verdict, and the judge call's telemetry shows
     /// outcome <c>Unavailable</c>. The caller's own cancellation still propagates.
     /// </remarks>

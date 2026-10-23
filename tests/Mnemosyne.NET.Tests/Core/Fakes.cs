@@ -258,3 +258,21 @@ internal sealed class ManualTimeProvider : TimeProvider
         }
     }
 }
+
+/// <summary>
+/// An evaluator that ignores its token and answers with <see cref="Completion"/>'s task, which completes only when a test
+/// completes it, after running an optional step.
+/// </summary>
+internal sealed class IgnoringEvaluator(Action? onCall = null) : IReasonletEvaluator
+{
+    public TaskCompletionSource<Result<ReasonletEvaluation, MnemosyneError>> Completion { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    public int Calls { get; private set; }
+
+    public ValueTask<Result<ReasonletEvaluation, MnemosyneError>> EvaluateAsync(ReasonletEvaluationRequest request, CancellationToken ct)
+    {
+        Calls++;
+        onCall?.Invoke();
+        return new(Completion.Task);
+    }
+}

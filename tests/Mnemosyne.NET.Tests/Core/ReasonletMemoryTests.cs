@@ -1221,6 +1221,122 @@ public sealed class ReasonletMemoryTests
         Assert.Contains(TimeSpan.FromSeconds(30), clock.DueTimes);
     }
 
+    /// <summary>Records a run, or remembers a capture, with the answer sentinel, and returns the receipt's verdict source.</summary>
+    private static async Task<ReasonletVerdictSource> SourceThroughAsync(ReasonletMemory memory, string path, CancellationToken ct) =>
+        path == "record"
+            ? (await memory.RecordExecutionAsync(Run() with { Question = "question", Answer = AnswerSentinel }, ct)).Value.Source
+            : (await memory.RememberAsync(TestData.Capture() with { Answer = AnswerSentinel }, ct)).Value.Source;
+
+    [Theory]
+    [MemberData(nameof(Paths))]
+    public async Task AJudgeThatIgnoresItsTokenAndNeverCompletesIsAbandonedOnTime(string path)
+    {
+        var clock = new ManualTimeProvider();
+        var evaluator = new IgnoringEvaluator(clock.Fire);
+        var memory = Memory(evaluator: evaluator, clock: clock);
+
+        // The real-time bound only catches a hang; the manual clock decides when the timeout expires.
+        var source = await SourceThroughAsync(memory, path, CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken);
+
+        Assert.Equal(ReasonletVerdictSource.Agent, source);
+        Assert.Equal(1, evaluator.Calls);
+        Assert.Null(StoredEvaluation(path));
+        Assert.False(evaluator.Completion.Task.IsCompleted);
+    }
+
+    [Theory]
+    [MemberData(nameof(Paths))]
+    public async Task TheCallersCancellationStopsTheWaitForAJudgeThatIgnoresItsToken(string path)
+    {
+        using var cts = new CancellationTokenSource();
+        var evaluator = new IgnoringEvaluator(cts.Cancel);
+        var memory = Memory(evaluator: evaluator, clock: new ManualTimeProvider());
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
+            await SourceThroughAsync(memory, path, cts.Token).WaitAsync(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken));
+
+        Assert.False(Stored(path));
+    }
+
+    [Fact]
+    public async Task AnAbandonedJudgeThatLaterThrowsLeavesNoUnobservedException()
+    {
+        var unobserved = 0;
+        void OnUnobserved(object? sender, UnobservedTaskExceptionEventArgs e)
+        {
+            if (e.Exception.InnerExceptions.Any(inner => inner is AbandonedJudgeException))
+            {
+                Interlocked.Increment(ref unobserved);
+            }
+        }
+
+        TaskScheduler.UnobservedTaskException += OnUnobserved;
+        try
+        {
+            await AbandonThenFailAsync();
+
+            // The abandoned task is now unreachable; collecting it would raise the event if nothing had observed it.
+            for (var i = 0; i < 3; i++)
+            {
+                GC.Collect();
+                GC.WaitForPendingFinalizers();
+            }
+
+            Assert.Equal(0, Volatile.Read(ref unobserved));
+        }
+        finally
+        {
+            TaskScheduler.UnobservedTaskException -= OnUnobserved;
+        }
+    }
+
+    /// <summary>Abandons a judge on its timeout, then fails the judge's task once the record call has returned.</summary>
+    private async Task AbandonThenFailAsync()
+    {
+        var clock = new ManualTimeProvider();
+        var evaluator = new IgnoringEvaluator(clock.Fire);
+        var source = await SourceThroughAsync(Memory(evaluator: evaluator, clock: clock), "record", CancellationToken.None);
+        Assert.Equal(ReasonletVerdictSource.Agent, source);
+        var calls = _store.Calls;
+
+        evaluator.Completion.SetException(new AbandonedJudgeException());
+        await Task.Yield();
+
+        // The late failure touches nothing: the store saw only the call that already returned.
+        Assert.Equal(calls, _store.Calls);
+    }
+
+    private sealed class AbandonedJudgeException() : Exception("the abandoned judge failed late");
+
+    [Fact]
+    public async Task AJudgesOwnAsynchronousTimeoutIsAnOutage()
+    {
+        var memory = Memory(evaluator: new AsyncTimeoutEvaluator());
+
+        Assert.Equal(ReasonletVerdictSource.Agent, await SourceThroughAsync(memory, "record", CancellationToken.None));
+        Assert.Null(StoredEvaluation("record"));
+    }
+
+    /// <summary>An evaluator whose task faults with a timeout of its own after it has started, not synchronously.</summary>
+    private sealed class AsyncTimeoutEvaluator : IReasonletEvaluator
+    {
+        public async ValueTask<Result<ReasonletEvaluation, MnemosyneError>> EvaluateAsync(ReasonletEvaluationRequest request, CancellationToken ct)
+        {
+            await Task.Yield();
+            throw new TaskCanceledException("the judge's own HTTP timeout");
+        }
+    }
+
+    [Fact]
+    public async Task AnInfiniteTimeoutWithAnUncancellableTokenAwaitsTheJudgeDirectly()
+    {
+        var evaluator = new FakeEvaluator();
+        var memory = Memory(evaluator: evaluator, options: new MnemosyneOptions { EvaluationTimeout = Timeout.InfiniteTimeSpan });
+
+        Assert.Equal(ReasonletVerdictSource.Evaluator, await SourceThroughAsync(memory, "record", CancellationToken.None));
+        Assert.False(Assert.Single(evaluator.Tokens).CanBeCanceled);
+    }
+
     [Theory]
     [MemberData(nameof(Paths))]
     public async Task AnInfiniteTimeoutNeverTimesOut(string path)
