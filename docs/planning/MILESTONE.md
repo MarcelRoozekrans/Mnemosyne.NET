@@ -14,9 +14,9 @@ with getting-started docs and a sample. See the
 [roadmap design](../superpowers/specs/2026-10-21-roadmap-design.md).
 
 ## Definition of Done
-- [ ] All planned phases complete
-- [ ] All tests passing, including integration tests against PostgreSQL + pgvector
-- [ ] CI green, including the Native AOT gate
+- [x] All planned phases complete
+- [x] All tests passing, including integration tests against PostgreSQL + pgvector
+- [x] CI green, including the Native AOT gate
 - [x] A procedure can be stored with intent, embedding, execution and feedback, scoped and with provenance
 - [x] For a new question, the selector returns ranked candidates with a score breakdown, filtered by scope
 - [x] Telemetry, erasure by scope or subject, and retention work
@@ -29,7 +29,7 @@ with getting-started docs and a sample. See the
 4. Phase 1.4 — PostgreSQL + pgvector store [complete]
 5. Phase 1.5 — Telemetry and retention [complete]
 6. Phase 1.6 — Selector and ranking [complete]
-7. Phase 1.7 — Docsite skeleton and first sample [active]
+7. Phase 1.7 — Docsite skeleton and first sample [complete]
 
 ## Audit History
 | Date | Verdict | Gaps |
