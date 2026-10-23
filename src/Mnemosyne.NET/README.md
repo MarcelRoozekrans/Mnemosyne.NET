@@ -39,7 +39,7 @@ The host still runs `MigrateAsync` on the store at startup; see the [PostgreSQL 
 - the default `IReasonletSelector`, built from `MnemosyneOptions.Ranking`;
 - `TimeProvider.System`.
 
-The selector and the clock are added only when the host has not registered its own, so you can replace either. An `IIntentExtractor` is optional: register one and the facade uses it. Call `AddMnemosyne()` with no argument for the defaults.
+`AddMnemosyne` does not register a store or an embedding generator: the container must also hold an `IReasonletStore` and an `IEmbeddingGenerator<string, Embedding<float>>`, or the first resolve of `IReasonletMemory` throws `InvalidOperationException`. The selector and the clock are added only when the host has not registered its own, so you can replace either. An `IIntentExtractor` is optional: register one and the facade uses it. Call `AddMnemosyne()` with no argument for the defaults.
 
 The options are passed as an object, not a configure delegate, because their members are init-only. They are validated when you register, and `AddMnemosyne` throws `ArgumentException` for a bad value.
 

@@ -192,6 +192,8 @@ There is one activity per operation.
 | `mnemosyne.erased.reasonlets`, `mnemosyne.erased.executions` | counters | none |
 | `mnemosyne.pruned.reasonlets`, `mnemosyne.pruned.executions` | counters | none |
 
+Recall, from the core `Mnemosyne.NET` package, also records `mnemosyne.operations` and `mnemosyne.operation.duration` on the same meter, with operation `recall`; see its [recall telemetry](https://github.com/MarcelRoozekrans/Mnemosyne.NET/tree/main/src/Mnemosyne.NET#telemetry).
+
 ### Privacy
 
 No signal carries user data: no question, intent, name, graph, tags, scope, subject or run id. Reasonlet ids and versions are opaque, so they are allowed. Scope often names a tenant and subject names a person, and telemetry is exported, sampled and kept elsewhere. A host that needs tenant breakdowns can add them in its own wrapper.
