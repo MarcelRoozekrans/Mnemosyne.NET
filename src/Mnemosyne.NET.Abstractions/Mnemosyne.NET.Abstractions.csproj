@@ -10,5 +10,6 @@
   </ItemGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="Mnemosyne.NET.Tests" />
+    <InternalsVisibleTo Include="Mnemosyne.NET" />
   </ItemGroup>
 </Project>

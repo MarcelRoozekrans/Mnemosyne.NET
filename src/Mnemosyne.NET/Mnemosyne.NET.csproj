@@ -2,8 +2,14 @@
   <PropertyGroup>
     <IsPackable>true</IsPackable>
     <IsAotCompatible>true</IsAotCompatible>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <Description>Reasonlet selection and ranking: find the best known procedure for a question.</Description>
   </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Mnemosyne.NET.Tests" />
+    <InternalsVisibleTo Include="Mnemosyne.NET.PostgreSql.Tests" />
+  </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\Mnemosyne.NET.Abstractions\Mnemosyne.NET.Abstractions.csproj" />
