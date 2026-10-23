@@ -15,7 +15,7 @@ If you have no decision-model provider, or want a different judge, you can write
 
 > Does the answer resolve the question by following the procedure?
 
-A Noul answers with a calibrated probability, so no free-text reply has to be parsed.
+A [Noul](https://marcelroozekrans.github.io/Minos.NET/question-types) answers with a probability, so no free-text reply has to be parsed.
 
 - **Score** is the Noul's probability.
 - **Success** is `Probability >= SuccessThreshold`. The threshold defaults to 0.5, the cut-off of Minos's own `Noul.Value`.
@@ -49,7 +49,7 @@ dotnet add package Minos.NET.SystemOne   # or Minos.NET.OpenAI
 
 ## Register it
 
-Register an `IDecisionClient` with Minos.NET.DependencyInjection, then call `AddMnemosyneMinosEvaluator`. `AddMnemosyne` picks up the registered `IReasonletEvaluator`.
+Register an `IDecisionClient` with Minos.NET.DependencyInjection, then call `AddMnemosyneMinosEvaluator`. `AddSystemOneDecisionClient` comes from Minos.NET.SystemOne, which brings in Minos.NET.DependencyInjection; the OpenAI package has `AddOpenAIDecisionClient`. `AddMnemosyne` picks up the registered `IReasonletEvaluator`.
 
 ```csharp
 using Microsoft.Extensions.DependencyInjection;
@@ -77,6 +77,7 @@ using Minos.SystemOne;
 using Mnemosyne.NET;
 using Mnemosyne.NET.Minos;
 
+// configuration is the host's IConfiguration.
 services.AddSystemOneDecisionClient("judge", options => options.ApiKey = configuration["TypeSafe:ApiKey"]);
 services.AddMnemosyneMinosEvaluator(new MinosEvaluatorOptions { DecisionClientKey = "judge" });
 services.AddMnemosyne();
@@ -119,7 +120,7 @@ All 13 `DecisionErrorKind` values map as follows:
 
 Eleven kinds mean the judge could not judge, so a run is never lost: it is stored with the agent's own verdict, and the receipt's `Source` is `Agent`. `InvalidQuestions` and `Disposed` are bugs in how the host wired things, so they surface as an exception rather than hiding behind a fallback.
 
-Minos's client retries transient failures itself, so a kind that reaches Mnemosyne is one that outlasted its retries.
+For the transient kinds, a client with the standard pipeline has already retried before one reaches Mnemosyne.
 
 ## Privacy
 
@@ -131,4 +132,4 @@ Don't put Minos.NET.Recording on the judge's client unless its state redaction i
 
 ## Telemetry
 
-The evaluator is called inside the facade's `mnemosyne.evaluate` activity, so the spans Minos emits for the judge call nest under it. The evaluator tag is the evaluator's name, `minos` by default. See [Telemetry](telemetry.md#the-evaluate-activity) for the tags and the `evaluate` metrics, and [Observability](https://marcelroozekrans.github.io/Minos.NET/observability) in the Minos docs for Minos's own spans and metrics.
+The evaluator is called inside the facade's `mnemosyne.evaluate` activity, so the spans Minos emits for the judge call nest under it. The evaluator tag is the evaluator's name, `minos` by default, and it appears only when the judge answered with a valid verdict. A failed Minos call, which covers all 13 kinds in the table above, carries no `mnemosyne.evaluator` tag. See [Telemetry](telemetry.md#the-evaluate-activity) for the tags and the `evaluate` metrics, and [Observability](https://marcelroozekrans.github.io/Minos.NET/observability) in the Minos docs for Minos's own spans and metrics.
