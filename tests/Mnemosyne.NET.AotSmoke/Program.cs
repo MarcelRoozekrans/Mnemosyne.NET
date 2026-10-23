@@ -1,3 +1,5 @@
+using System.Diagnostics;
+using System.Diagnostics.Metrics;
 using Mnemosyne.NET.Abstractions;
 using Mnemosyne.NET.PostgreSql;
 using Npgsql;
@@ -56,6 +58,30 @@ catch (Exception ex)
 
 static async Task<int> PostgreSqlSmoke(string connectionString, ReasonletGraph graph)
 {
+    // Listeners attach before the store runs, so the instrumentation executes under native AOT. Only counts are kept.
+    var activityNames = new System.Collections.Concurrent.ConcurrentBag<string>();
+    var measurements = 0;
+    using var activityListener = new ActivityListener
+    {
+        ShouldListenTo = source => source.Name == MnemosyneTelemetry.ActivitySourceName,
+        Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllDataAndRecorded,
+        ActivityStopped = activity => activityNames.Add(activity.OperationName),
+    };
+    ActivitySource.AddActivityListener(activityListener);
+    using var meterListener = new MeterListener
+    {
+        InstrumentPublished = (instrument, listener) =>
+        {
+            if (instrument.Meter.Name == MnemosyneTelemetry.MeterName)
+            {
+                listener.EnableMeasurementEvents(instrument);
+            }
+        },
+    };
+    meterListener.SetMeasurementEventCallback<long>((_, _, _, _) => Interlocked.Increment(ref measurements));
+    meterListener.SetMeasurementEventCallback<double>((_, _, _, _) => Interlocked.Increment(ref measurements));
+    meterListener.Start();
+
     await using var dataSource = new NpgsqlSlimDataSourceBuilder(connectionString).EnableArrays().Build();
     var store = new ReasonletPostgreSqlStore(dataSource, new MnemosynePostgreSqlOptions { Dimensions = 3 });
     using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(2));
@@ -168,6 +194,37 @@ static async Task<int> PostgreSqlSmoke(string connectionString, ReasonletGraph g
         return 15;
     }
 
-    Console.WriteLine("PostgreSQL smoke passed.");
+    // Nothing in the scope is older than a day, so neither window deletes anything. The scope is gone already, so this
+    // proves the statements run under AOT rather than what they delete.
+    foreach (var retention in new[]
+    {
+        new ReasonletRetention { Scope = scope, ExecutionsOlderThan = TimeSpan.FromDays(1) },
+        new ReasonletRetention { Scope = scope, ReasonletsUnusedFor = TimeSpan.FromDays(1) },
+    })
+    {
+        var pruned = await store.PruneAsync(retention, ct);
+        if (pruned.IsFailure || pruned.Value.Reasonlets != 0 || pruned.Value.Executions != 0)
+        {
+            Console.Error.WriteLine($"Prune failed: {(pruned.IsFailure ? pruned.Error.Message : $"{pruned.Value.Reasonlets} Reasonlets, {pruned.Value.Executions} executions deleted")}");
+            return 20;
+        }
+    }
+
+    // Every operation above stopped an activity, and the prune and erase among them: check the names, not just a count.
+    string[] expected = ["mnemosyne.migrate", "mnemosyne.remember", "mnemosyne.search", "mnemosyne.erase", "mnemosyne.prune"];
+    var missing = expected.Where(name => !activityNames.Contains(name)).ToArray();
+    if (missing.Length > 0)
+    {
+        Console.Error.WriteLine($"No activity was captured for: {string.Join(", ", missing)}");
+        return 21;
+    }
+
+    if (Volatile.Read(ref measurements) == 0)
+    {
+        Console.Error.WriteLine("No metric measurement was captured.");
+        return 22;
+    }
+
+    Console.WriteLine($"PostgreSQL smoke passed ({activityNames.Count} activities, {measurements} measurements captured).");
     return 0;
 }

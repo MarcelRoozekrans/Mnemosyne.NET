@@ -59,8 +59,16 @@ CREATE TABLE mnemosyne.reasonlet_executions (
 );
 
 CREATE INDEX reasonlet_executions_scope_subject_id ON mnemosyne.reasonlet_executions (scope, subject_id);
--- The foreign key's cascade, the erase and the metrics recount look executions up by Reasonlet.
+-- The foreign key's cascade and the erase, which recomputes a kept Reasonlet's timestamps from the executions it
+-- leaves, look executions up by Reasonlet.
 CREATE INDEX reasonlet_executions_scope_reasonlet_id ON mnemosyne.reasonlet_executions (scope, reasonlet_id);
+-- Retention deletes the executions older than a cutoff, oldest first. A prune of every scope finds them by
+-- executed_at alone; a prune of one scope, the usual multi-tenant case, finds them by scope and executed_at, so it
+-- never reads another scope's runs. Both are needed: PostgreSQL 17 has no skip scan to serve the first from the second.
+-- The scoped index carries the id so the prune reads its candidates from the index alone. Without it the planner
+-- preferred walking executed_at, whose order matches the heap's, and filtering out the other scopes' rows.
+CREATE INDEX reasonlet_executions_executed_at ON mnemosyne.reasonlet_executions (executed_at);
+CREATE INDEX reasonlet_executions_scope_executed_at ON mnemosyne.reasonlet_executions (scope, executed_at) INCLUDE (id);
 
 -- One row per execution: recording feedback again replaces it.
 CREATE TABLE mnemosyne.reasonlet_feedback (
@@ -73,17 +81,27 @@ CREATE TABLE mnemosyne.reasonlet_feedback (
     FOREIGN KEY (scope, execution_id) REFERENCES mnemosyne.reasonlet_executions (scope, id) ON DELETE CASCADE
 );
 
--- One row per Reasonlet: its execution counts, kept in the transaction of every execution insert
--- and recounted when an erase removes a subject's executions from a Reasonlet it keeps. Search
--- reads it instead of aggregating the executions.
+-- One row per Reasonlet: its execution counts and times, kept in the transaction of every execution
+-- insert, and subtracted by an erase that removes a subject's executions from a Reasonlet it keeps.
+-- The counters are the totals of record, not an aggregate of the executions: retention prunes old
+-- executions and leaves their counts here, so a recount from what remains would undercount. Search
+-- reads this row instead of aggregating the executions.
 CREATE TABLE mnemosyne.reasonlet_metrics (
-    reasonlet_id     uuid        PRIMARY KEY,
-    scope            text        NOT NULL,
-    runs             integer     NOT NULL,
-    successes        integer     NOT NULL,
-    last_success_at  timestamptz NULL,
+    reasonlet_id      uuid        PRIMARY KEY,
+    scope             text        NOT NULL,
+    runs              integer     NOT NULL,
+    successes         integer     NOT NULL,
+    last_success_at   timestamptz NULL,
+    -- NOT NULL: every Reasonlet has at least the execution its remember created, and an erase that
+    -- removes every remaining run falls back to the Reasonlet's created_at. A null would read as never
+    -- used to retention.
+    last_executed_at  timestamptz NOT NULL,
     FOREIGN KEY (scope, reasonlet_id) REFERENCES mnemosyne.reasonlets (scope, id) ON DELETE CASCADE
 );
+
+-- No index on last_executed_at, on purpose. Retention reads every metrics row of the Reasonlets it judges, so an
+-- index would serve no statement, and every execution insert updates the column: indexing it would stop that update
+-- from being a heap-only tuple update, and every append would then write a new index entry.
 
 -- The dimensions, hnsw_m and hnsw_ef_construction keys record what MigrateAsync applied.
 CREATE TABLE mnemosyne.settings (

@@ -28,6 +28,20 @@ public sealed class ReasonletPostgreSqlStoreTests : IAsyncDisposable
         Assert.Throws<ArgumentNullException>(() => new ReasonletPostgreSqlStore(_unreachable, null!));
     }
 
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    public void APruneRetryBacksOffFiftyMillisecondsPerAttemptGiveOrTakeHalf(int attempt)
+    {
+        var delays = Enumerable.Range(0, 1000).Select(_ => ReasonletPostgreSqlStore.PruneRetryBackoff(attempt).TotalMilliseconds).ToArray();
+
+        Assert.All(delays, delay => Assert.InRange(delay, 25.0 * attempt, 75.0 * attempt));
+
+        // Jittered, not fixed: a thousand draws spread over most of the range.
+        Assert.True(delays.Max() - delays.Min() > 40.0 * attempt);
+    }
+
     [Fact]
     public async Task MigrateAgainstAnUnreachableServerIsUnavailable()
     {
@@ -45,6 +59,24 @@ public sealed class ReasonletPostgreSqlStoreTests : IAsyncDisposable
 
         Assert.True(result.IsFailure);
         Assert.Equal(MnemosyneErrorCode.Unavailable, result.Error.Code);
+    }
+
+    [Fact]
+    public async Task PruneAgainstAnUnreachableServerIsUnavailable()
+    {
+        var result = await new ReasonletPostgreSqlStore(_unreachable, Options)
+            .PruneAsync(new ReasonletRetention { ExecutionsOlderThan = TimeSpan.FromDays(1) }, TestContext.Current.CancellationToken);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(MnemosyneErrorCode.Unavailable, result.Error.Code);
+    }
+
+    [Fact]
+    public async Task ANullRetentionThrows()
+    {
+        var store = new ReasonletPostgreSqlStore(_unreachable, Options);
+
+        await Assert.ThrowsAsync<ArgumentNullException>(async () => await store.PruneAsync(null!, TestContext.Current.CancellationToken));
     }
 
     [Fact]

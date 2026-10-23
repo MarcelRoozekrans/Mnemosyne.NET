@@ -68,6 +68,9 @@ internal static class Check
     public static UnitResult<MnemosyneError> NotNegative(TimeSpan value, string path) =>
         value >= TimeSpan.Zero ? Ok() : Fail(path, "must not be negative");
 
+    public static UnitResult<MnemosyneError> PositiveWhenPresent(TimeSpan? value, string path) =>
+        value is not { } span || span > TimeSpan.Zero ? Ok() : Fail(path, "must be positive");
+
     public static UnitResult<MnemosyneError> NotDefault(ReasonletId id, string path) =>
         id.IsDefault ? Fail(path, "must not be the default id") : Ok();
 

@@ -82,4 +82,17 @@ public interface IReasonletStore
     /// <param name="ct">The cancellation token.</param>
     /// <returns>The numbers of Reasonlets and executions removed.</returns>
     ValueTask<Result<ReasonletErasureResult, MnemosyneError>> EraseAsync(ReasonletErasure erasure, CancellationToken ct);
+
+    /// <summary>Deletes the run records and Reasonlets that a retention policy no longer keeps.</summary>
+    /// <remarks>
+    /// The host runs it, for example on a schedule; recall never prunes. A prune may commit its work in several
+    /// batches, and a failure keeps the batches committed before it, so it is safe to run again.
+    /// Error codes: <see cref="MnemosyneErrorCode.Validation"/> when the policy breaks an invariant, such as no window, a window that is not positive or a <c>default</c> scope,
+    /// <see cref="MnemosyneErrorCode.Conflict"/> when a concurrent change keeps conflicting with the prune,
+    /// <see cref="MnemosyneErrorCode.Unavailable"/> when the backing store fails.
+    /// </remarks>
+    /// <param name="retention">What to keep.</param>
+    /// <param name="ct">The cancellation token.</param>
+    /// <returns>The numbers of Reasonlets and executions deleted.</returns>
+    ValueTask<Result<ReasonletPruneResult, MnemosyneError>> PruneAsync(ReasonletRetention retention, CancellationToken ct);
 }
