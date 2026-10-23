@@ -8,8 +8,10 @@ namespace Mnemosyne.NET;
 /// by a weighted sum of similarity, smoothed success rate and freshness.
 /// </summary>
 /// <remarks>
-/// A new version starts from its parent's smoothed success rate, so a refined Reasonlet is not ranked below an
-/// unproven one. Ties order by similarity descending, then by id ascending, so the order is deterministic.
+/// A new version's success rate is smoothed toward its parent's smoothed rate when that is above the neutral 0.5, and
+/// toward 0.5 otherwise. Inheritance only lifts: a version of a proven procedure starts with its parent's head start, a
+/// version of a failing one starts like any new procedure, and, given the same own runs, a version never scores below a
+/// Reasonlet without a parent. Ties order by similarity descending, then by id ascending, so the order is deterministic.
 /// </remarks>
 public sealed class ReasonletSelector : IReasonletSelector
 {
@@ -69,12 +71,13 @@ public sealed class ReasonletSelector : IReasonletSelector
     }
 
     /// <summary>
-    /// Computes the smoothed success rate <c>(successes + k * prior) / (runs + k)</c>. The prior is 0.5 for a root and the
-    /// parent's own rate, smoothed with the neutral prior, for a version that has a parent.
+    /// Computes the smoothed success rate <c>(successes + k * prior) / (runs + k)</c>. The prior is 0.5 for a root, and
+    /// <c>max(parentRate, 0.5)</c> for a version that has a parent, where the parent's rate is its own, smoothed with the
+    /// neutral prior.
     /// </summary>
     internal static double SuccessRate(ReasonletMetrics own, ReasonletMetrics? parent, double priorWeight)
     {
-        var prior = parent is { } p ? Smooth(p, NeutralPrior, priorWeight) : NeutralPrior;
+        var prior = parent is { } p ? Math.Max(Smooth(p, NeutralPrior, priorWeight), NeutralPrior) : NeutralPrior;
         return Smooth(own, prior, priorWeight);
     }
 

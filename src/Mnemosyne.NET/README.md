@@ -91,7 +91,7 @@ Each part of the score is in [0, 1], and every match carries all four in its `Re
 
   - `PriorWeight` is how many pseudo-runs the prior is worth.
   - For a Reasonlet without a parent, `prior` is 0.5.
-  - **A new version inherits.** For a Reasonlet with a parent, `prior` is the parent's own success rate, smoothed with the 0.5 prior. A new version therefore starts from its parent's record, and its own runs take over as they accumulate. This goes one level, to the parent only, because the parent is the version this one replaced.
+  - **A new version inherits upward only.** For a Reasonlet with a parent, `prior` is `max(parentRate, 0.5)`, where `parentRate` is the parent's own success rate, smoothed with the 0.5 prior. A version of a proven procedure therefore starts from its parent's record, and its own runs take over as they accumulate. A version of a failing procedure, a fix, starts at 0.5 like any new procedure, so its parent's failures do not hold it back. This goes one level, to the parent only, because the parent is the version this one replaced.
   - When the parent has been erased, the parent link is cut and the version is treated as a root, with the 0.5 prior.
   - Runs count execution outcomes. Every remember records a run with the capture's outcome, and so does each `RecordExecutionAsync`. Feedback does not count yet.
 - **Freshness** decays since the Reasonlet's last run:

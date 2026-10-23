@@ -50,6 +50,19 @@ public sealed class ReasonletSelectorTests
     }
 
     [Fact]
+    public void AFailingParentDoesNotPullAVersionBelowNeutral()
+    {
+        // The parent's own rate is 2.5 / 25 = 0.1, below neutral, so the version starts from 0.5 like any new procedure.
+        var parent = Metrics(20, 0);
+        Assert.Equal((1 + (5 * 0.5)) / 6, ReasonletSelector.SuccessRate(Metrics(1, 1), parent, 5), Tolerance);
+        Assert.Equal(0.5, ReasonletSelector.SuccessRate(Metrics(0, 0), parent, 5), Tolerance);
+    }
+
+    [Fact]
+    public void ANeutralParentGivesTheNeutralPrior() =>
+        Assert.Equal(0.5, ReasonletSelector.SuccessRate(Metrics(0, 0), Metrics(0, 0), 5), Tolerance);
+
+    [Fact]
     public void FreshnessDecaysByHalfLife()
     {
         var half = TimeSpan.FromDays(30);
