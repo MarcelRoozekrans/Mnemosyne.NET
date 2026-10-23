@@ -114,15 +114,15 @@ public sealed class SearchTests(PgVectorFixture fixture) : IClassFixture<PgVecto
         Assert.Equal(3, measured.Runs);
         Assert.Equal(2, measured.Successes);
         Assert.Equal(
-            await Entries.ScalarAsync<DateTime>(fixture.DataSource, "SELECT executed_at FROM mnemosyne.reasonlet_executions WHERE id = $1", success.Value),
-            measured.LastSuccessAt!.Value.UtcDateTime);
+            await Entries.TimestampAsync(fixture.DataSource, "SELECT executed_at FROM mnemosyne.reasonlet_executions WHERE id = $1", success.Value),
+            measured.LastSuccessAt!.Value);
         var missing = result.Value[1].Metrics;
-        var created = await Entries.ScalarAsync<DateTime>(
+        var created = await Entries.TimestampAsync(
             fixture.DataSource, "SELECT created_at FROM mnemosyne.reasonlets WHERE id = $1", bare.Value);
         Assert.Equal(0, missing.Runs);
         Assert.Equal(0, missing.Successes);
         Assert.Null(missing.LastSuccessAt);
-        Assert.Equal(created, missing.LastExecutedAt.UtcDateTime);
+        Assert.Equal(created, missing.LastExecutedAt);
     }
 
     [Fact]
@@ -135,8 +135,8 @@ public sealed class SearchTests(PgVectorFixture fixture) : IClassFixture<PgVecto
         var result = await store.SearchAsync(scope, new float[] { 1, 0, 0 }, null, 10, Ct);
 
         Assert.Equal(
-            await Entries.ScalarAsync<DateTime>(fixture.DataSource, "SELECT last_executed_at::timestamp FROM mnemosyne.reasonlet_metrics WHERE reasonlet_id = $1", id.Value),
-            result.Value.Single().Metrics.LastExecutedAt.UtcDateTime);
+            await Entries.TimestampAsync(fixture.DataSource, "SELECT last_executed_at FROM mnemosyne.reasonlet_metrics WHERE reasonlet_id = $1", id.Value),
+            result.Value.Single().Metrics.LastExecutedAt);
     }
 
     [Fact]
@@ -160,11 +160,11 @@ public sealed class SearchTests(PgVectorFixture fixture) : IClassFixture<PgVecto
         Assert.Equal(
             await Entries.ScalarAsync<int>(fixture.DataSource, "SELECT successes FROM mnemosyne.reasonlet_metrics WHERE reasonlet_id = $1", root.Value), parent.Successes);
         Assert.Equal(
-            await Entries.ScalarAsync<DateTime>(fixture.DataSource, "SELECT last_success_at::timestamp FROM mnemosyne.reasonlet_metrics WHERE reasonlet_id = $1", root.Value),
-            parent.LastSuccessAt!.Value.UtcDateTime);
+            await Entries.TimestampAsync(fixture.DataSource, "SELECT last_success_at FROM mnemosyne.reasonlet_metrics WHERE reasonlet_id = $1", root.Value),
+            parent.LastSuccessAt!.Value);
         Assert.Equal(
-            await Entries.ScalarAsync<DateTime>(fixture.DataSource, "SELECT last_executed_at::timestamp FROM mnemosyne.reasonlet_metrics WHERE reasonlet_id = $1", root.Value),
-            parent.LastExecutedAt.UtcDateTime);
+            await Entries.TimestampAsync(fixture.DataSource, "SELECT last_executed_at FROM mnemosyne.reasonlet_metrics WHERE reasonlet_id = $1", root.Value),
+            parent.LastExecutedAt);
         Assert.NotEqual(childHit.Metrics, parent);
     }
 
