@@ -1,5 +1,7 @@
-# Coverage is a merge gate: both checks block a PR that drops below 100%. Written down explicitly
-# rather than left to Codecov's base-branch default, so the rule survives a dip on main.
+# The goal is 100% coverage: the project and patch targets are both 100%, and both statuses report on
+# every PR. The branch ruleset does not require codecov/project or codecov/patch, so a red status
+# reports but does not block a merge. The targets are written down explicitly rather than left to
+# Codecov's base-branch default, so the goal survives a dip on main.
 coverage:
   status:
     project:
