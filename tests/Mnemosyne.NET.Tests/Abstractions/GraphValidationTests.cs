@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using Mnemosyne.NET.Abstractions;
+using Mnemosyne.NET.Abstractions.Validation;
 using Xunit;
 using ZeroAlloc.Results;
 

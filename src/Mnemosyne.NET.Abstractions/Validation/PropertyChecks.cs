@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Text.Unicode;
+using Mnemosyne.NET.Abstractions.Validation;
 using ZeroAlloc.Results;
 
 namespace Mnemosyne.NET.Abstractions;

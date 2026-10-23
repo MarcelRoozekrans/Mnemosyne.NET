@@ -1,6 +1,7 @@
 using System.Reflection;
 using System.Xml.Linq;
 using Mnemosyne.NET.Abstractions;
+using Mnemosyne.NET.Abstractions.Validation;
 using Xunit;
 using ZeroAlloc.Results;
 
@@ -113,6 +114,40 @@ public class ContractShapeTests
         var copy = result with { Executions = 6 };
         Assert.Equal(2, copy.Reasonlets);
         Assert.Equal(6, copy.Executions);
+    }
+
+    [Fact]
+    public void CheckExposesOnlyTheHelpersOtherPackagesUse()
+    {
+        // Public API: a change here is a breaking or widening change to every package that extends Mnemosyne.
+        var members = typeof(Check).GetMethods(BindingFlags.Public | BindingFlags.Static | BindingFlags.DeclaredOnly)
+            .Select(m => m.Name + "(" + string.Join(", ", m.GetParameters().Select(p => p.ParameterType.Name)) + ")")
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+        Assert.Equal(
+            [
+                "All(ReadOnlySpan`1)",
+                "Fail(String, String)",
+                "Nested(UnitResult`1, String)",
+                "NotDefault(ExecutionId, String)",
+                "NotDefault(ReasonletId, String)",
+                "NotNull(Object, String)",
+                "Range(Int32, Int32, Int32, String)",
+                "UnitInterval(Double, String)",
+            ],
+            members);
+        Assert.True(typeof(Check).IsPublic);
+        Assert.Equal("Mnemosyne.NET.Abstractions.Validation", typeof(Check).Namespace);
+    }
+
+    [Fact]
+    public void OnlyTheTestProjectSeesAbstractionsInternals()
+    {
+        var csproj = Path.Combine(RepoConventionsTests.RepoRoot(), "src", "Mnemosyne.NET.Abstractions", "Mnemosyne.NET.Abstractions.csproj");
+        var friends = XDocument.Load(csproj).Descendants("InternalsVisibleTo")
+            .Select(e => e.Attribute("Include")?.Value)
+            .ToArray();
+        Assert.Equal(new string?[] { "Mnemosyne.NET.Tests" }, friends);
     }
 
     [Fact]
