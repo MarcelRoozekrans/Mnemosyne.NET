@@ -62,12 +62,12 @@ await memory.EraseAsync(new ReasonletErasure(scope, SubjectId: "user-1234"), ct)
 
 When an erased Reasonlet had versions below it that are kept, their link to it is cut, and each becomes the root of its own lineage. [Versions and lineage](versions.md#what-erasure-does-to-a-lineage) shows what that does to versions and ranking.
 
-The result counts the Reasonlets and runs removed. The whole erase runs in one transaction.
+The result counts the Reasonlets and runs removed. The whole erase runs in one transaction. [Data lifecycle](../guides/data-lifecycle.md#erasure) covers the details, including what happens alongside concurrent writes.
 
 ### What an erase leaves behind
 
 - **Counters.** A Reasonlet's run and success counts include runs whose records were pruned earlier. An erase subtracts the runs it removes, but it can't find runs that were already pruned, so those stay in the counts. They are bare numbers with no link to a person.
-- **Data at rest.** An erase deletes rows; it doesn't scrub the disk. Deleted data can stay in PostgreSQL's data files, its write-ahead log, replicas and backups until they are overwritten or rotated. For erasure requests under data-protection law, encrypt the storage and rotate backups on a schedule that meets your retention promise. The [PostgreSQL store README](https://github.com/MarcelRoozekrans/Mnemosyne.NET/tree/main/src/Mnemosyne.NET.PostgreSql#what-erasure-leaves-on-disk) covers this in detail.
+- **Data at rest.** An erase deletes rows; it doesn't scrub the disk. Deleted data can stay in PostgreSQL's data files, its write-ahead log, replicas and backups until they are overwritten or rotated. For erasure requests under data-protection law, encrypt the storage and rotate backups on a schedule that meets your retention promise. [What erasure leaves on disk](../guides/postgresql.md#what-erasure-leaves-on-disk) covers this in detail.
 
 ## Telemetry stays clean
 

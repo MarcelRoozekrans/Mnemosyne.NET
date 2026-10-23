@@ -47,7 +47,7 @@ flowchart LR
 2. **Recall.** For a new question, Mnemosyne finds the stored procedures that match it and ranks them by similarity, track record and freshness. Every match carries its score breakdown, so you can see why it ranked where it did.
 3. **Learn.** The agent records each run of a recalled procedure. When it improves a procedure, it remembers the improved one as a new version. The new version starts from its parent's track record when that record is better than neutral, so an improvement on a proven procedure isn't ranked as unproven.
 
-**Forget** is not a step in the loop: you erase or prune when you need to. You can erase everything for a tenant, or everything that belongs to one person, through `IReasonletMemory`. Pruning procedures nobody uses any more is `PruneAsync` on the store, not on `IReasonletMemory`, because it is an administrative job the host schedules.
+**Forget** is not a step in the loop: you erase or prune when you need to. You can erase everything for a tenant, or everything that belongs to one person, through `IReasonletMemory`. Pruning procedures nobody uses any more is `PruneAsync` on the store, not on `IReasonletMemory`, because it is an administrative job the host schedules. [Data lifecycle](guides/data-lifecycle.md) covers both.
 
 ## When to use it
 

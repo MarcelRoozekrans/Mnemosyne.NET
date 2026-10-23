@@ -73,7 +73,9 @@ A wrong filter would hide every right answer, so recall filters only on an inten
 
 ## Name
 
-When the capture has no `Name`, Mnemosyne takes the first line of the question that isn't blank, trims it, and cuts it to 200 Unicode code points. A cut never splits a character that takes two UTF-16 units, such as an emoji.
+When the capture has no `Name`, Mnemosyne takes the first line of the question that isn't blank, trims it, cuts it to 200 Unicode code points, and trims the end again. A cut never splits a character that takes two UTF-16 units, such as an emoji.
+
+The stored Reasonlet carries the resolved intent and name, so what recall returns is what remember decided.
 
 ## Provenance
 

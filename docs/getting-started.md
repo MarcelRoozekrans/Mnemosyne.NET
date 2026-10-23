@@ -82,6 +82,21 @@ Three registrations make up Mnemosyne:
 - **The embedding generator** turns questions into vectors. Use the same model for remembering and recalling.
 - **`AddMnemosyne`** registers `IReasonletMemory`, the facade you call. With no argument it uses the default options. Register the data source and the generator as singletons, because the facade is one.
 
+### What the registrations do
+
+`AddMnemosyne` registers:
+
+- `IReasonletMemory`, as a singleton `ReasonletMemory`;
+- the `MnemosyneOptions`;
+- the default `IReasonletSelector`, built from `MnemosyneOptions.Ranking`, unless you registered your own;
+- `TimeProvider.System`, unless you registered your own clock.
+
+It doesn't register a store or an embedding generator. If the container lacks an `IReasonletStore` or an `IEmbeddingGenerator<string, Embedding<float>>`, the first resolve of `IReasonletMemory` throws `InvalidOperationException`. An `IIntentExtractor` is optional: register one and the facade uses it.
+
+**Register everything the facade uses as a singleton:** the store, the embedding generator, the intent extractor and any selector of your own. The facade resolves them once, for the life of the container. A scoped registration fails under scope validation, which ASP.NET Core turns on in Development, and a transient one is captured for good anyway.
+
+Both registrations take their options as an object, not a configure delegate, because the members are init-only, and `Dimensions` is `required`. Both check the options when you register: `AddMnemosyne` throws `ArgumentException` for an invalid value, and `AddMnemosynePostgreSql` throws `ArgumentOutOfRangeException`. [PostgreSQL store](guides/postgresql.md#options) and [Ranking](concepts/ranking.md#settings) list the options.
+
 ## 4. Run the migrations
 
 ```csharp
@@ -215,4 +230,4 @@ With it, every run leaves the database empty and prints one match.
 - [The store-and-recall sample](samples.md) builds a track record, captures a new version and shows it ranking first.
 - [Reasonlets](concepts/reasonlets.md) covers what a capture holds.
 - [Ranking](concepts/ranking.md) covers the cut-off, the weights and how to tune them.
-- The [PostgreSQL store README](https://github.com/MarcelRoozekrans/Mnemosyne.NET/tree/main/src/Mnemosyne.NET.PostgreSql#readme) covers privileges, options and erasure in depth.
+- [PostgreSQL store](guides/postgresql.md) covers privileges, options and migrations in depth, and [Data lifecycle](guides/data-lifecycle.md) covers erasure and pruning.

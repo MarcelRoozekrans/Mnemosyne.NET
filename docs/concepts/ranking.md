@@ -26,7 +26,7 @@ Similarity is the cosine similarity between the question's embedding and the sto
 
 The default cut-off is 0.5. A query can set its own with `ReasonletQuery.MinSimilarity`, from 0 to 1, and you can change the default with `ReasonletRankingOptions.MinSimilarity`.
 
-**Tune the cut-off for your embedding model.** Similarity scales differ between models: one model's 0.5 is a weak match, another's a strong one. Recall a few questions you know have a stored answer and a few you know don't, and set the cut-off between the two groups.
+**Tune the cut-off for your embedding model.** Similarity scales differ between models: one model's 0.5 is a weak match, another's a strong one. Recall a few questions you know have a stored answer and a few you know don't, and set the cut-off between the two groups. The recall activity's candidate and returned counts, described under [Telemetry](../guides/telemetry.md#the-recall-activity), show how much the cut-off drops in production.
 
 When nothing passes the cut-off, recall returns an empty list. That is a success, not an error: the agent has no stored procedure to go on and works from scratch.
 
@@ -127,13 +127,25 @@ Recall returns a result, and fails only for a real problem:
 | The query is invalid, for example a blank question or `Top` outside 1 to 50 | `Validation` |
 | The embedding generator throws, times out or returns nothing | `Unavailable` |
 | The embedding has the wrong number of dimensions, a NaN or infinite value, or a zero norm | `Unavailable` |
-| The store fails | the store's error, usually `Unavailable` |
+| The store or the selector fails | its error, unchanged, usually `Unavailable` |
 | The intent extractor is down | no error: recall searches every intent instead |
+| The intent extractor answers an error code other than `Unavailable`, or an invalid intent | `InvalidOperationException` is thrown |
+| The store returns an invalid candidate | `InvalidOperationException` is thrown |
 | Your cancellation token fires | `OperationCanceledException` is thrown |
+
+A dependency is **down** when it throws, or when it times out: an `OperationCanceledException` while your own token is not cancelled, such as an `HttpClient` timeout. An extractor that answers `Unavailable` is down too.
+
+An unusable embedding is `Unavailable`, not `Validation`, because the generator made it, not you: nothing in your input is invalid. The facade checks it against the store's `IReasonletStore.Dimensions` before calling the store.
+
+The two cases that throw are bugs in an adapter, not runtime conditions. The extractor is always given a valid question, so any other error code from it, or an invalid intent, means the adapter is wrong, and so does an invalid candidate from a store.
+
+`RecallAsync` reports every exception through the task it returns, a null query included, rather than throwing before it returns, so the recall's telemetry records it. The exception surfaces when you await the task.
+
+Remember fails the same way for an invalid capture, for an embedding problem and for an extractor bug. Unlike recall, it has no fallback when the intent extractor is needed and is down: it answers `Unavailable`, so a guessed intent is never stored. Store errors, `Validation` included, come back from both unchanged.
 
 No error from the facade's own dependencies quotes the question or an exception's message, because either could hold user data:
 
-- **The embedding generator.** If it throws or times out, the error's detail names only the exception type. If it returns no embedding, there is no detail. If its embedding is unusable, the detail gives only the reason, such as a wrong length.
+- **The embedding generator.** If it throws or times out, the error's detail names only the exception type. If it returns no embedding, there is no detail. If its embedding is unusable, the error's message is fixed and the detail gives only the reason: `length`, with both lengths for a wrong one, `non-finite` or `norm`.
 - **The intent extractor at recall.** A failure is not surfaced at all, because recall searches without an intent filter instead.
 - **The intent extractor at remember.** If it throws or times out, the remember answers `Unavailable` and the detail names only the exception type. If it answers `Unavailable` itself, the remember answers `Unavailable` with no detail, so none of the extractor's own text is passed on.
 
@@ -162,6 +174,6 @@ services.AddMnemosyne(new MnemosyneOptions
 | `CandidatePool` | 20 | 1 to 200 |
 | `MinIntentConfidence` | 0.7 | 0 to 1 |
 
-The three weights must add up to 1. `AddMnemosyne` checks the options when you register them and throws `ArgumentException` for an invalid value.
+The three weights must add up to 1, within 1e-9. `AddMnemosyne` checks the options when you register them and throws `ArgumentException` for an invalid value.
 
 On each query, `Top` sets how many matches come back, from 1 to 50 with a default of 3, and `MinSimilarity` overrides the cut-off.
