@@ -535,12 +535,12 @@ public sealed class EraseTests(PgVectorFixture fixture) : IClassFixture<PgVector
         await Entries.ScalarAsync<int>(fixture.DataSource, "SELECT successes FROM mnemosyne.reasonlet_metrics WHERE reasonlet_id = $1", id.Value));
 
     /// <summary>Reads a Reasonlet's last execution and last success times.</summary>
-    private async Task<(DateTime LastExecutedAt, DateTime LastSuccessAt)> TimestampsAsync(ReasonletId id) => (
-        await Entries.ScalarAsync<DateTime>(fixture.DataSource, "SELECT last_executed_at::timestamp FROM mnemosyne.reasonlet_metrics WHERE reasonlet_id = $1", id.Value),
-        await Entries.ScalarAsync<DateTime>(fixture.DataSource, "SELECT last_success_at::timestamp FROM mnemosyne.reasonlet_metrics WHERE reasonlet_id = $1", id.Value));
+    private async Task<(DateTimeOffset LastExecutedAt, DateTimeOffset LastSuccessAt)> TimestampsAsync(ReasonletId id) => (
+        await Entries.TimestampAsync(fixture.DataSource, "SELECT last_executed_at FROM mnemosyne.reasonlet_metrics WHERE reasonlet_id = $1", id.Value),
+        await Entries.TimestampAsync(fixture.DataSource, "SELECT last_success_at FROM mnemosyne.reasonlet_metrics WHERE reasonlet_id = $1", id.Value));
 
-    private Task<DateTime> ExecutedAtAsync(ExecutionId id) => Entries.ScalarAsync<DateTime>(
-        fixture.DataSource, "SELECT executed_at::timestamp FROM mnemosyne.reasonlet_executions WHERE id = $1", id.Value);
+    private Task<DateTimeOffset> ExecutedAtAsync(ExecutionId id) => Entries.TimestampAsync(
+        fixture.DataSource, "SELECT executed_at FROM mnemosyne.reasonlet_executions WHERE id = $1", id.Value);
 
     private async Task<List<Guid>> IdsAsync(string sql, object parameter)
     {

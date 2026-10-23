@@ -86,16 +86,16 @@ public sealed class ExecutionTests(PgVectorFixture fixture) : IClassFixture<PgVe
 
         Assert.True((await store.AppendFeedbackAsync(scope, receipt.Execution, new ReasonletFeedback(0.1, 0.2, 0.3), Ct)).IsSuccess);
         Assert.Equal("0.1|0.2|0.3", await FeedbackAsync(receipt.Execution));
-        var first = await Entries.ScalarAsync<DateTime>(
-            fixture.DataSource, "SELECT recorded_at::timestamp FROM mnemosyne.reasonlet_feedback WHERE execution_id = $1", receipt.Execution.Value);
+        var first = await Entries.TimestampAsync(
+            fixture.DataSource, "SELECT recorded_at FROM mnemosyne.reasonlet_feedback WHERE execution_id = $1", receipt.Execution.Value);
 
         Assert.True((await store.AppendFeedbackAsync(scope, receipt.Execution, new ReasonletFeedback(0.9, 0.8, 0.7), Ct)).IsSuccess);
 
         Assert.Equal("0.9|0.8|0.7", await FeedbackAsync(receipt.Execution));
         Assert.Equal(1L, await CountAsync("SELECT count(*) FROM mnemosyne.reasonlet_feedback WHERE execution_id = $1", receipt.Execution.Value));
         Assert.True(
-            await Entries.ScalarAsync<DateTime>(
-                fixture.DataSource, "SELECT recorded_at::timestamp FROM mnemosyne.reasonlet_feedback WHERE execution_id = $1", receipt.Execution.Value) >= first);
+            await Entries.TimestampAsync(
+                fixture.DataSource, "SELECT recorded_at FROM mnemosyne.reasonlet_feedback WHERE execution_id = $1", receipt.Execution.Value) >= first);
     }
 
     [Fact]
@@ -230,8 +230,8 @@ public sealed class ExecutionTests(PgVectorFixture fixture) : IClassFixture<PgVe
         Assert.Equal((0, 2), (erased.Value.Reasonlets, erased.Value.Executions));
         Assert.Equal((2, 2), await MetricsAsync(r.Id));
         Assert.Equal(
-            await Entries.ScalarAsync<DateTime>(fixture.DataSource, "SELECT executed_at::timestamp FROM mnemosyne.reasonlet_executions WHERE id = $1", bRun.Value),
-            await Entries.ScalarAsync<DateTime>(fixture.DataSource, "SELECT last_success_at::timestamp FROM mnemosyne.reasonlet_metrics WHERE reasonlet_id = $1", r.Id.Value));
+            await Entries.TimestampAsync(fixture.DataSource, "SELECT executed_at FROM mnemosyne.reasonlet_executions WHERE id = $1", bRun.Value),
+            await Entries.TimestampAsync(fixture.DataSource, "SELECT last_success_at FROM mnemosyne.reasonlet_metrics WHERE reasonlet_id = $1", r.Id.Value));
         await AssertMetricsMatchTheExecutionsAsync(scope);
     }
 
@@ -293,11 +293,11 @@ public sealed class ExecutionTests(PgVectorFixture fixture) : IClassFixture<PgVe
         await Entries.ScalarAsync<int>(fixture.DataSource, "SELECT runs FROM mnemosyne.reasonlet_metrics WHERE reasonlet_id = $1", id.Value),
         await Entries.ScalarAsync<int>(fixture.DataSource, "SELECT successes FROM mnemosyne.reasonlet_metrics WHERE reasonlet_id = $1", id.Value));
 
-    private Task<DateTime> ExecutedAtAsync(ExecutionId id) => Entries.ScalarAsync<DateTime>(
-        fixture.DataSource, "SELECT executed_at::timestamp FROM mnemosyne.reasonlet_executions WHERE id = $1", id.Value);
+    private Task<DateTimeOffset> ExecutedAtAsync(ExecutionId id) => Entries.TimestampAsync(
+        fixture.DataSource, "SELECT executed_at FROM mnemosyne.reasonlet_executions WHERE id = $1", id.Value);
 
-    private Task<DateTime> LastExecutedAtAsync(ReasonletId id) => Entries.ScalarAsync<DateTime>(
-        fixture.DataSource, "SELECT last_executed_at::timestamp FROM mnemosyne.reasonlet_metrics WHERE reasonlet_id = $1", id.Value);
+    private Task<DateTimeOffset> LastExecutedAtAsync(ReasonletId id) => Entries.TimestampAsync(
+        fixture.DataSource, "SELECT last_executed_at FROM mnemosyne.reasonlet_metrics WHERE reasonlet_id = $1", id.Value);
 
     /// <summary>Asserts that every Reasonlet of the scope has a metrics row equal to an aggregate of its executions.</summary>
     private async Task AssertMetricsMatchTheExecutionsAsync(ReasonletScope scope) => Assert.Equal(
