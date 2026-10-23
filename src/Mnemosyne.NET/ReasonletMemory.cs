@@ -33,7 +33,12 @@ namespace Mnemosyne.NET;
 /// unjudged, and the agent's own outcome counts. A judge that throws, times out or answers Unavailable is down. Any other
 /// error code from it, or an invalid evaluation, throws <see cref="InvalidOperationException"/>, whose message names only
 /// the code or the failing path. The run's answer reaches the evaluator and nothing else: it is never passed to the
-/// store, nor placed in an error or an exception message.
+/// store, nor placed in an error, an exception message or a signal.
+/// </para>
+/// <para>
+/// Each judge call emits a <c>mnemosyne.evaluate</c> activity, tagged with the judge's name, success and score when it
+/// answered, and counts and times itself on <c>mnemosyne.evaluations</c> and <c>mnemosyne.evaluation.duration</c> and
+/// under operation <c>evaluate</c>. A judge that is down shows there as a failure, though the call itself succeeds.
 /// </para>
 /// </remarks>
 public sealed class ReasonletMemory : IReasonletMemory
@@ -414,25 +419,41 @@ public sealed class ReasonletMemory : IReasonletMemory
     }
 
     /// <summary>
-    /// Calls the evaluator. It fails only with Unavailable, when the judge is down, with the detail naming an exception's
-    /// type. An error code other than Unavailable or an invalid evaluation is an adapter bug and throws, and the caller's
-    /// own cancellation propagates.
+    /// Calls the evaluator inside its <c>mnemosyne.evaluate</c> activity. It fails only with Unavailable, when the judge
+    /// is down, with the detail naming an exception's type. An error code other than Unavailable or an invalid
+    /// evaluation is an adapter bug and throws, and the caller's own cancellation propagates. The activity records how the
+    /// judge call ended, a judge that is down included.
     /// </summary>
     private static async ValueTask<Result<ReasonletEvaluation, MnemosyneError>> EvaluateAsync(
         IReasonletEvaluator evaluator, ReasonletEvaluationRequest request, CancellationToken ct)
     {
+        using var telemetry = EvaluationTelemetry.Start();
         Result<ReasonletEvaluation, MnemosyneError> evaluated;
         try
         {
             evaluated = await evaluator.EvaluateAsync(request, ct).ConfigureAwait(false);
         }
-        catch (Exception ex) when (!IsCallerCancellation(ex, ct))
+        catch (Exception ex) when (IsCallerCancellation(ex, ct))
         {
+            telemetry.Threw(ex);
+            throw;
+        }
+        catch (OperationCanceledException ex)
+        {
+            // Not the caller's cancellation, so a timeout, which counts as the judge being down.
+            telemetry.Failed(MnemosyneErrorCode.Unavailable);
+            return DependencyFailed(EvaluatorFailed, ex);
+        }
+        catch (Exception ex)
+        {
+            telemetry.Threw(ex);
             return DependencyFailed(EvaluatorFailed, ex);
         }
 
         if (evaluated.IsFailure)
         {
+            telemetry.Failed(evaluated.Error.Code);
+
             // The evaluator's own text can quote the question or the answer, so only its code is kept. The request is
             // valid, so any code but Unavailable is an adapter bug.
             if (evaluated.Error.Code != MnemosyneErrorCode.Unavailable)
@@ -446,9 +467,12 @@ public sealed class ReasonletMemory : IReasonletMemory
 
         if (evaluated.Value.Validate() is { IsFailure: true } invalid)
         {
-            throw new InvalidOperationException($"The evaluator returned an invalid evaluation: {invalid.Error.Message}");
+            var bug = new InvalidOperationException($"The evaluator returned an invalid evaluation: {invalid.Error.Message}");
+            telemetry.Threw(bug);
+            throw bug;
         }
 
+        telemetry.Judged(evaluated.Value);
         return evaluated;
     }
 

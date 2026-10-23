@@ -25,6 +25,7 @@ internal static class StoreTelemetry
     private const string ExceptionEvent = "exception";
     private const string ExceptionTypeTag = "exception.type";
     private const string DbStatusCodeTag = "db.response.status_code";
+    private const string VerdictSourceTag = "mnemosyne.verdict_source";
     private const string Ok = "ok";
     private const string ExceptionOutcome = "exception";
 
@@ -160,6 +161,16 @@ internal static class StoreTelemetry
         activity?.SetTag("mnemosyne.reasonlet.version", receipt.Version);
         Remembered.Add(1, new TagList { { "mnemosyne.capture_kind", kind } });
     }
+
+    /// <summary>
+    /// Tags an execution append with the source of the run's verdict, before it runs, so a failed append has it too:
+    /// <c>evaluator</c> when the run comes with an evaluation, else <c>agent</c>.
+    /// </summary>
+    internal static void ExecutionVerdictSource(Activity? activity, bool evaluated) =>
+        activity?.SetTag(VerdictSourceTag, evaluated ? "evaluator" : "agent");
+
+    /// <summary>Tags feedback that changed the run's effective success with verdict source <c>feedback</c>.</summary>
+    internal static void FeedbackVerdictSource(Activity? activity) => activity?.SetTag(VerdictSourceTag, "feedback");
 
     /// <summary>Tags a search with its limit, before it runs, so a failed search has it too.</summary>
     internal static void SearchLimit(Activity? activity, int limit) => activity?.SetTag("mnemosyne.search.limit", limit);

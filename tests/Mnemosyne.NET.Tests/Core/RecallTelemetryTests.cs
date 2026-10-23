@@ -31,8 +31,8 @@ public sealed class RecallTelemetryTests
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
-    private ReasonletMemory Memory(IIntentExtractor? extractor = null, IReasonletStore? store = null) =>
-        new(store ?? _store, _selector, _generator, extractor, null, new MnemosyneOptions());
+    private ReasonletMemory Memory(IIntentExtractor? extractor = null, IReasonletStore? store = null, IReasonletEvaluator? evaluator = null) =>
+        new(store ?? _store, _selector, _generator, extractor, evaluator, new MnemosyneOptions());
 
     private static ReasonletCandidate Candidate(double similarity = 0.9) =>
         new(TestData.Definition(), similarity, new ReasonletMetrics(0, 0, null, DateTimeOffset.UnixEpoch));
@@ -328,7 +328,7 @@ public sealed class RecallTelemetryTests
     }
 
     [Fact]
-    public async Task NoRecallSignalCarriesUserData()
+    public async Task NoFacadeSignalCarriesUserData()
     {
         // One token in every field that holds user data. Ids are GUIDs written with dashes, so none can contain it.
         var token = Guid.NewGuid().ToString("N");
@@ -355,9 +355,36 @@ public sealed class RecallTelemetryTests
             Respond = () => Result<ReasonletIntent, MnemosyneError>.Failure(new(MnemosyneErrorCode.Conflict, token)),
         };
         await Assert.ThrowsAsync<InvalidOperationException>(async () => await Memory(buggy).RecallAsync(query with { Intent = null }, Ct));
+        _generator.Respond = new FakeEmbeddingGenerator().Respond;
+
+        // A judged run and a judged remember, with the token in the run's question and answer and the capture's answer.
+        var judge = new FakeEvaluator();
+        var run = new ReasonletRun
+        {
+            Scope = scope,
+            Id = ReasonletId.New(),
+            Outcome = new ReasonletOutcome(true, TimeSpan.FromSeconds(1), null),
+            Provenance = TestData.Provenance(),
+            Question = $"question-{token}",
+            Answer = $"answer-{token}",
+        };
+        var capture0 = TestData.Capture() with { Scope = scope, Question = $"question-{token}", Answer = $"answer-{token}" };
+        Assert.True((await Memory(evaluator: judge).RecordExecutionAsync(run, Ct)).IsSuccess);
+        Assert.True((await Memory(evaluator: judge).RememberAsync(capture0, Ct)).IsSuccess);
+
+        // A judge that throws, one that is down and one that fails otherwise, each quoting the token, and one whose
+        // invalid name holds it.
+        judge.Respond = () => throw new HttpRequestException($"judge: {token}");
+        Assert.True((await Memory(evaluator: judge).RecordExecutionAsync(run, Ct)).IsSuccess);
+        judge.Respond = () => Result<ReasonletEvaluation, MnemosyneError>.Failure(new(MnemosyneErrorCode.Unavailable, token, token));
+        Assert.True((await Memory(evaluator: judge).RememberAsync(capture0, Ct)).IsSuccess);
+        judge.Respond = () => Result<ReasonletEvaluation, MnemosyneError>.Failure(new(MnemosyneErrorCode.Conflict, token, token));
+        await Assert.ThrowsAsync<InvalidOperationException>(async () => await Memory(evaluator: judge).RecordExecutionAsync(run, Ct));
+        judge.Respond = () => new ReasonletEvaluation(true, 0.5, new string('x', 80) + token);
+        await Assert.ThrowsAsync<InvalidOperationException>(async () => await Memory(evaluator: judge).RememberAsync(capture0, Ct));
 
         var activities = capture.Activities;
-        Assert.Equal(5, activities.Count);
+        Assert.Equal(11, activities.Count);
         var measurements = capture.Measurements;
         Assert.NotEmpty(measurements);
         var emitted = new List<string?>();
