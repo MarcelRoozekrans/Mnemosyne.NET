@@ -237,6 +237,12 @@ static async Task<int> PostgreSqlSmoke(string connectionString, ReasonletGraph g
         return minos;
     }
 
+    var chat = await ChatSmoke(dataSource, graph, ct);
+    if (chat != 0)
+    {
+        return chat;
+    }
+
     // Every operation above stopped an activity, and the prune and erase among them: check the names, not just a count.
     string[] expected = ["mnemosyne.migrate", "mnemosyne.remember", "mnemosyne.search", "mnemosyne.erase", "mnemosyne.prune"];
     var missing = expected.Where(name => !activityNames.Contains(name)).ToArray();
@@ -437,6 +443,76 @@ static async Task<int> MinosSmoke(NpgsqlDataSource dataSource, ReasonletGraph gr
     return 0;
 }
 
+// The chat evaluator as a host wires it: a chat client in the container, AddMnemosyneChatEvaluator, and the facade.
+// The fake client replies with a verdict of 0.9, which exercises the source-generated state serializer, the JSON schema
+// and the strict reply parser under native AOT. A run the agent called a failure is judged a success.
+static async Task<int> ChatSmoke(NpgsqlDataSource dataSource, ReasonletGraph graph, CancellationToken ct)
+{
+    var services = new ServiceCollection();
+    services.AddSingleton(dataSource);
+    services.AddSingleton<IEmbeddingGenerator<string, Embedding<float>>>(new FixedEmbeddingGenerator());
+    services.AddSingleton<IChatClient>(new ApprovingChatClient());
+    services.AddMnemosynePostgreSql(new MnemosynePostgreSqlOptions { Dimensions = 3 });
+    services.AddMnemosyneChatEvaluator();
+    services.AddMnemosyne();
+    await using var provider = services.BuildServiceProvider();
+
+    var memory = provider.GetRequiredService<IReasonletMemory>();
+    var scope = new ReasonletScope($"aot-chat-{Guid.NewGuid():N}");
+    const string question = "How do I search through the chat judge?";
+    var remembered = await memory.RememberAsync(
+        new ReasonletCapture
+        {
+            Scope = scope,
+            Question = question,
+            Graph = graph,
+            Outcome = new ReasonletOutcome(true, TimeSpan.FromMilliseconds(5), null),
+            Provenance = new ReasonletProvenance { Source = "aot-smoke" },
+        },
+        ct);
+    if (remembered.IsFailure)
+    {
+        Console.Error.WriteLine($"Remember for the chat smoke failed: {remembered.Error.Message}");
+        return 38;
+    }
+
+    var judged = await memory.RecordExecutionAsync(
+        new ReasonletRun
+        {
+            Scope = scope,
+            Id = remembered.Value.Id,
+            Outcome = new ReasonletOutcome(false, TimeSpan.FromMilliseconds(5), null),
+            Provenance = new ReasonletProvenance { Source = "aot-smoke" },
+            Question = question,
+            Answer = "Search with the search tool.",
+        },
+        ct);
+    if (judged.IsFailure
+        || judged.Value.Source != ReasonletVerdictSource.Evaluator
+        || !judged.Value.Success)
+    {
+        Console.Error.WriteLine($"Judging a run through the chat evaluator failed: {(judged.IsFailure ? judged.Error.Message : judged.Value.ToString())}");
+        return 37;
+    }
+
+    // The receipt carries no score, so read it back from the stored run.
+    var stored = await ReadVerdictAsync(dataSource, judged.Value.Execution, ct);
+    if (stored is not { Evaluator: "llm-judge", Score: 0.9, Success: true })
+    {
+        Console.Error.WriteLine($"The chat evaluator's verdict was not stored as expected: {stored}");
+        return 37;
+    }
+
+    var erased = await memory.EraseAsync(new ReasonletErasure(scope, null), ct);
+    if (erased.IsFailure)
+    {
+        Console.Error.WriteLine($"Erase after the chat smoke failed: {erased.Error.Message}");
+        return 39;
+    }
+
+    return 0;
+}
+
 // Reads a run's verdict inputs and its effective success with a plain reader, which needs no reflection.
 static async Task<(bool Agent, bool? Evaluated, string? Evaluator, double? Score, bool? Feedback, bool Success)?> ReadVerdictAsync(
     NpgsqlDataSource dataSource, ExecutionId execution, CancellationToken ct)
@@ -478,6 +554,22 @@ internal sealed class ApprovingDecisionClient : IDecisionClient
     public ValueTask<Result<DecisionResponse, DecisionError>> EvaluateAsync(DecisionRequest request, CancellationToken cancellationToken = default) =>
         ValueTask.FromResult(Result<DecisionResponse, DecisionError>.Success(
             new DecisionResponse(request.Definition, [QuestionAnswer.Noul(0.9)], model: "aot-fake")));
+
+    public object? GetService(Type serviceType, object? serviceKey = null) => null;
+
+    public void Dispose()
+    {
+    }
+}
+
+/// <summary>A chat client that replies to every request with a verdict of worked at 0.9 confidence.</summary>
+internal sealed class ApprovingChatClient : IChatClient
+{
+    public Task<ChatResponse> GetResponseAsync(IEnumerable<ChatMessage> messages, ChatOptions? options = null, CancellationToken cancellationToken = default) =>
+        Task.FromResult(new ChatResponse(new ChatMessage(ChatRole.Assistant, """{"worked":true,"confidence":0.9}""")));
+
+    public IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(IEnumerable<ChatMessage> messages, ChatOptions? options = null, CancellationToken cancellationToken = default) =>
+        throw new NotSupportedException();
 
     public object? GetService(Type serviceType, object? serviceKey = null) => null;
 

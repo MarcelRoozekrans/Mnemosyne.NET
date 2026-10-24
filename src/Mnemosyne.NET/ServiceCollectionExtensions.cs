@@ -56,4 +56,37 @@ public static class ServiceCollectionExtensions
             provider.GetRequiredService<TimeProvider>()));
         return services;
     }
+
+    /// <summary>
+    /// Registers <see cref="ChatReasonletEvaluator"/> as the singleton <see cref="IReasonletEvaluator"/>, judging runs with the
+    /// host's <see cref="IChatClient"/>.
+    /// </summary>
+    /// <remarks>
+    /// The host registers the <see cref="IChatClient"/>, for example with a Microsoft.Extensions.AI provider package. When
+    /// <see cref="ChatEvaluatorOptions.ChatClientKey"/> is set, the evaluator resolves the keyed client of that key
+    /// instead of the unkeyed one. The evaluator is a singleton that captures the client it resolves, so register the client
+    /// as a singleton. A scoped client would be captured by the singleton, and fails scope validation where that is enabled.
+    /// </remarks>
+    /// <param name="services">The service collection.</param>
+    /// <param name="options">The settings, or null for the defaults.</param>
+    /// <returns>The same service collection.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="services"/> is null.</exception>
+    /// <exception cref="ArgumentException">The options are invalid.</exception>
+    public static IServiceCollection AddMnemosyneChatEvaluator(this IServiceCollection services, ChatEvaluatorOptions? options = null)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+        options ??= new ChatEvaluatorOptions();
+        var validation = options.Validate();
+        if (validation.IsFailure)
+        {
+            throw new ArgumentException(validation.Error.Message, nameof(options));
+        }
+
+        services.AddSingleton<IReasonletEvaluator>(provider => new ChatReasonletEvaluator(
+            options.ChatClientKey is { } key
+                ? provider.GetRequiredKeyedService<IChatClient>(key)
+                : provider.GetRequiredService<IChatClient>(),
+            options));
+        return services;
+    }
 }

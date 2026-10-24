@@ -24,11 +24,18 @@ public static class Check
     public static UnitResult<MnemosyneError> Fail(string path, string reason) =>
         UnitResult<MnemosyneError>.Failure(new MnemosyneError(MnemosyneErrorCode.Validation, $"{path}: {reason}"));
 
-    internal static UnitResult<MnemosyneError> NotBlank(string? value, string path) =>
+    /// <summary>Fails when a string is null, empty or only whitespace.</summary>
+    /// <param name="value">The value to check.</param>
+    /// <param name="path">The path of the value.</param>
+    /// <returns>Success, or a validation failure for <paramref name="path"/>.</returns>
+    public static UnitResult<MnemosyneError> NotBlank(string? value, string path) =>
         string.IsNullOrWhiteSpace(value) ? Fail(path, "must not be blank") : Ok();
 
     /// <summary>Fails when a non-null string holds a lone surrogate, which cannot be written as UTF-8 without changing it.</summary>
-    internal static UnitResult<MnemosyneError> ValidUtf16(string? value, string path) =>
+    /// <param name="value">The value to check. Null passes.</param>
+    /// <param name="path">The path of the value.</param>
+    /// <returns>Success, or a validation failure for <paramref name="path"/>.</returns>
+    public static UnitResult<MnemosyneError> ValidUtf16(string? value, string path) =>
         value is null || IsValidUtf16(value) ? Ok() : Fail(path, "must be valid UTF-16");
 
     /// <summary>Returns whether a string has no lone surrogate.</summary>
@@ -51,9 +58,14 @@ public static class Check
 
     /// <summary>
     /// Fails when a non-null string has more than <paramref name="max"/> Unicode code points, the unit JSON Schema
-    /// <c>maxLength</c> counts. The string must already be valid UTF-16.
+    /// <c>maxLength</c> counts: a surrogate pair counts once. Run <see cref="ValidUtf16"/> first: the count is only
+    /// exact for valid UTF-16.
     /// </summary>
-    internal static UnitResult<MnemosyneError> MaxLength(string? value, int max, string path) =>
+    /// <param name="value">The value to check. Null passes.</param>
+    /// <param name="max">The most code points allowed.</param>
+    /// <param name="path">The path of the value.</param>
+    /// <returns>Success, or a validation failure for <paramref name="path"/>.</returns>
+    public static UnitResult<MnemosyneError> MaxLength(string? value, int max, string path) =>
         value is null || CodePointCount(value) <= max ? Ok() : Fail(path, $"must not be longer than {max} code points");
 
     /// <summary>Returns the number of code points in valid UTF-16 text: a surrogate pair counts once.</summary>
