@@ -101,7 +101,7 @@ internal sealed partial class ReasonletRepository(IAsyncDbConnection connection)
             FOR KEY SHARE OF r
         ) locked
         """)]
-    public partial Task<int?> LockAncestorsAsync(string scope, Guid[] ids, IAsyncDbTransaction transaction, CancellationToken ct);
+    public partial Task<int> LockAncestorsAsync(string scope, Guid[] ids, IAsyncDbTransaction transaction, CancellationToken ct);
 
     /// <summary>
     /// Locks a lineage's top in its scope <c>FOR NO KEY UPDATE</c> until the transaction ends, which serializes every
