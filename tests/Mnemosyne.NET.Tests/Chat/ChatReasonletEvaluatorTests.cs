@@ -65,6 +65,7 @@ public sealed class ChatReasonletEvaluatorTests
 
         Assert.True(result.IsSuccess);
         Assert.Equal(new ReasonletEvaluation(true, 0.8, "llm-judge"), result.Value);
+        Assert.False(double.IsNegative(result.Value.Score));
         Assert.True(result.Value.Validate().IsSuccess);
     }
 
@@ -83,6 +84,8 @@ public sealed class ChatReasonletEvaluatorTests
     [InlineData("""{"worked":false,"confidence":1}""", false, 0.0)]
     [InlineData("""{"worked":true,"confidence":0.0}""", true, 0.0)]
     [InlineData("""{"worked":true,"confidence":1.0e0}""", true, 1.0)]
+    [InlineData("""{"worked":true,"confidence":-0}""", true, 0.0)]
+    [InlineData("""{"worked":false,"confidence":-0}""", false, 1.0)]
     public async Task TheConfidenceBoundsAreAccepted(string reply, bool success, double score)
     {
         var result = await Judge(reply);
@@ -305,7 +308,7 @@ public sealed class ChatReasonletEvaluatorTests
         { $"{{\"worked\":true,\"work{EscapedE}d\":false,\"confidence\":0.8,\"note\":\"{ReplySentinel}\"}}", "chat: InvalidReply" },
         { $"{{\"worked\":true,\"confidence\":0.8,\"confidence\":0.9,\"note\":\"{ReplySentinel}\"}}", "chat: InvalidReply" },
 
-        // A confidence outside [0, 1], or too large for a double.
+        // A confidence outside [0, 1], or a number too large for a double, which reads as an infinity.
         { $"{{\"worked\":true,\"confidence\":-0.01,\"note\":\"{ReplySentinel}\"}}", "chat: InvalidReply" },
         { $"{{\"worked\":true,\"confidence\":1.01,\"note\":\"{ReplySentinel}\"}}", "chat: InvalidReply" },
         { $"{{\"worked\":true,\"confidence\":1e400,\"note\":\"{ReplySentinel}\"}}", "chat: InvalidReply" },

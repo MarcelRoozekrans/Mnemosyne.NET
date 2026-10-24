@@ -154,13 +154,14 @@ public sealed class ChatReasonletEvaluator : IReasonletEvaluator
                 }
                 else if (property.NameEquals("confidence"))
                 {
-                    // TryGetDouble fails for a number too large for a double, and JSON has no NaN.
+                    // A number too large for a double reads as an infinity, which the range check rejects, and JSON has no NaN.
                     if (confidence is not null || value.ValueKind != JsonValueKind.Number || !value.TryGetDouble(out var number) || number < 0 || number > 1)
                     {
                         return null;
                     }
 
-                    confidence = number;
+                    // Adding 0.0 turns a negative zero into a positive zero.
+                    confidence = number + 0.0;
                 }
             }
 
