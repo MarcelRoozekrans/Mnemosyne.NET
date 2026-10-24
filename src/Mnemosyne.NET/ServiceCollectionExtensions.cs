@@ -65,7 +65,7 @@ public static class ServiceCollectionExtensions
     /// The host registers the <see cref="IChatClient"/>, for example with a Microsoft.Extensions.AI provider package. When
     /// <see cref="ChatEvaluatorOptions.ChatClientKey"/> is set, the evaluator resolves the keyed client of that key
     /// instead of the unkeyed one. The evaluator is a singleton that captures the client it resolves, so register the client
-    /// as a singleton. A scoped registration fails scope validation when the evaluator is resolved.
+    /// as a singleton. A scoped client would be captured by the singleton, and fails scope validation where that is enabled.
     /// </remarks>
     /// <param name="services">The service collection.</param>
     /// <param name="options">The settings, or null for the defaults.</param>

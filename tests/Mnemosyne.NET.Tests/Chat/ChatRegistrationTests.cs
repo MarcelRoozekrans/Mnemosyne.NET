@@ -48,6 +48,19 @@ public sealed class ChatRegistrationTests
     }
 
     [Fact]
+    public async Task NullOptionsGiveVerdictsNamedLlmJudge()
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton<IChatClient>(FakeChatClient.Replying(Verdict));
+        services.AddMnemosyneChatEvaluator(null);
+        using var provider = services.BuildServiceProvider();
+
+        var verdict = await provider.GetRequiredService<IReasonletEvaluator>().EvaluateAsync(Request(), TestContext.Current.CancellationToken);
+
+        Assert.Equal("llm-judge", verdict.Value.Evaluator);
+    }
+
+    [Fact]
     public async Task AKeyedClientIsPickedWhenTheKeyIsSet()
     {
         var unkeyed = FakeChatClient.Replying("""{"worked":true,"confidence":0.1}""");
