@@ -80,7 +80,7 @@ Invalid options throw an `ArgumentException` at registration: an evaluator name 
 
 Your agent's chat client is often a large model. To give the judge a different one, register it under a key and point `ChatClientKey` at that key. With no key, the evaluator uses the unkeyed client.
 
-The evaluator sets no model, temperature or token limit, so set them in the client's pipeline with `ChatClientBuilder.ConfigureOptions`. A temperature of 0 keeps the verdict steadier from run to run.
+The evaluator sets no model, temperature or token limit, so set them in the client's pipeline with `ChatClientBuilder.ConfigureOptions`. A temperature of 0 keeps the verdict steadier from run to run, but some reasoning models reject a temperature, so set it only where the model accepts it.
 
 ```csharp
 using Microsoft.Extensions.AI;
@@ -133,7 +133,7 @@ A reply is an `InvalidReply` when it is:
 
 An exception from the client reaches the facade, which treats it as the judge being down. The caller's own cancellation propagates. The facade's `EvaluationTimeout` still applies.
 
-In every case but the caller's own cancellation, the run is still stored, with the agent's own verdict, and the receipt's `Source` is `Agent`. A model that regularly adds prose or a fence turns every run into "judge down". Watch `mnemosyne.evaluations` and the `mnemosyne.evaluate` activity for a steady stream of `error.type = Unavailable`, and of `exception` outcomes when the client itself fails. See [Telemetry](telemetry.md#the-evaluate-activity).
+In every case but the caller's own cancellation, the run is still stored, with the agent's own verdict, and the receipt's `Source` is `Agent`. A model that regularly adds prose or a fence turns every run into "judge down". Reasoning that a provider returns separately is ignored, while a model that writes its reasoning into the reply text, such as `<think>` tags from some local models, fails every run as `InvalidReply`. Watch `mnemosyne.evaluations` and the `mnemosyne.evaluate` activity for a steady stream of `error.type = Unavailable`, and of `exception` outcomes when the client itself fails. See [Telemetry](telemetry.md#the-evaluate-activity).
 
 ## Privacy
 
