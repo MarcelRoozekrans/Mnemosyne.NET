@@ -13,6 +13,9 @@ public sealed class ChatReasonletEvaluatorTests
     private const string CriteriaSentinel = "CRITERIA-SENTINEL-2a7b";
     private const string ReplySentinel = "REPLY-SENTINEL-7f3a";
 
+    // The JSON escape for 'e': a backslash, then u0065. Built from parts so no tool or reader mistakes it for a C# escape.
+    private const string EscapedE = "\\" + "u0065";
+
     // An outcome whose values appear nowhere else, so finding either in a message means the outcome leaked.
     private static readonly ReasonletOutcome SentinelOutcome = new(true, TimeSpan.FromSeconds(86_399.25), 0.123456789);
 
@@ -115,8 +118,12 @@ public sealed class ChatReasonletEvaluatorTests
     [Fact]
     public async Task EscapedPropertyNamesMatch()
     {
-        // JSON allows escapes in a name, and the parsed name is what counts.
-        var result = await Judge("""{"worked":true,"confidence":0.6}""");
+        // JSON allows escapes in a name, and the parsed name is what counts. The reply text holds a real JSON escape,
+        // a backslash then u0065, which is 'e'.
+        var reply = "{\"work" + EscapedE + "d\":true,\"confidence\":0.6}";
+        Assert.Contains('\\', reply);
+
+        var result = await Judge(reply);
 
         Assert.Equal(new ReasonletEvaluation(true, 0.6, "llm-judge"), result.Value);
     }
@@ -172,6 +179,7 @@ public sealed class ChatReasonletEvaluatorTests
             Assert.DoesNotContain(NameSentinel, message.Text, StringComparison.Ordinal);
             Assert.DoesNotContain("0.123456789", message.Text, StringComparison.Ordinal);
             Assert.DoesNotContain("86399", message.Text, StringComparison.Ordinal);
+            Assert.DoesNotContain("23:59:59", message.Text, StringComparison.Ordinal);
             Assert.DoesNotContain("outcome", message.Text, StringComparison.OrdinalIgnoreCase);
         }
     }
@@ -294,6 +302,7 @@ public sealed class ChatReasonletEvaluatorTests
         // Duplicates, in either order of values.
         { $"{{\"worked\":true,\"worked\":false,\"confidence\":0.8,\"note\":\"{ReplySentinel}\"}}", "chat: InvalidReply" },
         { $"{{\"worked\":false,\"confidence\":0.8,\"worked\":true,\"note\":\"{ReplySentinel}\"}}", "chat: InvalidReply" },
+        { $"{{\"worked\":true,\"work{EscapedE}d\":false,\"confidence\":0.8,\"note\":\"{ReplySentinel}\"}}", "chat: InvalidReply" },
         { $"{{\"worked\":true,\"confidence\":0.8,\"confidence\":0.9,\"note\":\"{ReplySentinel}\"}}", "chat: InvalidReply" },
 
         // A confidence outside [0, 1], or too large for a double.
