@@ -83,7 +83,7 @@ Design: [roadmap design](../superpowers/specs/2026-10-21-roadmap-design.md), bui
 **Goal:** An evaluator that judges through an `IChatClient`, for hosts without a decision-model provider. A reply it can't parse counts as the judge being down.
 **Surface:** Backend
 **HelpWanted:** no
-**Plan:** _to be written_
+**Plan:** `docs/superpowers/plans/2026-10-24-phase-2.3-chat-judge.md`
 
 ### Phase 2.4: Metrics feeding ranking [status: pending]
 **Goal:** Metrics computed from evaluated executions, with a minimum run count, feeding the success-rate term.
