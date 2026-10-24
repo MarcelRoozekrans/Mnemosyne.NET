@@ -285,12 +285,15 @@ public class ContractShapeTests
             [
                 "All(ReadOnlySpan`1)",
                 "Fail(String, String)",
+                "MaxLength(String, Int32, String)",
                 "Nested(UnitResult`1, String)",
+                "NotBlank(String, String)",
                 "NotDefault(ExecutionId, String)",
                 "NotDefault(ReasonletId, String)",
                 "NotNull(Object, String)",
                 "Range(Int32, Int32, Int32, String)",
                 "UnitInterval(Double, String)",
+                "ValidUtf16(String, String)",
             ],
             members);
         Assert.True(typeof(Check).IsPublic);
