@@ -133,7 +133,7 @@ A reply is an `InvalidReply` when it is:
 
 An exception from the client reaches the facade, which treats it as the judge being down. The caller's own cancellation propagates. The facade's `EvaluationTimeout` still applies.
 
-In every case the run is never lost: it is stored with the agent's own verdict, and the receipt's `Source` is `Agent`. A model that regularly adds prose or a fence turns every run into "judge down". Watch `mnemosyne.evaluations` and the `mnemosyne.evaluate` activity for a steady stream of `error.type = Unavailable`. See [Telemetry](telemetry.md#the-evaluate-activity).
+In every case but the caller's own cancellation, the run is still stored, with the agent's own verdict, and the receipt's `Source` is `Agent`. A model that regularly adds prose or a fence turns every run into "judge down". Watch `mnemosyne.evaluations` and the `mnemosyne.evaluate` activity for a steady stream of `error.type = Unavailable`, and of `exception` outcomes when the client itself fails. See [Telemetry](telemetry.md#the-evaluate-activity).
 
 ## Privacy
 
