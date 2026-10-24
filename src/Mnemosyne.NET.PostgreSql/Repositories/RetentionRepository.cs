@@ -13,7 +13,7 @@ internal sealed partial class RetentionRepository(IAsyncDbConnection connection)
     /// it, so a long prune has a fixed target and ends: rows that age past the cutoff while it runs wait for the next.
     /// </summary>
     [Query("SELECT now()")]
-    public partial Task<DateTime?> NowAsync(CancellationToken ct);
+    public partial Task<DateTime> NowAsync(CancellationToken ct);
 
     /// <summary>
     /// Locks the candidates in id order and deletes them, then answers how many it deleted. Each delete method puts its
@@ -268,7 +268,7 @@ internal sealed partial class RetentionRepository(IAsyncDbConnection connection)
         ) c
         WHERE r.id = ANY(@ids)
         """)]
-    public partial Task<int?> CountIdleExecutionsAsync(Guid[] ids, IAsyncDbTransaction transaction, CancellationToken ct);
+    public partial Task<int> CountIdleExecutionsAsync(Guid[] ids, IAsyncDbTransaction transaction, CancellationToken ct);
 
     /// <summary>
     /// Locks <c>FOR UPDATE</c>, in id order and until the transaction ends, every execution of the locked Reasonlets.

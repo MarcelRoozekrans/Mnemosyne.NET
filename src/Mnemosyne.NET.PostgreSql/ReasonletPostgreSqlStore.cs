@@ -640,8 +640,8 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
         await executions.LockMetricsForFeedbackAsync(reasonlet, transaction, ct).ConfigureAwait(false);
 
         // The execution is held, so the statement updates its row and answers the new effective success.
-        var after = (await executions.RecordFeedbackAsync(
-            id, scope.Value, feedback.Utility, feedback.Correctness, feedback.Reusability, feedback.Worked, transaction, ct).ConfigureAwait(false))!.Value;
+        var after = await executions.RecordFeedbackAsync(
+            id, scope.Value, feedback.Utility, feedback.Correctness, feedback.Reusability, feedback.Worked, transaction, ct).ConfigureAwait(false);
         if (after != before)
         {
             await (after
@@ -880,7 +880,7 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
         // temporary table, so the set stays on the server, and its delete takes its snapshot after the metrics locks,
         // so it sees every append that committed before.
         var doomed = await reasonlets.LockForErasureAsync(scope, erasure.SubjectId, transaction, ct).ConfigureAwait(false);
-        int? erased;
+        int erased;
         if (erasure.SubjectId is not { } subjectId)
         {
             erased = await executions.DeleteScopeExecutionsAsync(scope, doomed, transaction, ct).ConfigureAwait(false);
@@ -895,7 +895,7 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
 
         var removed = await reasonlets.DeleteAsync(scope, doomed, transaction, ct).ConfigureAwait(false);
         await transaction.CommitAsync(ct).ConfigureAwait(false);
-        return new ReasonletErasureResult { Reasonlets = removed, Executions = erased!.Value };
+        return new ReasonletErasureResult { Reasonlets = removed, Executions = erased };
     }
 
     /// <inheritdoc />
@@ -1201,8 +1201,7 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
     {
         await using var connection = (await _dataSource.OpenConnectionAsync(ct).ConfigureAwait(false)).AsAsync();
 
-        // SELECT now() always answers a row, so the null-forgiving operator only skips a check the query cannot fail.
-        return (await new RetentionRepository(connection).NowAsync(ct).ConfigureAwait(false))!.Value;
+        return await new RetentionRepository(connection).NowAsync(ct).ConfigureAwait(false);
     }
 
     /// <summary>

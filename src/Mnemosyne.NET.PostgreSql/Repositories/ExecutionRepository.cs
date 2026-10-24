@@ -121,7 +121,7 @@ internal sealed partial class ExecutionRepository(IAsyncDbConnection connection)
             FOR KEY SHARE
         ) l
         """)]
-    public partial Task<int?> LockReasonletForFeedbackAsync(Guid reasonletId, string scope, IAsyncDbTransaction transaction, CancellationToken ct);
+    public partial Task<int> LockReasonletForFeedbackAsync(Guid reasonletId, string scope, IAsyncDbTransaction transaction, CancellationToken ct);
 
     /// <summary>
     /// Locks the execution in the scope <c>FOR UPDATE</c> until the transaction ends, the third step of feedback, and
@@ -189,7 +189,7 @@ internal sealed partial class ExecutionRepository(IAsyncDbConnection connection)
         )
         SELECT success FROM verdict
         """)]
-    public partial Task<bool?> RecordFeedbackAsync(
+    public partial Task<bool> RecordFeedbackAsync(
         Guid executionId,
         string scope,
         double utility,
@@ -273,7 +273,7 @@ internal sealed partial class ExecutionRepository(IAsyncDbConnection connection)
         )
         SELECT count(*)::int FROM deleted
         """)]
-    public partial Task<int?> DeleteScopeExecutionsAsync(string scope, Guid[] doomedIds, IAsyncDbTransaction transaction, CancellationToken ct);
+    public partial Task<int> DeleteScopeExecutionsAsync(string scope, Guid[] doomedIds, IAsyncDbTransaction transaction, CancellationToken ct);
 
     /// <summary>
     /// Creates the temporary table <c>pg_temp.mnemosyne_erased_executions</c>, which holds the ids of the executions a
@@ -425,5 +425,5 @@ internal sealed partial class ExecutionRepository(IAsyncDbConnection connection)
         )
         SELECT count(*)::int FROM deleted
         """)]
-    public partial Task<int?> DeleteForErasureAsync(string scope, Guid[] keptIds, IAsyncDbTransaction transaction, CancellationToken ct);
+    public partial Task<int> DeleteForErasureAsync(string scope, Guid[] keptIds, IAsyncDbTransaction transaction, CancellationToken ct);
 }
