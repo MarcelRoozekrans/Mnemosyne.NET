@@ -1,7 +1,8 @@
 # Milestone 1: Store and reuse
 
-**Status:** active
+**Status:** complete
 **Started:** 2026-10-21
+**Completed:** 2026-10-28
 
 ## Goal
 Store successful procedures and find the best one for a new question, covering
@@ -20,7 +21,7 @@ with getting-started docs and a sample. See the
 - [x] A procedure can be stored with intent, embedding, execution and feedback, scoped and with provenance
 - [x] For a new question, the selector returns ranked candidates with a score breakdown, filtered by scope
 - [x] Telemetry, erasure by scope or subject, and retention work
-- [ ] A preview is on NuGet via release-please, and the docsite is live with getting-started docs and a sample
+- [x] A preview is on NuGet via release-please, and the docsite is live with getting-started docs and a sample
 
 ## Phases
 1. Phase 1.1 — Repo scaffold, CI and release pipeline [complete]
@@ -34,3 +35,4 @@ with getting-started docs and a sample. See the
 ## Audit History
 | Date | Verdict | Gaps |
 |---|---|---|
+| 2026-10-28 | PASS | None; warning: no pre-push review reports, reviewed per task and per branch instead ([audit](../superpowers/reviews/2026-10-28-milestone-1-audit.md)) |
