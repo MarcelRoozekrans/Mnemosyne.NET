@@ -51,4 +51,22 @@ public class IdTests
         Assert.True(default(ExecutionId).IsDefault);
         Assert.False(ExecutionId.New().IsDefault);
     }
+
+    [Fact]
+    public void ReasonletId_ToString_IsTheBareGuid()
+    {
+        var id = ReasonletId.New();
+        Assert.Equal(id.Value.ToString(), id.ToString());
+        Assert.Equal(id.Value.ToString(), $"{id}");
+        Assert.Equal(Guid.Empty.ToString(), default(ReasonletId).ToString());
+    }
+
+    [Fact]
+    public void ExecutionId_ToString_IsTheBareGuid()
+    {
+        var id = ExecutionId.New();
+        Assert.Equal(id.Value.ToString(), id.ToString());
+        Assert.Equal(id.Value.ToString(), $"{id}");
+        Assert.Equal(Guid.Empty.ToString(), default(ExecutionId).ToString());
+    }
 }
