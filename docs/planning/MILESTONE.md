@@ -22,7 +22,7 @@ See the [roadmap](ROADMAP.md#milestone-2-evaluation-status-active). Milestone 1 
 2. Phase 2.2 — Minos.NET evaluator [complete]
 3. Phase 2.3 — LLM-as-judge evaluator [complete]
 4. Phase 2.4 — Metrics feeding ranking [complete]
-5. Phase 2.5 — Evaluation docs and sample [pending]
+5. Phase 2.5 — Evaluation docs and sample [active]
 
 ## Audit History
 | Date | Verdict | Gaps |

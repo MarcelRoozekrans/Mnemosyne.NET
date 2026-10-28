@@ -95,11 +95,11 @@ Design: [roadmap design](../superpowers/specs/2026-10-21-roadmap-design.md), bui
 **Plan:** `docs/superpowers/plans/2026-10-28-phase-2.4-trusted-success-rate.md`
 **Completed:** 2026-10-28
 
-### Phase 2.5: Evaluation docs and sample [status: pending]
+### Phase 2.5: Evaluation docs and sample [status: active]
 **Goal:** Docsite pages and a sample for evaluation and feedback.
 **Surface:** Docs
 **HelpWanted:** no
-**Plan:** _to be written_
+**Plan:** `docs/superpowers/plans/2026-10-28-phase-2.5-evaluation-docs.md`
 
 ## Milestone 3: Off-the-shelf integrations [status: pending]
 **Goal:** Any `IChatClient` app or Agent Framework agent gets recall, capture and learning without writing Mnemosyne-specific code.
