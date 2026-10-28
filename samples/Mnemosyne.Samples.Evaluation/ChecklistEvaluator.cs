@@ -20,7 +20,10 @@ internal sealed partial class ChecklistEvaluator : IReasonletEvaluator
     /// <inheritdoc />
     public ValueTask<Result<ReasonletEvaluation, MnemosyneError>> EvaluateAsync(ReasonletEvaluationRequest request, CancellationToken ct)
     {
-        ct.ThrowIfCancellationRequested();
+        if (ct.IsCancellationRequested)
+        {
+            return ValueTask.FromCanceled<Result<ReasonletEvaluation, MnemosyneError>>(ct);
+        }
 
         var met = RefundReference().IsMatch(request.Answer)
             && request.Answer.Contains("notified", StringComparison.OrdinalIgnoreCase);

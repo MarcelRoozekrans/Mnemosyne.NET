@@ -68,7 +68,7 @@ success rate = (weighted successes + 5 × prior) / (weighted runs + 5)
 - **The 5** is the prior weight: the prior counts as five extra runs. For a procedure with no parent, the prior is a neutral 0.5. A brand-new procedure with one agent-only success scores (0.5 + 2.5) / 5.5 = 0.545. With one judged success it scores (1 + 2.5) / 6 = 0.583. After 20 agent-only successes out of 20 it scores (10 + 2.5) / 15 = 0.833, and the prior matters less and less as runs accumulate.
 - **`AgentVerdictWeight = 1`** counts every run in full and restores the plain rate, `(successes + 5 × prior) / (runs + 5)`. At 0 the rate rests on judged runs alone, and a procedure nobody judged keeps its prior.
 
-A human's feedback on an agent-only run makes it judged even when the verdict agrees with the agent's: the run then counts in full.
+A human's feedback with `Worked` set on an agent-only run makes it judged even when the verdict agrees with the agent's: the run then counts in full.
 
 Runs that retention pruned still count in `Runs` and `Successes`, but their verdicts went with them. The upgrade to phase 2.4 builds the judged counters from the executions still stored, so a Reasonlet's pruned history counts as agent-only. That understates how much of its history was judged, and in the safe direction: its rate leans on its prior a little more.
 

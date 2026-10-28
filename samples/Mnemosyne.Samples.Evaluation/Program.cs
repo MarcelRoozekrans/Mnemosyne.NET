@@ -11,7 +11,7 @@ using ZeroAlloc.Results;
 
 // Judge runs offline and watch the verdicts move the ranking. A rule-based evaluator checks each answer, so a run counts
 // as the evaluator judged it rather than as the agent reported it, and a person can overrule the evaluator afterwards.
-// The output reads as a walkthrough in three acts. The sample checks its own receipts, order and totals and exits 1 if
+// The output reads as a walkthrough in three acts. The sample checks its own receipts, order, totals, evidence and success rates and exits 1 if
 // they differ, so what the docs say about evaluation is tested in CI.
 //
 // Needs PostgreSQL 15 or later with pgvector 0.8.0 or later: `docker compose up -d --wait` next to this file starts
@@ -50,7 +50,8 @@ catch (OperationCanceledException) when (cts.IsCancellationRequested)
 static async Task<int> Run(string connectionString, CancellationToken ct)
 {
     // 1. The host wiring: a data source, the PostgreSQL store, an embedding generator, an evaluator and the facade. The
-    // evaluator is registered before AddMnemosyne, which then judges every run that arrives with a question and an answer.
+    // evaluator can be registered before or after AddMnemosyne. The facade judges every run that arrives with a question
+    // and an answer.
     var services = new ServiceCollection();
     services.AddSingleton(_ => NpgsqlDataSource.Create(connectionString)); // a factory, so the container disposes it
     services.AddMnemosynePostgreSql(new MnemosynePostgreSqlOptions { Dimensions = HashingEmbeddingGenerator.Dimensions });
@@ -157,13 +158,13 @@ static async Task<int> Walkthrough(IReasonletMemory memory, ReasonletScope scope
     Console.WriteLine("Remembered \"refund through the API\" and recorded 4 more runs, all with an answer that meets the rule: 5 runs the evaluator judged as successes.");
     Console.WriteLine();
 
-    // 3. Three acts. Each recalls the same question and checks the order and the totals the docs publish. Freshness is
+    // 3. Three acts. Each recalls the same question and checks the order, totals, evidence and success rates the docs publish. Freshness is
     // 1.000 within a run, so the totals are stable. A mismatch is collected, not thrown, so one run reports them all.
     var mismatches = new List<string>();
 
     Console.WriteLine("Act 1. Every answer for \"refund through the API\" meets the rule, so its runs count in full.");
     var first = await RecallAndPrint(memory, scope, ct);
-    Check("act 1", first, [throughApi.Id, byHand.Id], [0.888, 0.880], mismatches);
+    Check("act 1", first, [throughApi.Id, byHand.Id], [0.888, 0.880], [(5, 5), (8, 0)], [0.750, 0.722], mismatches);
     Console.WriteLine();
 
     // The agent says this run worked, but the answer lacks the word "notified". The evaluator overrules the agent.
@@ -184,7 +185,7 @@ static async Task<int> Walkthrough(IReasonletMemory memory, ReasonletScope scope
     RequireVerdict(disputed.Source, disputed.Success, ReasonletVerdictSource.Evaluator, false, "Record the disputed run");
     Console.WriteLine($"  Receipt: source {disputed.Source}, success {disputed.Success}, execution {disputed.Execution.Value}. The agent said true; the evaluator said false.");
     var second = await RecallAndPrint(memory, scope, ct);
-    Check("act 2", second, [byHand.Id, throughApi.Id], [0.880, 0.867], mismatches);
+    Check("act 2", second, [byHand.Id, throughApi.Id], [0.880, 0.867], [(8, 0), (6, 6)], [0.722, 0.682], mismatches);
     Console.WriteLine();
 
     // A person checks and says the customer was in fact notified. Feedback with Worked set overrides the evaluator.
@@ -193,7 +194,7 @@ static async Task<int> Walkthrough(IReasonletMemory memory, ReasonletScope scope
         await memory.RecordFeedbackAsync(scope, disputed.Execution, new ReasonletFeedback(1, 1, 1, Worked: true), ct),
         "Record the feedback");
     var third = await RecallAndPrint(memory, scope, ct);
-    Check("act 3", third, [throughApi.Id, byHand.Id], [0.895, 0.880], mismatches);
+    Check("act 3", third, [throughApi.Id, byHand.Id], [0.895, 0.880], [(6, 6), (8, 0)], [0.773, 0.722], mismatches);
 
     if (mismatches.Count > 0)
     {
@@ -207,7 +208,7 @@ static async Task<int> Walkthrough(IReasonletMemory memory, ReasonletScope scope
     }
 
     Console.WriteLine();
-    Console.WriteLine("Checked every receipt, the order after each act and the totals the docs publish.");
+    Console.WriteLine("Checked every receipt, the order after each act, and the totals, evidence and success rates the docs publish.");
     return 0;
 }
 
@@ -240,11 +241,16 @@ static async Task<IReadOnlyList<ReasonletMatch>> RecallAndPrint(IReasonletMemory
     return matches;
 }
 
-// Adds a line to mismatches for each way the recall differs: its order, or a total rounded to three decimals.
-static void Check(string act, IReadOnlyList<ReasonletMatch> matches, ReasonletId[] expectedOrder, double[] expectedTotals, List<string> mismatches)
+// Adds a line to mismatches for each way the recall differs: its order, the evidence on each match, or a total or
+// success rate rounded to three decimals.
+static void Check(
+    string act, IReadOnlyList<ReasonletMatch> matches, ReasonletId[] expectedOrder, double[] expectedTotals,
+    (int Runs, int JudgedRuns)[] expectedEvidence, double[] expectedRates, List<string> mismatches)
 {
     var actualOrder = matches.Select(m => m.Reasonlet.Id).ToArray();
     var actualTotals = matches.Select(m => Math.Round(m.Score.Total, 3)).ToArray();
+    var actualEvidence = matches.Select(m => (m.Evidence.Runs, m.Evidence.JudgedRuns)).ToArray();
+    var actualRates = matches.Select(m => Math.Round(m.Score.SuccessRate, 3)).ToArray();
     if (!actualOrder.SequenceEqual(expectedOrder))
     {
         var names = string.Join(", ", matches.Select(m => m.Reasonlet.Name));
@@ -253,11 +259,25 @@ static void Check(string act, IReadOnlyList<ReasonletMatch> matches, ReasonletId
 
     if (!actualTotals.SequenceEqual(expectedTotals))
     {
-        mismatches.Add(string.Create(
-            CultureInfo.InvariantCulture,
-            $"{act}: expected totals {string.Join(", ", expectedTotals.Select(t => t.ToString("F3", CultureInfo.InvariantCulture)))}, got {string.Join(", ", actualTotals.Select(t => t.ToString("F3", CultureInfo.InvariantCulture)))}"));
+        mismatches.Add($"{act}: expected totals {Format(expectedTotals)}, got {Format(actualTotals)}");
+    }
+
+    if (!actualEvidence.SequenceEqual(expectedEvidence))
+    {
+        mismatches.Add($"{act}: expected runs and judged runs {FormatEvidence(expectedEvidence)}, got {FormatEvidence(actualEvidence)}");
+    }
+
+    if (!actualRates.SequenceEqual(expectedRates))
+    {
+        mismatches.Add($"{act}: expected success rates {Format(expectedRates)}, got {Format(actualRates)}");
     }
 }
+
+static string Format(IEnumerable<double> values) =>
+    string.Join(", ", values.Select(v => v.ToString("F3", CultureInfo.InvariantCulture)));
+
+static string FormatEvidence(IEnumerable<(int Runs, int JudgedRuns)> values) =>
+    string.Join(", ", values.Select(v => $"{v.Runs}/{v.JudgedRuns}"));
 
 static void RequireVerdict(ReasonletVerdictSource source, bool success, ReasonletVerdictSource expectedSource, bool expectedSuccess, string what)
 {

@@ -94,7 +94,7 @@ A real model gives different similarities, so the numbers above change, and you 
    - **"refund by hand"**: 8 runs, none with an answer, so the agent's verdict counts for each;
    - **"refund through the API"**: 5 runs, each with an answer that meets the rule, so the evaluator judges each.
 3. Recalls "How do I refund an order?" three times. Between the recalls, one run on "refund through the API" is recorded and then given feedback.
-4. Checks every receipt, the order after each act and the totals shown below, and exits with code 1 if not.
+4. Checks every receipt, the order after each act, and the totals, evidence and success rates shown below, and exits with code 1 if not.
 5. Erases the scope, so a run leaves nothing behind.
 
 ### Run it
@@ -134,7 +134,7 @@ Act 3. A person checks and says the customer was in fact notified: feedback with
 
 The execution id in the act 2 receipt is different on every run, so it is shown as a placeholder.
 
-- **Act 1.** Five judged successes give a success rate of (5 + 5 × 0.5) / (5 + 5) = 0.750. "Refund by hand" has 8 runs and none judged, so it ranks second.
+- **Act 1.** Five judged successes give a success rate of 0.750. "Refund by hand" has 8 runs and none judged, so it ranks second.
 - **Act 2.** The agent said the run worked, but the evaluator overruled it. The failed judged run drops the rate to 0.682, and "refund by hand" ranks first.
 - **Act 3.** Feedback with `Worked` true overrides the evaluator, so the run counts as a success and the rate rises to 0.773.
 

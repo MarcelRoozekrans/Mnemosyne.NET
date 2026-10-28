@@ -81,7 +81,7 @@ await memory.RecordFeedbackAsync(
 - **`Worked` is the verdict.** When it is set, it counts instead of the evaluator's and the agent's.
 - **A verdict can be changed but not withdrawn.** Feedback with `Worked` null keeps the earlier verdict. To change it, record the other value.
 - **The three scores are stored but not ranked.** Each is from 0 to 1, and new feedback replaces the earlier scores.
-- **Feedback makes an agent-only run judged.** That holds even when the person agrees with the agent: the run then counts in full.
+- **Feedback with `Worked` set makes an agent-only run judged.** That holds even when the person agrees with the agent: the run then counts in full.
 - **It can fail.** An execution that does not exist in the scope gives `NotFound`, also when it exists only in another scope.
 
 ## When the judge is down

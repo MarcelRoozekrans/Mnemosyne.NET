@@ -22,7 +22,7 @@ The sample migrates the `mnemosyne` schema with 256 dimensions, so give it a dat
 
 `ChecklistEvaluator` implements `IReasonletEvaluator`. An answer works when it contains a refund reference like `REF-4821` and the word "notified". It looks at the answer alone and ignores whether the agent reported success. It never prints the question or the answer, and never quotes them in an error.
 
-Registering it before `AddMnemosyne()` is all the wiring there is:
+Registering it, before or after `AddMnemosyne()`, is all the wiring there is:
 
 ```csharp
 services.AddSingleton<IReasonletEvaluator, ChecklistEvaluator>();
@@ -40,7 +40,7 @@ The facade then judges every run recorded with both a question and an answer. A 
 3. Act 1: recalls. "Refund through the API" ranks first.
 4. Act 2: records one more run on "refund through the API". The agent reports success, but the answer lacks "notified". The receipt says the evaluator decided and the run failed. Recall again: "refund by hand" ranks first.
 5. Act 3: records feedback on that run with `Worked: true`, as a person who checked and found the customer was notified. A person's verdict overrides the evaluator's. Recall again: "refund through the API" ranks first.
-6. Checks every receipt, the order after each act and the totals shown below, and exits 1 if not. CI runs the sample, so this is tested.
+6. Checks every receipt, the order after each act, and the totals, evidence and success rates shown below, and exits 1 if not. CI runs the sample, so this is tested.
 7. Erases the scope with `EraseAsync`.
 
 The output, without the wiring lines. The execution id in the act 2 receipt is different on every run, so it is shown as a placeholder:

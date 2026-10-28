@@ -68,7 +68,7 @@ The facade keeps only the error code. Your error's text is dropped, so it cannot
 
 ## Cancellation
 
-Honour the token. Throw `OperationCanceledException`, as `ct.ThrowIfCancellationRequested()` does. Never return cancellation as an error result.
+Honour the token. Cancellation surfaces as an `OperationCanceledException` when the result is awaited. An `async` method gets that from `ct.ThrowIfCancellationRequested()`. A method that is not `async` can return `ValueTask.FromCanceled`. Never return cancellation as an error result.
 
 The facade passes your evaluator the caller's token, linked with a timer for `MnemosyneOptions.EvaluationTimeout`. It is 30 seconds by default. When the time is up, the facade cancels the token and stops waiting, even for a judge that ignores it. That call is abandoned: it may run on, but its outcome is discarded. The run is stored with the agent's verdict, and the evaluate activity shows `Unavailable`.
 
@@ -121,7 +121,7 @@ Three checks are worth having in every evaluator's tests:
 
 - A passing and a failing run give the verdicts you expect.
 - Every verdict you can return passes `Validate()`. This is the one the facade enforces.
-- A cancelled token throws `OperationCanceledException`.
+- A cancelled token makes awaiting the call throw `OperationCanceledException`.
 
 If your evaluator can fail, also test that its failure is an `Unavailable` result, and that nothing in it quotes the question or the answer.
 
@@ -156,7 +156,10 @@ internal sealed partial class ChecklistEvaluator : IReasonletEvaluator
     /// <inheritdoc />
     public ValueTask<Result<ReasonletEvaluation, MnemosyneError>> EvaluateAsync(ReasonletEvaluationRequest request, CancellationToken ct)
     {
-        ct.ThrowIfCancellationRequested();
+        if (ct.IsCancellationRequested)
+        {
+            return ValueTask.FromCanceled<Result<ReasonletEvaluation, MnemosyneError>>(ct);
+        }
 
         var met = RefundReference().IsMatch(request.Answer)
             && request.Answer.Contains("notified", StringComparison.OrdinalIgnoreCase);
@@ -175,6 +178,6 @@ How it follows the contract:
 - It returns `Success` and a `Score` of 1 or 0, with a fixed `Evaluator` id, `sample-checklist`, so the verdict passes `Validate`.
 - It has no backend, so it never returns `Unavailable`. An evaluator that calls a service would.
 - It never prints the question or the answer, and puts neither in an error.
-- It checks the token first, so a cancelled call throws.
+- It checks the token first and returns a cancelled `ValueTask`, so awaiting a cancelled call throws.
 
 The sample registers it as shown in [Register it](#register-it), then records runs and recalls, so you can watch the verdicts move the ranking. Its `README.md` explains how to run it.
