@@ -9,6 +9,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- The offline embedding stand-in, shared by the samples. -->
+    <Compile Include="../Shared/HashingEmbeddingGenerator.cs" Link="HashingEmbeddingGenerator.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="../../src/Mnemosyne.NET.Abstractions/Mnemosyne.NET.Abstractions.csproj" />
     <ProjectReference Include="../../src/Mnemosyne.NET/Mnemosyne.NET.csproj" />
     <ProjectReference Include="../../src/Mnemosyne.NET.PostgreSql/Mnemosyne.NET.PostgreSql.csproj" />

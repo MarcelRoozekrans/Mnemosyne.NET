@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Mnemosyne.NET;
 using Mnemosyne.NET.Abstractions;
 using Mnemosyne.NET.PostgreSql;
+using Mnemosyne.Samples;
 using Mnemosyne.Samples.Evaluation;
 using Npgsql;
 using ZeroAlloc.Results;
@@ -73,7 +74,7 @@ static async Task<int> Run(string connectionString, CancellationToken ct)
     }
     finally
     {
-        // 5. Erase the scope, whatever happened above, so a run leaves no Reasonlets behind. A failed erase is
+        // 4. Erase the scope, whatever happened above, so a run leaves no Reasonlets behind. A failed erase is
         // reported but never replaces a failure that is already on its way out.
         if (!await TryErase(memory, scope))
         {
@@ -152,8 +153,8 @@ static async Task<int> Walkthrough(IReasonletMemory memory, ReasonletScope scope
             ct),
         "Remember refund through the API");
     RequireVerdict(throughApi.Source, throughApi.Success, ReasonletVerdictSource.Evaluator, true, "Remember refund through the API");
-    await RecordRuns(memory, scope, throughApi.Id, success, ThroughApiQuestion, PassingAnswer, count: 5, provenance, ct);
-    Console.WriteLine("Remembered \"refund through the API\" and recorded 5 more runs, all with an answer that meets the rule: 6 runs the evaluator judged as successes.");
+    await RecordRuns(memory, scope, throughApi.Id, success, ThroughApiQuestion, PassingAnswer, count: 4, provenance, ct);
+    Console.WriteLine("Remembered \"refund through the API\" and recorded 4 more runs, all with an answer that meets the rule: 5 runs the evaluator judged as successes.");
     Console.WriteLine();
 
     // 3. Three acts. Each recalls the same question and checks the order and the totals the docs publish. Freshness is
@@ -162,7 +163,7 @@ static async Task<int> Walkthrough(IReasonletMemory memory, ReasonletScope scope
 
     Console.WriteLine("Act 1. Every answer for \"refund through the API\" meets the rule, so its runs count in full.");
     var first = await RecallAndPrint(memory, scope, ct);
-    Check("act 1", first, [throughApi.Id, byHand.Id], [0.895, 0.880], mismatches);
+    Check("act 1", first, [throughApi.Id, byHand.Id], [0.888, 0.880], mismatches);
     Console.WriteLine();
 
     // The agent says this run worked, but the answer lacks the word "notified". The evaluator overrules the agent.
@@ -183,7 +184,7 @@ static async Task<int> Walkthrough(IReasonletMemory memory, ReasonletScope scope
     RequireVerdict(disputed.Source, disputed.Success, ReasonletVerdictSource.Evaluator, false, "Record the disputed run");
     Console.WriteLine($"  Receipt: source {disputed.Source}, success {disputed.Success}, execution {disputed.Execution.Value}. The agent said true; the evaluator said false.");
     var second = await RecallAndPrint(memory, scope, ct);
-    Check("act 2", second, [byHand.Id, throughApi.Id], [0.880, 0.875], mismatches);
+    Check("act 2", second, [byHand.Id, throughApi.Id], [0.880, 0.867], mismatches);
     Console.WriteLine();
 
     // A person checks and says the customer was in fact notified. Feedback with Worked set overrides the evaluator.
@@ -192,7 +193,7 @@ static async Task<int> Walkthrough(IReasonletMemory memory, ReasonletScope scope
         await memory.RecordFeedbackAsync(scope, disputed.Execution, new ReasonletFeedback(1, 1, 1, Worked: true), ct),
         "Record the feedback");
     var third = await RecallAndPrint(memory, scope, ct);
-    Check("act 3", third, [throughApi.Id, byHand.Id], [0.900, 0.880], mismatches);
+    Check("act 3", third, [throughApi.Id, byHand.Id], [0.895, 0.880], mismatches);
 
     if (mismatches.Count > 0)
     {
