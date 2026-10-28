@@ -332,6 +332,14 @@ static async Task<int> FacadeSmoke(NpgsqlDataSource dataSource, ReasonletGraph g
         return 25;
     }
 
+    // The evidence travels with every match: the remember is one run, judged by the agent alone, and there is no parent.
+    if (recalled.Value[0].Evidence.Runs < 1
+        || recalled.Value[0].Evidence != new ReasonletEvidence(1, 0, false))
+    {
+        Console.Error.WriteLine($"Recall carried the wrong evidence: {recalled.Value[0].Evidence}");
+        return 25;
+    }
+
     // The agent says the run failed and the judge says it worked, so the judge's verdict counts, and the receipt says so.
     // The answer is never stored, and the store reads no verdict back, so the smoke checks the stored columns in SQL.
     var judged = await memory.RecordExecutionAsync(
