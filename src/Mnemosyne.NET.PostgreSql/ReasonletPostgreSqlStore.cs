@@ -29,7 +29,7 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
     private const string MigrationResourcePrefix = "Mnemosyne.NET.PostgreSql.Migrations.";
 
     /// <summary>The schema version this store needs, which the newest migration records in <c>mnemosyne.settings</c>.</summary>
-    private const int SchemaVersion = 2;
+    private const int SchemaVersion = 3;
 
     /// <summary>The most rows one prune transaction deletes, so no batch holds its locks for long.</summary>
     internal const int PruneBatchSize = 1000;
@@ -542,7 +542,10 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
     /// flips, the Reasonlet's counters follow in the same transaction: <c>successes</c> moves by one, a raised success
     /// moves <c>last_success_at</c> forward to the run's time when that is later, and a lost success that held
     /// <c>last_success_at</c> recomputes it from the remaining successes, or clears it when none remains. Pruned runs
-    /// stay in <c>successes</c>, so <c>last_success_at</c> can be null while <c>successes</c> is above zero. Recorded feedback
+    /// stay in <c>successes</c>, so <c>last_success_at</c> can be null while <c>successes</c> is above zero. A
+    /// <c>Worked</c> verdict also makes the run judged: an agent-only run adds one to <c>judged_runs</c>, even when the
+    /// verdict agrees with the agent's and its success does not flip, and <c>judged_successes</c> moves by the change in
+    /// whether the run is a judged success. Recorded feedback
     /// that gives a <c>Worked</c> verdict tags its <c>mnemosyne.feedback.append</c> activity with
     /// <c>mnemosyne.verdict_source</c> <c>feedback</c>, whether or not it flips the effective success, so a human override
     /// that agrees with the judge shows too; feedback with <c>Worked</c> null, or that fails, is not tagged.
@@ -639,14 +642,21 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
 
         await executions.LockMetricsForFeedbackAsync(reasonlet, transaction, ct).ConfigureAwait(false);
 
-        // The execution is held, so the statement updates its row and answers the new effective success.
-        var after = await executions.RecordFeedbackAsync(
-            id, scope.Value, feedback.Utility, feedback.Correctness, feedback.Reusability, feedback.Worked, transaction, ct).ConfigureAwait(false);
+        // The execution is held, so the statement updates its row and answers the new verdict. The counters move
+        // when the run's effective success or its judged state changed: a verdict that agrees with the agent's
+        // changes only the latter.
+        var after = (await executions.RecordFeedbackAsync(
+            id, scope.Value, feedback.Utility, feedback.Correctness, feedback.Reusability, feedback.Worked, transaction, ct).ConfigureAwait(false))!;
         if (after != before)
         {
-            await (after
-                ? executions.RaiseSuccessAsync(id, reasonlet, transaction, ct)
-                : executions.LoseSuccessAsync(id, reasonlet, transaction, ct)).ConfigureAwait(false);
+            await executions.MoveCountersAsync(
+                id,
+                reasonlet,
+                after.Successes - before.Successes,
+                after.JudgedRuns - before.JudgedRuns,
+                after.JudgedSuccesses - before.JudgedSuccesses,
+                transaction,
+                ct).ConfigureAwait(false);
         }
 
         await transaction.CommitAsync(ct).ConfigureAwait(false);
@@ -799,12 +809,18 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
         {
             // The parent's counter row has NOT NULL runs, so a null run count means there is no row.
             var parent = row.ParentRuns is { } parentRuns
-                ? new ReasonletMetrics(parentRuns, row.ParentSuccesses!.Value, row.ParentLastSuccessAt, row.ParentLastExecutedAt!.Value)
+                ? new ReasonletMetrics(
+                    parentRuns,
+                    row.ParentSuccesses!.Value,
+                    row.ParentLastSuccessAt,
+                    row.ParentLastExecutedAt!.Value,
+                    row.ParentJudgedRuns!.Value,
+                    row.ParentJudgedSuccesses!.Value)
                 : (ReasonletMetrics?)null;
             candidates.Add(new ReasonletCandidate(
                 ToDefinition(row.ToReasonletRow()),
                 row.Similarity,
-                new ReasonletMetrics(row.Runs, row.Successes, row.LastSuccessAt, row.LastExecutedAt),
+                new ReasonletMetrics(row.Runs, row.Successes, row.LastSuccessAt, row.LastExecutedAt, row.JudgedRuns, row.JudgedSuccesses),
                 parent));
         }
 

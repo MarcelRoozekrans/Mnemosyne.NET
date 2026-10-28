@@ -24,8 +24,8 @@ internal sealed partial class SettingsRepository(IAsyncDbConnection connection)
     public partial Task<int?> GetDimensionsAsync(CancellationToken ct);
 
     /// <summary>
-    /// The schema version the migrations recorded, or null when none did: migration 0002 records 2, and a database
-    /// that only 0001 reached has none.
+    /// The schema version the migrations recorded, or null when none did: migration 0002 records 2, 0003 records 3, and
+    /// a database that only 0001 reached has none.
     /// </summary>
     [Query("SELECT value::int FROM mnemosyne.settings WHERE key = 'schema_version'")]
     public partial Task<int?> GetSchemaVersionAsync(CancellationToken ct);

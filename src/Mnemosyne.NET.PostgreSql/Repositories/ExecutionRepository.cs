@@ -1,4 +1,5 @@
 using System.Data.Async;
+using Mnemosyne.NET.PostgreSql.Rows;
 using ZeroAlloc.ORM;
 
 namespace Mnemosyne.NET.PostgreSql.Repositories;
@@ -28,6 +29,11 @@ internal sealed partial class ExecutionRepository(IAsyncDbConnection connection)
     /// the evaluator's verdict before the agent's: a new run has no feedback yet. The metrics count the effective
     /// success. The table's CHECKs refuse an evaluation given only in part.
     /// </para>
+    /// <para>
+    /// A run with an evaluation is judged, so it also counts in <c>judged_runs</c>, and in <c>judged_successes</c>
+    /// when its effective success is true. A run without one is agent-only and leaves both alone. The metrics row's
+    /// CHECKs hold the judged counters within the run counters.
+    /// </para>
     /// </remarks>
     private const string InsertSql = """
         WITH r AS (
@@ -41,14 +47,19 @@ internal sealed partial class ExecutionRepository(IAsyncDbConnection connection)
             SELECT @id, r.id, r.scope, now(), @agentSuccess, @evaluatedSuccess, @evaluationScore, @evaluator,
                    coalesce(@evaluatedSuccess, @agentSuccess), @durationTicks, @score, @source, @runId, @subjectId, @tags
             FROM r
-            RETURNING reasonlet_id, scope, success, executed_at
+            RETURNING reasonlet_id, scope, success, evaluated_success IS NOT NULL AS judged, executed_at
         )
-        INSERT INTO mnemosyne.reasonlet_metrics AS m (reasonlet_id, scope, runs, successes, last_success_at, last_executed_at)
-        SELECT reasonlet_id, scope, 1, CASE WHEN success THEN 1 ELSE 0 END, CASE WHEN success THEN executed_at END, executed_at
+        INSERT INTO mnemosyne.reasonlet_metrics AS m
+            (reasonlet_id, scope, runs, successes, judged_runs, judged_successes, last_success_at, last_executed_at)
+        SELECT reasonlet_id, scope, 1, CASE WHEN success THEN 1 ELSE 0 END,
+               CASE WHEN judged THEN 1 ELSE 0 END, CASE WHEN judged AND success THEN 1 ELSE 0 END,
+               CASE WHEN success THEN executed_at END, executed_at
         FROM e
         ON CONFLICT (reasonlet_id) DO UPDATE
             SET runs = m.runs + 1,
                 successes = m.successes + EXCLUDED.successes,
+                judged_runs = m.judged_runs + EXCLUDED.judged_runs,
+                judged_successes = m.judged_successes + EXCLUDED.judged_successes,
                 last_success_at = greatest(m.last_success_at, EXCLUDED.last_success_at),
                 last_executed_at = greatest(m.last_executed_at, EXCLUDED.last_executed_at)
         """;
@@ -125,22 +136,23 @@ internal sealed partial class ExecutionRepository(IAsyncDbConnection connection)
 
     /// <summary>
     /// Locks the execution in the scope <c>FOR UPDATE</c> until the transaction ends, the third step of feedback, and
-    /// answers its effective success: null when it is gone, deleted by an erase or a prune that this statement waited
-    /// for.
+    /// answers its verdict before the feedback, its effective success and whether it is judged: null when it is gone,
+    /// deleted by an erase or a prune that this statement waited for.
     /// </summary>
     /// <remarks>
     /// A statement of its own, so it re-checks the execution after any wait: under READ COMMITTED a locking read that
-    /// waited for a delete finds no row. The success it answers cannot change until commit, because every writer of
-    /// the row, feedback itself, locks it first. It also checks that the execution still belongs to the Reasonlet the
-    /// feedback locked, rather than assuming <c>reasonlet_id</c> never changes, so the locks it holds are always the
-    /// run's own Reasonlet and metrics row.
+    /// waited for a delete finds no row. The verdict it answers cannot change until commit, because every writer of
+    /// the row, feedback itself, locks it first. A run is judged when an evaluator or a human gave it a verdict. It
+    /// also checks that the execution still belongs to the Reasonlet the feedback locked, rather than assuming
+    /// <c>reasonlet_id</c> never changes, so the locks it holds are always the run's own Reasonlet and metrics row.
     /// </remarks>
     [Query("""
-        SELECT success FROM mnemosyne.reasonlet_executions
+        SELECT success, evaluated_success IS NOT NULL OR feedback_worked IS NOT NULL
+        FROM mnemosyne.reasonlet_executions
         WHERE id = @executionId AND scope = @scope AND reasonlet_id = @reasonletId
         FOR UPDATE
         """)]
-    public partial Task<bool?> LockExecutionForFeedbackAsync(
+    public partial Task<VerdictRow?> LockExecutionForFeedbackAsync(
         Guid executionId, string scope, Guid reasonletId, IAsyncDbTransaction transaction, CancellationToken ct);
 
     /// <summary>
@@ -162,7 +174,8 @@ internal sealed partial class ExecutionRepository(IAsyncDbConnection connection)
 
     /// <summary>
     /// Records feedback on an execution that this transaction holds, replacing earlier feedback, and applies its
-    /// verdict, in one statement. Answers the execution's effective success afterwards.
+    /// verdict, in one statement. Answers the execution's verdict afterwards: its effective success, and whether it is
+    /// judged, which a non-null <paramref name="worked"/> makes it.
     /// </summary>
     /// <remarks>
     /// A null <paramref name="worked"/> keeps the stored human verdict, so a verdict can be changed but not retracted.
@@ -185,11 +198,11 @@ internal sealed partial class ExecutionRepository(IAsyncDbConnection connection)
             SET feedback_worked = coalesce(@worked, feedback_worked),
                 success = coalesce(@worked, feedback_worked, evaluated_success, agent_success)
             WHERE id = @executionId AND scope = @scope
-            RETURNING success
+            RETURNING success, evaluated_success IS NOT NULL OR feedback_worked IS NOT NULL AS judged
         )
-        SELECT success FROM verdict
+        SELECT success, judged FROM verdict
         """)]
-    public partial Task<bool> RecordFeedbackAsync(
+    public partial Task<VerdictRow?> RecordFeedbackAsync(
         Guid executionId,
         string scope,
         double utility,
@@ -200,40 +213,45 @@ internal sealed partial class ExecutionRepository(IAsyncDbConnection connection)
         CancellationToken ct);
 
     /// <summary>
-    /// Counts a success that feedback raised from a failure: one more success, and <c>last_success_at</c> moved to
-    /// the run's time when that is later. <c>greatest</c> ignores a null.
-    /// </summary>
-    [Command("""
-        UPDATE mnemosyne.reasonlet_metrics
-        SET successes = successes + 1,
-            last_success_at = greatest(last_success_at,
-                (SELECT e.executed_at FROM mnemosyne.reasonlet_executions e WHERE e.id = @executionId))
-        WHERE reasonlet_id = @reasonletId
-        """)]
-    public partial Task RaiseSuccessAsync(Guid executionId, Guid reasonletId, IAsyncDbTransaction transaction, CancellationToken ct);
-
-    /// <summary>
-    /// Uncounts a success that feedback turned into a failure: one success fewer, and, when the run's time is at or
-    /// after <c>last_success_at</c>, so that the lost success held it, <c>last_success_at</c> recomputed as the
-    /// latest remaining effective success of the Reasonlet, or null when none remains.
+    /// Moves the Reasonlet's counters by the change feedback made to one run's verdict: <paramref name="successes"/>,
+    /// <paramref name="judgedRuns"/> and <paramref name="judgedSuccesses"/> are each -1, 0 or 1. A success raised from
+    /// a failure moves <c>last_success_at</c> to the run's time when that is later; <c>greatest</c> ignores a null. A
+    /// success lost, when the run's time is at or after <c>last_success_at</c>, so that the lost success held it,
+    /// recomputes <c>last_success_at</c> as the latest remaining effective success of the Reasonlet, or null when none
+    /// remains. No change to <c>successes</c> leaves it alone.
     /// </summary>
     /// <remarks>
-    /// Run it after <see cref="RecordFeedbackAsync"/>, in a later statement, so the run reads as a failure here and is
-    /// not its own latest success. Retention leaves pruned runs in the counters, so <c>successes</c> can stay above
-    /// zero while <c>last_success_at</c> becomes null: the time of a pruned success is no longer known. That is what an
-    /// erase does too.
+    /// <para>
+    /// Run it after <see cref="RecordFeedbackAsync"/>, in a later statement, so a lowered run reads as a failure here
+    /// and is not its own latest success. Retention leaves pruned runs in the counters, so <c>successes</c> can stay
+    /// above zero while <c>last_success_at</c> becomes null: the time of a pruned success is no longer known. That is
+    /// what an erase does too.
+    /// </para>
+    /// <para>
+    /// The judged counters move with the run's judged state, not only with its success: a verdict that agrees with the
+    /// agent's makes an agent-only run judged without changing whether it succeeded. Feedback cannot retract a
+    /// verdict, so <c>judged_runs</c> never falls here. One statement moves all three, so the metrics row's CHECKs see
+    /// them in step.
+    /// </para>
     /// </remarks>
     [Command("""
         UPDATE mnemosyne.reasonlet_metrics m
-        SET successes = m.successes - 1,
+        SET successes = m.successes + @successes,
+            judged_runs = m.judged_runs + @judgedRuns,
+            judged_successes = m.judged_successes + @judgedSuccesses,
             last_success_at = CASE
-                WHEN (SELECT e.executed_at FROM mnemosyne.reasonlet_executions e WHERE e.id = @executionId) >= m.last_success_at
+                WHEN @successes > 0
+                THEN greatest(m.last_success_at,
+                    (SELECT e.executed_at FROM mnemosyne.reasonlet_executions e WHERE e.id = @executionId))
+                WHEN @successes < 0
+                     AND (SELECT e.executed_at FROM mnemosyne.reasonlet_executions e WHERE e.id = @executionId) >= m.last_success_at
                 THEN (SELECT max(e.executed_at) FROM mnemosyne.reasonlet_executions e
                       WHERE e.scope = m.scope AND e.reasonlet_id = m.reasonlet_id AND e.success)
                 ELSE m.last_success_at END
         WHERE m.reasonlet_id = @reasonletId
         """)]
-    public partial Task LoseSuccessAsync(Guid executionId, Guid reasonletId, IAsyncDbTransaction transaction, CancellationToken ct);
+    public partial Task MoveCountersAsync(
+        Guid executionId, Guid reasonletId, int successes, int judgedRuns, int judgedSuccesses, IAsyncDbTransaction transaction, CancellationToken ct);
 
     /// <summary>
     /// Locks <c>FOR UPDATE</c>, in id order, every execution of <paramref name="doomedIds"/> in the scope, whoever ran
@@ -376,8 +394,9 @@ internal sealed partial class ExecutionRepository(IAsyncDbConnection connection)
     /// </para>
     /// <para>
     /// The counters are subtracted, not recounted: retention prunes old executions and leaves their counts, so the
-    /// executions left are not the whole history. A doomed Reasonlet's metrics row is not updated, because it cascades
-    /// with the Reasonlet. A timestamp is recomputed only when the latest removed value is at or after the stored one,
+    /// executions left are not the whole history. The judged counters lose the removed runs that an evaluator or a
+    /// human judged, and those of them whose effective success is true, so a removed agent-only run leaves them alone.
+    /// A doomed Reasonlet's metrics row is not updated, because it cascades with the Reasonlet. A timestamp is recomputed only when the latest removed value is at or after the stored one,
     /// as the latest remaining execution, or success, of the Reasonlet. Every CTE of a statement reads one snapshot, in
     /// which the deleted rows are still visible, so "remaining" leaves out the deleted ids explicitly.
     /// </para>
@@ -394,11 +413,14 @@ internal sealed partial class ExecutionRepository(IAsyncDbConnection connection)
             DELETE FROM mnemosyne.reasonlet_executions e
             USING pg_temp.mnemosyne_erased_executions t
             WHERE e.scope = @scope AND e.id = t.id
-            RETURNING e.id, e.reasonlet_id, e.success, e.executed_at
+            RETURNING e.id, e.reasonlet_id, e.success, e.evaluated_success IS NOT NULL OR e.feedback_worked IS NOT NULL AS judged,
+                      e.executed_at
         ), removed AS (
             SELECT reasonlet_id,
                    count(*)::int AS runs,
                    (count(*) FILTER (WHERE success))::int AS successes,
+                   (count(*) FILTER (WHERE judged))::int AS judged_runs,
+                   (count(*) FILTER (WHERE judged AND success))::int AS judged_successes,
                    max(executed_at) AS last_executed_at,
                    max(executed_at) FILTER (WHERE success) AS last_success_at
             FROM deleted
@@ -408,6 +430,8 @@ internal sealed partial class ExecutionRepository(IAsyncDbConnection connection)
             UPDATE mnemosyne.reasonlet_metrics m
             SET runs = m.runs - x.runs,
                 successes = m.successes - x.successes,
+                judged_runs = m.judged_runs - x.judged_runs,
+                judged_successes = m.judged_successes - x.judged_successes,
                 last_executed_at = CASE WHEN x.last_executed_at >= m.last_executed_at
                     THEN coalesce((SELECT max(e.executed_at) FROM mnemosyne.reasonlet_executions e
                                    WHERE e.scope = @scope AND e.reasonlet_id = m.reasonlet_id

@@ -277,6 +277,29 @@ public sealed class EraseTests(PgVectorFixture fixture) : IClassFixture<PgVector
     }
 
     [Fact]
+    public async Task ErasingASubjectSubtractsExactlyItsJudgedRunsFromKeptCounters()
+    {
+        // K is B's. A ran it three times: an agent-only success, a success the judge failed, and a failure a human
+        // said worked. B judged a run of its own. The erase removes one agent-only and two judged runs, one of them a
+        // judged success, and leaves B's judged success counted.
+        var store = await MigratedStoreAsync();
+        var scope = PgVectorFixture.NewScope();
+        var k = await RememberAsync(store, scope, "k", SubjectB);
+        await AppendAsync(store, scope, k.Id, SubjectA);
+        await AppendJudgedAsync(store, scope, k.Id, SubjectA, agent: true, judged: false);
+        var raised = await AppendAsync(store, scope, k.Id, SubjectA, new ReasonletOutcome(false, TimeSpan.Zero, null));
+        Assert.True((await store.AppendFeedbackAsync(scope, raised, new ReasonletFeedback(0.5, 0.5, 0.5, true), Ct)).IsSuccess);
+        await AppendJudgedAsync(store, scope, k.Id, SubjectB, agent: false, judged: true);
+        Assert.Equal((5, 4, 3, 2), await AllCountersAsync(k.Id));
+
+        var result = await store.EraseAsync(new ReasonletErasure(scope, SubjectA), Ct);
+
+        Assert.Equal((0, 3), (result.Value.Reasonlets, result.Value.Executions));
+        Assert.Equal((2, 2, 1, 1), await AllCountersAsync(k.Id));
+        await AssertMetricsMatchTheExecutionsAsync(scope);
+    }
+
+    [Fact]
     public async Task ErasingTheLatestRunRecomputesTheTimestampsFromWhatRemains()
     {
         // A's success is K's latest run and latest success, so both timestamps move back to B's run, the latest left.
@@ -523,6 +546,56 @@ public sealed class EraseTests(PgVectorFixture fixture) : IClassFixture<PgVector
         Assert.True(result.IsSuccess);
         return result.Value.Execution;
     }
+
+    private static async Task AppendJudgedAsync(
+        ReasonletPostgreSqlStore store, ReasonletScope scope, ReasonletId id, string subject, bool agent, bool judged)
+    {
+        var result = await store.AppendExecutionAsync(
+            scope,
+            id,
+            new ReasonletOutcome(agent, TimeSpan.Zero, null),
+            new ReasonletProvenance { Source = "test", SubjectId = subject },
+            new ReasonletEvaluation(judged, 0.5, "judge"),
+            Ct);
+        Assert.True(result.IsSuccess);
+    }
+
+    /// <summary>Reads a Reasonlet's run, success, judged run and judged success counters.</summary>
+    private async Task<(int Runs, int Successes, int JudgedRuns, int JudgedSuccesses)> AllCountersAsync(ReasonletId id)
+    {
+        var (runs, successes) = await MetricsAsync(id);
+        return (
+            runs,
+            successes,
+            await Entries.ScalarAsync<int>(fixture.DataSource, "SELECT judged_runs FROM mnemosyne.reasonlet_metrics WHERE reasonlet_id = $1", id.Value),
+            await Entries.ScalarAsync<int>(fixture.DataSource, "SELECT judged_successes FROM mnemosyne.reasonlet_metrics WHERE reasonlet_id = $1", id.Value));
+    }
+
+    /// <summary>
+    /// Asserts that every Reasonlet of the scope has a metrics row equal to an aggregate of its executions, the judged
+    /// counters included: a run is judged when an evaluator or a human gave it a verdict.
+    /// </summary>
+    private async Task AssertMetricsMatchTheExecutionsAsync(ReasonletScope scope) => Assert.Equal(
+        0L,
+        await Entries.ScalarAsync<long>(
+            fixture.DataSource,
+            """
+            SELECT count(*) FROM mnemosyne.reasonlets r
+            LEFT JOIN mnemosyne.reasonlet_metrics m ON m.reasonlet_id = r.id
+            LEFT JOIN LATERAL (SELECT count(*)::int AS runs, (count(*) FILTER (WHERE success))::int AS successes,
+                                      (count(*) FILTER (WHERE evaluated_success IS NOT NULL OR feedback_worked IS NOT NULL))::int AS judged_runs,
+                                      (count(*) FILTER (WHERE (evaluated_success IS NOT NULL OR feedback_worked IS NOT NULL) AND success))::int
+                                          AS judged_successes,
+                                      max(executed_at) FILTER (WHERE success) AS last_success_at,
+                                      max(executed_at) AS last_executed_at
+                               FROM mnemosyne.reasonlet_executions e WHERE e.reasonlet_id = r.id) a ON true
+            WHERE r.scope = $1
+              AND (m.reasonlet_id IS NULL
+                   OR (m.runs, m.successes, m.judged_runs, m.judged_successes) <> (a.runs, a.successes, a.judged_runs, a.judged_successes)
+                   OR m.last_success_at IS DISTINCT FROM a.last_success_at
+                   OR m.last_executed_at IS DISTINCT FROM a.last_executed_at)
+            """,
+            scope.Value));
 
     /// <summary>Counts a scope's Reasonlets, executions and feedback.</summary>
     private async Task<(long Reasonlets, long Executions, long Feedback)> CountsAsync(ReasonletScope scope) => (

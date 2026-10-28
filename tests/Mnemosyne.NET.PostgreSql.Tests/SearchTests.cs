@@ -169,6 +169,28 @@ public sealed class SearchTests(PgVectorFixture fixture) : IClassFixture<PgVecto
     }
 
     [Fact]
+    public async Task SearchReturnsTheJudgedCountsOfTheCandidateAndItsParent()
+    {
+        // The root has its agent-only remember run and two judged runs, one a success. The child has its agent-only
+        // remember run and one judged failure.
+        var (store, scope) = await MigratedAsync();
+        var root = await RememberAsync(store, scope, new float[] { 1, 0, 0 }, "root");
+        var child = (await store.RememberAsync(
+            Entries.Entry(scope, Entries.Graph("child"), root, embedding: new float[] { 0.9f, 0.1f, 0 }), Ct)).Value.Id;
+        await AppendJudgedAsync(store, scope, root, true);
+        await AppendJudgedAsync(store, scope, root, false);
+        await AppendJudgedAsync(store, scope, child, false);
+
+        var result = await store.SearchAsync(scope, new float[] { 1, 0, 0 }, null, 10, Ct);
+
+        var rootHit = result.Value.Single(c => c.Reasonlet.Id == root);
+        var childHit = result.Value.Single(c => c.Reasonlet.Id == child);
+        Assert.Equal((3, 2, 2, 1), Counts(rootHit.Metrics));
+        Assert.Equal((2, 1, 1, 0), Counts(childHit.Metrics));
+        Assert.Equal(rootHit.Metrics, childHit.ParentMetrics);
+    }
+
+    [Fact]
     public async Task SearchReturnsNullParentMetricsAfterTheParentIsErased()
     {
         var (store, scope) = await MigratedAsync();
@@ -308,6 +330,14 @@ public sealed class SearchTests(PgVectorFixture fixture) : IClassFixture<PgVecto
         Assert.True(result.IsSuccess);
         return result.Value.Id;
     }
+
+    /// <summary>Appends a run that the agent called a success and a judge gave <paramref name="judged"/>.</summary>
+    private static async Task AppendJudgedAsync(ReasonletPostgreSqlStore store, ReasonletScope scope, ReasonletId id, bool judged) =>
+        Assert.True((await store.AppendExecutionAsync(
+            scope, id, new ReasonletOutcome(true, TimeSpan.Zero, null), Entries.Provenance(), new ReasonletEvaluation(judged, 0.5, "judge"), Ct)).IsSuccess);
+
+    private static (int Runs, int Successes, int JudgedRuns, int JudgedSuccesses) Counts(ReasonletMetrics metrics) =>
+        (metrics.Runs, metrics.Successes, metrics.JudgedRuns, metrics.JudgedSuccesses);
 
     private static void AssertValidation(string message, MnemosyneError error)
     {
