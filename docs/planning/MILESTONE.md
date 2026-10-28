@@ -1,38 +1,29 @@
-# Milestone 1: Store and reuse
+# Milestone 2: Evaluation
 
-**Status:** complete
-**Started:** 2026-10-21
-**Completed:** 2026-10-28
+**Status:** active
+**Started:** 2026-10-23
 
 ## Goal
-Store successful procedures and find the best one for a new question, covering
-handover phases 1 and 2. A caller stores the procedure it followed, with its
-intent, embedding, execution and feedback, under a scope and with provenance.
-For a new question the selector returns ranked candidates with a score
-breakdown. Erasure and retention are in from the start, because they shape the
-schema, and capture, recall and erasure emit OpenTelemetry signals. The milestone ships a NuGet preview and a live docsite
-with getting-started docs and a sample. See the
-[roadmap design](../superpowers/specs/2026-10-21-roadmap-design.md).
+Answer "did it work?" without the caller filling in feedback by hand, so that the success-rate term in ranking reflects real outcomes (handover phase 3).
+- A pluggable evaluator judges each recorded run, and a person's explicit feedback overrides it.
+- Mnemosyne ships two judges: a Minos.NET judge, which is the default, and a judge that asks a chat model.
+- Ranking's success rate comes from evaluated runs.
+
+See the [roadmap](ROADMAP.md#milestone-2-evaluation-status-active). Milestone 1 is archived in [milestones/milestone-1.md](milestones/milestone-1.md).
 
 ## Definition of Done
-- [x] All planned phases complete
-- [x] All tests passing, including integration tests against PostgreSQL + pgvector
-- [x] CI green, including the Native AOT gate
-- [x] A procedure can be stored with intent, embedding, execution and feedback, scoped and with provenance
-- [x] For a new question, the selector returns ranked candidates with a score breakdown, filtered by scope
-- [x] Telemetry, erasure by scope or subject, and retention work
-- [x] A preview is on NuGet via release-please, and the docsite is live with getting-started docs and a sample
+- [x] Runs are scored by a pluggable evaluator, with explicit feedback overriding it
+- [x] A Minos.NET default evaluator and an LLM-as-judge evaluator are shipped
+- [ ] Success rate in ranking comes from evaluated executions
+- [ ] Docs and a sample cover evaluation
 
 ## Phases
-1. Phase 1.1 — Repo scaffold, CI and release pipeline [complete]
-2. Phase 1.2 — Abstractions [complete]
-3. Phase 1.3 — Graph JSON schema v1 [complete]
-4. Phase 1.4 — PostgreSQL + pgvector store [complete]
-5. Phase 1.5 — Telemetry and retention [complete]
-6. Phase 1.6 — Selector and ranking [complete]
-7. Phase 1.7 — Docsite skeleton and first sample [complete]
+1. Phase 2.1 — Evaluator contract and feedback API [complete]
+2. Phase 2.2 — Minos.NET evaluator [complete]
+3. Phase 2.3 — LLM-as-judge evaluator [complete]
+4. Phase 2.4 — Metrics feeding ranking [active]
+5. Phase 2.5 — Evaluation docs and sample [pending]
 
 ## Audit History
 | Date | Verdict | Gaps |
 |---|---|---|
-| 2026-10-28 | PASS | None; warning: no pre-push review reports, reviewed per task and per branch instead ([audit](../superpowers/reviews/2026-10-28-milestone-1-audit.md)) |
