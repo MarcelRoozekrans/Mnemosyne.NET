@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.2.0](https://github.com/MarcelRoozekrans/Mnemosyne.NET/compare/v0.1.0...v0.2.0) (2026-10-28)
+
+
+### ⚠ BREAKING CHANGES
+
+* ReasonletMatch gains a required third positional member, Evidence, so a custom IReasonletSelector must supply it. ReasonletMetrics gains two positional members, JudgedRuns and JudgedSuccesses, so positional deconstruction takes six values and a custom IReasonletStore must be recompiled and must fill both counters. Rankings of runs without an evaluator or human verdict change on upgrade; set AgentVerdictWeight to 1 for the previous rate. Migration 0003 needs a stop-the-world upgrade.
+
+### Features
+
+* print Reasonlet and execution ids as their bare GUID ([#19](https://github.com/MarcelRoozekrans/Mnemosyne.NET/issues/19)) ([2cc21ee](https://github.com/MarcelRoozekrans/Mnemosyne.NET/commit/2cc21ee84b539f03385b7b0a388d0663dcd9d9b1))
+* trust-weighted success rate and the evidence behind each recall match ([cdc8905](https://github.com/MarcelRoozekrans/Mnemosyne.NET/commit/cdc89055077170038403d0420f804d05a8eb66a3))
+
 ## 0.1.0 (2026-10-28)
 
 
