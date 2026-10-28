@@ -384,7 +384,10 @@ public sealed class ExecutionTests(PgVectorFixture fixture) : IClassFixture<PgVe
     private Task<DateTimeOffset> LastExecutedAtAsync(ReasonletId id) => Entries.TimestampAsync(
         fixture.DataSource, "SELECT last_executed_at FROM mnemosyne.reasonlet_metrics WHERE reasonlet_id = $1", id.Value);
 
-    /// <summary>Asserts that every Reasonlet of the scope has a metrics row equal to an aggregate of its executions.</summary>
+    /// <summary>
+    /// Asserts that every Reasonlet of the scope has a metrics row equal to an aggregate of its executions, the judged
+    /// counters included: a run is judged when an evaluator or a human gave it a verdict.
+    /// </summary>
     private async Task AssertMetricsMatchTheExecutionsAsync(ReasonletScope scope) => Assert.Equal(
         0L,
         await Entries.ScalarAsync<long>(
@@ -393,11 +396,15 @@ public sealed class ExecutionTests(PgVectorFixture fixture) : IClassFixture<PgVe
             SELECT count(*) FROM mnemosyne.reasonlets r
             LEFT JOIN mnemosyne.reasonlet_metrics m ON m.reasonlet_id = r.id
             LEFT JOIN LATERAL (SELECT count(*)::int AS runs, (count(*) FILTER (WHERE success))::int AS successes,
+                                      (count(*) FILTER (WHERE evaluated_success IS NOT NULL OR feedback_worked IS NOT NULL))::int AS judged_runs,
+                                      (count(*) FILTER (WHERE (evaluated_success IS NOT NULL OR feedback_worked IS NOT NULL) AND success))::int
+                                          AS judged_successes,
                                       max(executed_at) FILTER (WHERE success) AS last_success_at,
                                       max(executed_at) AS last_executed_at
                                FROM mnemosyne.reasonlet_executions e WHERE e.reasonlet_id = r.id) a ON true
             WHERE r.scope = $1
-              AND (m.reasonlet_id IS NULL OR m.scope <> r.scope OR (m.runs, m.successes) <> (a.runs, a.successes)
+              AND (m.reasonlet_id IS NULL OR m.scope <> r.scope
+                   OR (m.runs, m.successes, m.judged_runs, m.judged_successes) <> (a.runs, a.successes, a.judged_runs, a.judged_successes)
                    OR m.last_success_at IS DISTINCT FROM a.last_success_at
                    OR m.last_executed_at IS DISTINCT FROM a.last_executed_at)
             """,

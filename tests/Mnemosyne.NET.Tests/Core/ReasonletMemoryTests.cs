@@ -144,7 +144,7 @@ public sealed class ReasonletMemoryTests
     {
         var candidates = new[] { Candidate(0.9), Candidate(0.8) };
         _store.SearchResult = Result<IReadOnlyList<ReasonletCandidate>, MnemosyneError>.Success(candidates);
-        var matches = new List<ReasonletMatch> { new(candidates[1].Reasonlet, new ReasonletScore(0.8, 1, 1, 0.9)) };
+        var matches = new List<ReasonletMatch> { new(candidates[1].Reasonlet, new ReasonletScore(0.8, 1, 1, 0.9), new ReasonletEvidence(1, 0, false)) };
         _selector.Result = Result<IReadOnlyList<ReasonletMatch>, MnemosyneError>.Success(matches);
         var query = TestData.Query();
 

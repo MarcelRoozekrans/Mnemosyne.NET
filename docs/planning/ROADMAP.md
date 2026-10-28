@@ -3,15 +3,16 @@
 Design: [roadmap design](../superpowers/specs/2026-10-21-roadmap-design.md), building on
 [the Reasonlets design](../superpowers/specs/2026-10-21-mnemosyne-reasonlets-design.md).
 
-## Milestone 1: Store and reuse [status: active]
+## Milestone 1: Store and reuse [status: complete]
 **Goal:** Store successful procedures and find the best one for a new question (handover phases 1+2), shipped as a NuGet preview with a live docsite.
 **Started:** 2026-10-21
+**Completed:** 2026-10-28
 **Definition of Done:**
 - [x] A procedure can be stored with intent, embedding, execution and feedback, scoped and with provenance
 - [x] For a new question, the selector returns ranked candidates with a score breakdown, filtered by scope
 - [x] Telemetry for capture, recall and erasure, erasure by scope or subject, and retention work against PostgreSQL + pgvector
 - [x] CI is green, including the Native AOT gate and integration tests against pgvector
-- [ ] A preview is on NuGet via release-please, and the docsite is live with getting-started docs and a sample
+- [x] A preview is on NuGet via release-please, and the docsite is live with getting-started docs and a sample
 
 ### Phase 1.1: Repo scaffold, CI and release pipeline [status: complete]
 **Goal:** Solution, central package management, CI with a Native AOT gate, release-please, Renovate and Codecov, matching the sibling repos.
@@ -61,9 +62,10 @@ Design: [roadmap design](../superpowers/specs/2026-10-21-roadmap-design.md), bui
 
 ## Milestone 2: Evaluation [status: active]
 **Goal:** Answer "did it work?" without the caller hand-filling feedback, so the success-rate term in ranking is real (handover phase 3).
+**Started:** 2026-10-23
 **Definition of Done:**
-- [ ] Runs are scored by a pluggable evaluator, with explicit feedback overriding it
-- [ ] A Minos.NET default evaluator and an LLM-as-judge evaluator are shipped
+- [x] Runs are scored by a pluggable evaluator, with explicit feedback overriding it
+- [x] A Minos.NET default evaluator and an LLM-as-judge evaluator are shipped
 - [ ] Success rate in ranking comes from evaluated executions
 - [ ] Docs and a sample cover evaluation
 
@@ -79,17 +81,18 @@ Design: [roadmap design](../superpowers/specs/2026-10-21-roadmap-design.md), bui
 **HelpWanted:** no
 **Plan:** `docs/superpowers/plans/2026-10-23-phase-2.2-minos-evaluator.md`
 
-### Phase 2.3: LLM-as-judge evaluator [status: active]
+### Phase 2.3: LLM-as-judge evaluator [status: complete]
 **Goal:** An evaluator that judges through an `IChatClient`, for hosts without a decision-model provider. A reply it can't parse counts as the judge being down.
 **Surface:** Backend
 **HelpWanted:** no
 **Plan:** `docs/superpowers/plans/2026-10-24-phase-2.3-chat-judge.md`
+**Completed:** 2026-10-24
 
-### Phase 2.4: Metrics feeding ranking [status: pending]
-**Goal:** Metrics computed from evaluated executions, with a minimum run count, feeding the success-rate term.
+### Phase 2.4: Metrics feeding ranking [status: active]
+**Goal:** A trust-weighted success rate that counts agent-only runs at a configurable weight, and the evidence behind each recall match (#9).
 **Surface:** Data
 **HelpWanted:** no
-**Plan:** _to be written_
+**Plan:** `docs/superpowers/plans/2026-10-28-phase-2.4-trusted-success-rate.md`
 
 ### Phase 2.5: Evaluation docs and sample [status: pending]
 **Goal:** Docsite pages and a sample for evaluation and feedback.

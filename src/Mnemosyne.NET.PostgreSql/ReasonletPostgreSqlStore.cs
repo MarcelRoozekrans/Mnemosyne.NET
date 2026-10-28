@@ -29,7 +29,7 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
     private const string MigrationResourcePrefix = "Mnemosyne.NET.PostgreSql.Migrations.";
 
     /// <summary>The schema version this store needs, which the newest migration records in <c>mnemosyne.settings</c>.</summary>
-    private const int SchemaVersion = 2;
+    private const int SchemaVersion = 3;
 
     /// <summary>The most rows one prune transaction deletes, so no batch holds its locks for long.</summary>
     internal const int PruneBatchSize = 1000;
@@ -71,7 +71,8 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
     /// A later call with a different dimension fails with <see cref="MnemosyneErrorCode.Validation"/> and changes
     /// nothing, because mixing embedding models would corrupt similarity; so does a later call with different HNSW
     /// options, because they apply only when the index is built. A database failure answers
-    /// <see cref="MnemosyneErrorCode.Unavailable"/>.
+    /// <see cref="MnemosyneErrorCode.Unavailable"/>, and so does a database that a newer release migrated and marked
+    /// as too new for this binary.
     /// </remarks>
     /// <param name="ct">The cancellation token.</param>
     /// <returns>Success, or the error.</returns>
@@ -109,6 +110,13 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
 
         var source = new EmbeddedResourceMigrationSource(typeof(ReasonletPostgreSqlStore).Assembly, MigrationResourcePrefix);
         await new MigrationRunner(connection, source, new PostgresMigrationDialect()).RunAsync(ct).ConfigureAwait(false);
+
+        // After the migrations, which record the setting, and before the store counts as migrated: a host calls
+        // MigrateAsync at startup, so a binary that a later migration locked out must refuse here too.
+        if (BinaryTooOld(await new SettingsRepository(connection).GetMinBinarySchemaAsync(ct).ConfigureAwait(false)) is { } tooOld)
+        {
+            return tooOld;
+        }
 
         var vectorVersion = await new SettingsRepository(connection).GetVectorVersionAsync(ct).ConfigureAwait(false);
         if (!PgVectorVersion.IsSupported(vectorVersion))
@@ -542,10 +550,13 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
     /// flips, the Reasonlet's counters follow in the same transaction: <c>successes</c> moves by one, a raised success
     /// moves <c>last_success_at</c> forward to the run's time when that is later, and a lost success that held
     /// <c>last_success_at</c> recomputes it from the remaining successes, or clears it when none remains. Pruned runs
-    /// stay in <c>successes</c>, so <c>last_success_at</c> can be null while <c>successes</c> is above zero. Recorded feedback
-    /// that gives a <c>Worked</c> verdict tags its <c>mnemosyne.feedback.append</c> activity with
-    /// <c>mnemosyne.verdict_source</c> <c>feedback</c>, whether or not it flips the effective success, so a human override
-    /// that agrees with the judge shows too; feedback with <c>Worked</c> null, or that fails, is not tagged.
+    /// stay in <c>successes</c>, so <c>last_success_at</c> can be null while <c>successes</c> is above zero. A
+    /// <c>Worked</c> verdict also makes the run judged: an agent-only run adds one to <c>judged_runs</c>, even when the
+    /// verdict agrees with the agent's and its success does not flip, and <c>judged_successes</c> moves by the change in
+    /// whether the run is a judged success. Recorded feedback that gives a <c>Worked</c> verdict tags its
+    /// <c>mnemosyne.feedback.append</c> activity with <c>mnemosyne.verdict_source</c> <c>feedback</c>, whether or not it
+    /// flips the effective success, so a human override that agrees with the judge shows too; feedback with <c>Worked</c>
+    /// null, or that fails, is not tagged.
     /// </para>
     /// <para>
     /// One READ COMMITTED transaction of separate statements, so each step sees what committed while an earlier one
@@ -639,14 +650,21 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
 
         await executions.LockMetricsForFeedbackAsync(reasonlet, transaction, ct).ConfigureAwait(false);
 
-        // The execution is held, so the statement updates its row and answers the new effective success.
-        var after = await executions.RecordFeedbackAsync(
-            id, scope.Value, feedback.Utility, feedback.Correctness, feedback.Reusability, feedback.Worked, transaction, ct).ConfigureAwait(false);
+        // The execution is held, so the statement updates its row and answers the new verdict. The counters move
+        // when the run's effective success or its judged state changed: a verdict that agrees with the agent's
+        // changes only the latter.
+        var after = (await executions.RecordFeedbackAsync(
+            id, scope.Value, feedback.Utility, feedback.Correctness, feedback.Reusability, feedback.Worked, transaction, ct).ConfigureAwait(false))!;
         if (after != before)
         {
-            await (after
-                ? executions.RaiseSuccessAsync(id, reasonlet, transaction, ct)
-                : executions.LoseSuccessAsync(id, reasonlet, transaction, ct)).ConfigureAwait(false);
+            await executions.MoveCountersAsync(
+                id,
+                reasonlet,
+                after.Successes - before.Successes,
+                after.JudgedRuns - before.JudgedRuns,
+                after.JudgedSuccesses - before.JudgedSuccesses,
+                transaction,
+                ct).ConfigureAwait(false);
         }
 
         await transaction.CommitAsync(ct).ConfigureAwait(false);
@@ -799,12 +817,18 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
         {
             // The parent's counter row has NOT NULL runs, so a null run count means there is no row.
             var parent = row.ParentRuns is { } parentRuns
-                ? new ReasonletMetrics(parentRuns, row.ParentSuccesses!.Value, row.ParentLastSuccessAt, row.ParentLastExecutedAt!.Value)
+                ? new ReasonletMetrics(
+                    parentRuns,
+                    row.ParentSuccesses!.Value,
+                    row.ParentLastSuccessAt,
+                    row.ParentLastExecutedAt!.Value,
+                    row.ParentJudgedRuns!.Value,
+                    row.ParentJudgedSuccesses!.Value)
                 : (ReasonletMetrics?)null;
             candidates.Add(new ReasonletCandidate(
                 ToDefinition(row.ToReasonletRow()),
                 row.Similarity,
-                new ReasonletMetrics(row.Runs, row.Successes, row.LastSuccessAt, row.LastExecutedAt),
+                new ReasonletMetrics(row.Runs, row.Successes, row.LastSuccessAt, row.LastExecutedAt, row.JudgedRuns, row.JudgedSuccesses),
                 parent));
         }
 
@@ -1290,7 +1314,9 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
     /// Succeeds once the schema is migrated to <see cref="SchemaVersion"/> with this store's dimension, and caches
     /// that. Answers <see cref="MnemosyneErrorCode.Unavailable"/> before <see cref="MigrateAsync"/> has run, and on a
     /// database that an older release migrated, which needs <see cref="MigrateAsync"/> again: a statement would
-    /// otherwise fail on a missing column. Answers <see cref="MnemosyneErrorCode.Validation"/> when the recorded
+    /// otherwise fail on a missing column. Also answers <see cref="MnemosyneErrorCode.Unavailable"/> on a database whose
+    /// <c>min_binary_schema</c> is above <see cref="SchemaVersion"/>, which a newer release migrated for binaries no
+    /// older than itself. Answers <see cref="MnemosyneErrorCode.Validation"/> when the recorded
     /// dimension differs from the configured one.
     /// </summary>
     internal async ValueTask<UnitResult<MnemosyneError>> EnsureMigratedAsync(CancellationToken ct)
@@ -1325,6 +1351,11 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
             return new MnemosyneError(MnemosyneErrorCode.Unavailable, "schema not migrated: call MigrateAsync");
         }
 
+        if (BinaryTooOld(await settings.GetMinBinarySchemaAsync(ct).ConfigureAwait(false)) is { } tooOld)
+        {
+            return tooOld;
+        }
+
         if (dimensions != _options.Dimensions)
         {
             return DimensionMismatch(dimensions);
@@ -1333,6 +1364,17 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
         _migrated = true;
         return UnitResult<MnemosyneError>.Success();
     }
+
+    /// <summary>
+    /// The error for a database whose <c>min_binary_schema</c> is above <see cref="SchemaVersion"/>, which a later
+    /// migration records when binaries older than it must not write through, or null. A missing setting counts as 0.
+    /// </summary>
+    private static MnemosyneError? BinaryTooOld(int? minimum) =>
+        minimum is { } required && required > SchemaVersion
+            ? new MnemosyneError(
+                MnemosyneErrorCode.Unavailable,
+                $"binary too old for the database: the database needs a binary of schema {required} or later, and this one is schema {SchemaVersion}; upgrade Mnemosyne.NET.PostgreSql")
+            : null;
 
     // DDL takes no parameters, so these statements are raw text. Only the dimension and the HNSW
     // parameters are interpolated: integers that MnemosynePostgreSqlOptions.Validate has range-checked,

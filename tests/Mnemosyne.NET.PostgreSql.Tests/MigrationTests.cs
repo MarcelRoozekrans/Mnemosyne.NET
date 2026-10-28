@@ -27,7 +27,7 @@ public sealed class MigrationTests(PgVectorFixture fixture) : IClassFixture<PgVe
         Assert.Contains("m='16'", index, StringComparison.Ordinal);
         Assert.Contains("ef_construction='64'", index, StringComparison.Ordinal);
         Assert.Equal(
-            "dimensions=3,hnsw_ef_construction=64,hnsw_m=16,schema_version=2",
+            "dimensions=3,hnsw_ef_construction=64,hnsw_m=16,min_binary_schema=3,schema_version=3",
             string.Join(",", await RowsAsync(fixture.DataSource, "SELECT key || '=' || value FROM mnemosyne.settings ORDER BY key")));
     }
 
@@ -135,6 +135,10 @@ public sealed class MigrationTests(PgVectorFixture fixture) : IClassFixture<PgVe
                 "mnemosyne.reasonlet_executions FOREIGN KEY (scope, reasonlet_id) REFERENCES mnemosyne.reasonlets(scope, id) ON DELETE CASCADE",
                 "mnemosyne.reasonlet_executions UNIQUE (scope, id)",
                 "mnemosyne.reasonlet_feedback FOREIGN KEY (scope, execution_id) REFERENCES mnemosyne.reasonlet_executions(scope, id) ON DELETE CASCADE",
+                "mnemosyne.reasonlet_metrics CHECK (((judged_runs >= 0) AND (judged_runs <= runs)))",
+                "mnemosyne.reasonlet_metrics CHECK (((judged_successes >= 0) AND (judged_successes <= judged_runs)))",
+                "mnemosyne.reasonlet_metrics CHECK ((judged_successes <= successes))",
+                "mnemosyne.reasonlet_metrics CHECK (((successes - judged_successes) <= (runs - judged_runs)))",
                 "mnemosyne.reasonlet_metrics FOREIGN KEY (scope, reasonlet_id) REFERENCES mnemosyne.reasonlets(scope, id) ON DELETE CASCADE",
                 "mnemosyne.reasonlets CHECK ((length(content_hash) = 64))",
                 "mnemosyne.reasonlets FOREIGN KEY (scope, parent_id) REFERENCES mnemosyne.reasonlets(scope, id) ON DELETE SET NULL (parent_id)",
@@ -374,7 +378,7 @@ public sealed class MigrationTests(PgVectorFixture fixture) : IClassFixture<PgVe
         await using (var connection = (await dataSource.OpenConnectionAsync(Ct)).AsAsync())
         {
             var source = new EmbeddedResourceMigrationSource(typeof(ReasonletPostgreSqlStore).Assembly, "Mnemosyne.NET.PostgreSql.Migrations.");
-            await new MigrationRunner(connection, new FirstMigrationSource(source), new PostgresMigrationDialect()).RunAsync(Ct);
+            await new MigrationRunner(connection, new MigrationsUpTo(source, 1), new PostgresMigrationDialect()).RunAsync(Ct);
         }
 
         var reasonlet = Guid.CreateVersion7();
@@ -432,20 +436,134 @@ public sealed class MigrationTests(PgVectorFixture fixture) : IClassFixture<PgVe
                 + "coalesce(evaluator, '-'), coalesce(feedback_worked::text, '-')) FROM mnemosyne.reasonlet_executions ORDER BY executed_at"));
         Assert.Equal(metricsBefore, await RowsAsync(dataSource, "SELECT concat_ws('|', runs, successes, last_success_at, last_executed_at) FROM mnemosyne.reasonlet_metrics"));
         Assert.Equal("0.1|0.2|0.3", (await RowsAsync(dataSource, "SELECT concat_ws('|', utility, correctness, reusability) FROM mnemosyne.reasonlet_feedback"))[0]);
-        Assert.Equal("1,2", string.Join(",", await RowsAsync(dataSource, "SELECT version::text FROM __zaorm_migrations ORDER BY version")));
-        Assert.Equal("2", (await RowsAsync(dataSource, "SELECT value FROM mnemosyne.settings WHERE key = 'schema_version'"))[0]);
+        Assert.Equal("1,2,3", string.Join(",", await RowsAsync(dataSource, "SELECT version::text FROM __zaorm_migrations ORDER BY version")));
+        Assert.Equal("3", (await RowsAsync(dataSource, "SELECT value FROM mnemosyne.settings WHERE key = 'schema_version'"))[0]);
+        Assert.Equal("0|0", (await RowsAsync(dataSource, "SELECT concat_ws('|', judged_runs, judged_successes) FROM mnemosyne.reasonlet_metrics"))[0]);
 
-        // The upgraded store works: a verdict on the old failed run raises the counter.
+        // The upgraded store works: a verdict on the old failed run raises the counter and makes the run judged.
         Assert.True((await store.AppendFeedbackAsync(new ReasonletScope("old"), new ExecutionId(runs[1]), new ReasonletFeedback(0.5, 0.5, 0.5, true), Ct)).IsSuccess);
-        Assert.Equal(6, await Entries.ScalarAsync<int>(dataSource, "SELECT successes FROM mnemosyne.reasonlet_metrics"));
+        Assert.Equal(
+            "7|6|1|1",
+            (await RowsAsync(dataSource, "SELECT concat_ws('|', runs, successes, judged_runs, judged_successes) FROM mnemosyne.reasonlet_metrics"))[0]);
     }
 
     [Fact]
-    public async Task ASchemaVersionBelowTwoIsNotMigrated()
+    public async Task APhase2DatabaseUpgradeBackfillsTheJudgedCountersFromTheStoredRuns()
+    {
+        // A database at the 2.3 schema, 0001 and 0002, with runs of every kind: judged by an evaluator, judged by a
+        // human, and agent-only. The counters also hold pruned runs, whose verdicts are gone, so the backfill counts
+        // them as agent-only. Every run of the last Reasonlet was pruned.
+        var dataSource = await fixture.CreateEmptyDatabaseAsync();
+        await using (var connection = (await dataSource.OpenConnectionAsync(Ct)).AsAsync())
+        {
+            var source = new EmbeddedResourceMigrationSource(typeof(ReasonletPostgreSqlStore).Assembly, "Mnemosyne.NET.PostgreSql.Migrations.");
+            await new MigrationRunner(connection, new MigrationsUpTo(source, 2), new PostgresMigrationDialect()).RunAsync(Ct);
+        }
+
+        var mixed = Guid.CreateVersion7();
+        var unjudged = Guid.CreateVersion7();
+        var pruned = Guid.CreateVersion7();
+        var agentOnlyFailure = Guid.CreateVersion7();
+        await Entries.ExecuteAsync(
+            dataSource,
+            """
+            ALTER TABLE mnemosyne.reasonlets ALTER COLUMN embedding TYPE vector(3);
+            CREATE INDEX reasonlets_embedding_hnsw ON mnemosyne.reasonlets USING hnsw (embedding vector_cosine_ops) WITH (m = 16, ef_construction = 64);
+            INSERT INTO mnemosyne.settings (key, value) VALUES ('dimensions', '3'), ('hnsw_m', '16'), ('hnsw_ef_construction', '64');
+            """);
+        await Entries.ExecuteAsync(
+            dataSource,
+            "INSERT INTO mnemosyne.reasonlets (id, scope, name, intent, version, graph, content_hash, status, source, created_at, embedding) "
+            + "SELECT id, 'old', 'n', 'i', '1.0', '{}', repeat('0', 64), 1, 's', now() - interval '3 days', '[1,0,0]' FROM unnest($1::uuid[]) id",
+            new[] { mixed, unjudged, pruned });
+        await Entries.ExecuteAsync(
+            dataSource,
+            """
+            INSERT INTO mnemosyne.reasonlet_executions
+                (id, reasonlet_id, scope, executed_at, agent_success, evaluated_success, evaluation_score, evaluator, feedback_worked, success,
+                 duration_ticks, source)
+            VALUES (gen_random_uuid(), $1, 'old', now() - interval '2 days', false, true, 0.9, 'judge', NULL, true, 0, 's'),
+                   (gen_random_uuid(), $1, 'old', now() - interval '2 days', true, false, 0.1, 'judge', NULL, false, 0, 's'),
+                   (gen_random_uuid(), $1, 'old', now() - interval '2 days', false, NULL, NULL, NULL, true, true, 0, 's'),
+                   (gen_random_uuid(), $1, 'old', now() - interval '2 days', true, true, 0.9, 'judge', false, false, 0, 's'),
+                   (gen_random_uuid(), $1, 'old', now() - interval '2 days', true, NULL, NULL, NULL, NULL, true, 0, 's'),
+                   ($3, $1, 'old', now() - interval '2 days', false, NULL, NULL, NULL, NULL, false, 0, 's'),
+                   (gen_random_uuid(), $2, 'old', now() - interval '2 days', true, NULL, NULL, NULL, NULL, true, 0, 's')
+            """,
+            mixed,
+            unjudged,
+            agentOnlyFailure);
+        await Entries.ExecuteAsync(
+            dataSource,
+            """
+            INSERT INTO mnemosyne.reasonlet_metrics (reasonlet_id, scope, runs, successes, last_success_at, last_executed_at)
+            VALUES ($1, 'old', 10, 6, now() - interval '2 days', now() - interval '2 days'),
+                   ($2, 'old', 2, 2, now() - interval '2 days', now() - interval '2 days'),
+                   ($3, 'old', 3, 2, now() - interval '3 days', now() - interval '3 days')
+            """,
+            mixed,
+            unjudged,
+            pruned);
+        var store = new ReasonletPostgreSqlStore(dataSource, new MnemosynePostgreSqlOptions { Dimensions = 3 });
+        AssertNotMigrated((await store.GetAsync(new ReasonletScope("old"), new ReasonletId(mixed), Ct)).Error);
+
+        Assert.True((await store.MigrateAsync(Ct)).IsSuccess);
+
+        Assert.Equal("10|6|4|2", await CountersAsync(dataSource, mixed));
+        Assert.Equal("2|2|0|0", await CountersAsync(dataSource, unjudged));
+        Assert.Equal("3|2|0|0", await CountersAsync(dataSource, pruned));
+        Assert.Empty(await RowsAsync(
+            dataSource,
+            """
+            SELECT m.reasonlet_id::text FROM mnemosyne.reasonlet_metrics m
+            CROSS JOIN LATERAL (SELECT (count(*) FILTER (WHERE evaluated_success IS NOT NULL OR feedback_worked IS NOT NULL))::int AS judged_runs,
+                                       (count(*) FILTER (WHERE (evaluated_success IS NOT NULL OR feedback_worked IS NOT NULL) AND success))::int
+                                           AS judged_successes
+                                FROM mnemosyne.reasonlet_executions e WHERE e.reasonlet_id = m.reasonlet_id) a
+            WHERE (m.judged_runs, m.judged_successes) <> (a.judged_runs, a.judged_successes)
+            """));
+        Assert.Equal(
+            "dimensions=3,hnsw_ef_construction=64,hnsw_m=16,min_binary_schema=3,schema_version=3",
+            string.Join(",", await RowsAsync(dataSource, "SELECT key || '=' || value FROM mnemosyne.settings ORDER BY key")));
+        Assert.Equal("1,2,3", string.Join(",", await RowsAsync(dataSource, "SELECT version::text FROM __zaorm_migrations ORDER BY version")));
+
+        // The upgraded store keeps the counters: a verdict that agrees with the agent's failure makes its run judged.
+        Assert.True((await store.AppendFeedbackAsync(
+            new ReasonletScope("old"), new ExecutionId(agentOnlyFailure), new ReasonletFeedback(0.5, 0.5, 0.5, false), Ct)).IsSuccess);
+        Assert.Equal("10|6|5|2", await CountersAsync(dataSource, mixed));
+    }
+
+    [Fact]
+    public async Task ADatabaseThatNeedsANewerBinaryRefusesEveryCallUntilTheSettingIsGone()
     {
         var dataSource = await fixture.CreateEmptyDatabaseAsync();
         Assert.True((await new ReasonletPostgreSqlStore(dataSource, new MnemosynePostgreSqlOptions { Dimensions = 3 }).MigrateAsync(Ct)).IsSuccess);
-        await Entries.ExecuteAsync(dataSource, "UPDATE mnemosyne.settings SET value = '1' WHERE key = 'schema_version'");
+        await Entries.ExecuteAsync(dataSource, "UPDATE mnemosyne.settings SET value = '4' WHERE key = 'min_binary_schema'");
+        var store = new ReasonletPostgreSqlStore(dataSource, new MnemosynePostgreSqlOptions { Dimensions = 3 });
+        var scope = PgVectorFixture.NewScope();
+
+        AssertTooOld((await store.MigrateAsync(Ct)).Error);
+        AssertTooOld((await store.GetAsync(scope, ReasonletId.New(), Ct)).Error);
+        AssertTooOld((await store.RememberAsync(Entries.Entry(scope), Ct)).Error);
+        AssertTooOld((await store.AppendExecutionAsync(scope, ReasonletId.New(), default, new ReasonletProvenance { Source = "test" }, null, Ct)).Error);
+        AssertTooOld((await store.AppendFeedbackAsync(scope, ExecutionId.New(), default, Ct)).Error);
+        AssertTooOld((await store.SearchAsync(scope, new float[] { 1, 0, 0 }, null, 10, Ct)).Error);
+        AssertTooOld((await store.EraseAsync(new ReasonletErasure(scope, null), Ct)).Error);
+        AssertTooOld((await store.PruneAsync(new ReasonletRetention { Scope = scope, ExecutionsOlderThan = TimeSpan.FromDays(1) }, Ct)).Error);
+
+        // A missing setting counts as 0, so it asks nothing of the binary.
+        await Entries.ExecuteAsync(dataSource, "DELETE FROM mnemosyne.settings WHERE key = 'min_binary_schema'");
+
+        Assert.True((await store.RememberAsync(Entries.Entry(scope), Ct)).IsSuccess);
+        Assert.True((await new ReasonletPostgreSqlStore(dataSource, new MnemosynePostgreSqlOptions { Dimensions = 3 }).MigrateAsync(Ct)).IsSuccess);
+    }
+
+    [Fact]
+    public async Task ASchemaVersionBelowThreeIsNotMigrated()
+    {
+        var dataSource = await fixture.CreateEmptyDatabaseAsync();
+        Assert.True((await new ReasonletPostgreSqlStore(dataSource, new MnemosynePostgreSqlOptions { Dimensions = 3 }).MigrateAsync(Ct)).IsSuccess);
+        await Entries.ExecuteAsync(dataSource, "UPDATE mnemosyne.settings SET value = '2' WHERE key = 'schema_version'");
 
         var result = await new ReasonletPostgreSqlStore(dataSource, new MnemosynePostgreSqlOptions { Dimensions = 3 })
             .GetAsync(PgVectorFixture.NewScope(), ReasonletId.New(), Ct);
@@ -482,13 +600,30 @@ public sealed class MigrationTests(PgVectorFixture fixture) : IClassFixture<PgVe
         public IReadOnlyList<Migration> GetMigrations() => [new Migration(1, name, sql)];
     }
 
-    /// <summary>The store's own migrations up to 0001, under the store's source name, so a later MigrateAsync continues the history.</summary>
-    private sealed class FirstMigrationSource(IMigrationSource inner) : IMigrationSource
+    /// <summary>
+    /// The store's own migrations up to <paramref name="last"/>, under the store's source name, so a later MigrateAsync
+    /// continues the history.
+    /// </summary>
+    private sealed class MigrationsUpTo(IMigrationSource inner, int last) : IMigrationSource
     {
         public string Name => inner.Name;
 
-        public IReadOnlyList<Migration> GetMigrations() => [.. inner.GetMigrations().Where(m => m.Version == 1)];
+        public IReadOnlyList<Migration> GetMigrations() => [.. inner.GetMigrations().Where(m => m.Version <= last)];
     }
+
+    private static void AssertTooOld(MnemosyneError error)
+    {
+        Assert.Equal(MnemosyneErrorCode.Unavailable, error.Code);
+        Assert.Equal(
+            "binary too old for the database: the database needs a binary of schema 4 or later, and this one is schema 3; upgrade Mnemosyne.NET.PostgreSql",
+            error.Message);
+    }
+
+    /// <summary>Reads a Reasonlet's runs, successes, judged runs and judged successes, joined by bars.</summary>
+    private static async Task<string> CountersAsync(NpgsqlDataSource dataSource, Guid reasonlet) => await Entries.ScalarAsync<string>(
+        dataSource,
+        "SELECT concat_ws('|', runs, successes, judged_runs, judged_successes) FROM mnemosyne.reasonlet_metrics WHERE reasonlet_id = $1",
+        reasonlet);
 
     private static void AssertNotMigrated(MnemosyneError error)
     {

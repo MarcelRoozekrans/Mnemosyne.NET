@@ -54,15 +54,17 @@ public sealed class PruneTests(PgVectorFixture fixture) : IClassFixture<PgVector
         var k = await RememberAsync(store, scope, "k", SubjectA);
         await AppendAsync(store, scope, k.Id, SubjectA);
         await AppendAsync(store, scope, k.Id, SubjectA, Failure);
+        Assert.True((await store.AppendExecutionAsync(
+            scope, k.Id, Success, new ReasonletProvenance { Source = "test", SubjectId = SubjectA }, new ReasonletEvaluation(true, 0.9, "judge"), Ct)).IsSuccess);
         await Entries.ExecuteAsync(
             fixture.DataSource, "UPDATE mnemosyne.reasonlet_executions SET executed_at = now() - interval '10 days' WHERE scope = $1", scope.Value);
         var before = await MetricsAsync(k.Id);
 
         var result = await PruneAsync(store, new ReasonletRetention { Scope = scope, ExecutionsOlderThan = FiveDays });
 
-        Assert.Equal((0, 3), (result.Reasonlets, result.Executions));
+        Assert.Equal((0, 4), (result.Reasonlets, result.Executions));
         Assert.Equal((1L, 0L), await CountsAsync(fixture.DataSource, scope));
-        Assert.Equal((3, 2), (before.Runs, before.Successes));
+        Assert.Equal((4, 3, 1, 1), (before.Runs, before.Successes, before.JudgedRuns, before.JudgedSuccesses));
         Assert.Equal(before, await MetricsAsync(k.Id));
     }
 
@@ -812,12 +814,14 @@ public sealed class PruneTests(PgVectorFixture fixture) : IClassFixture<PgVector
         await Entries.ScalarAsync<int>(fixture.DataSource, "SELECT successes FROM mnemosyne.reasonlet_metrics WHERE reasonlet_id = $1", id.Value));
 
     /// <summary>Reads a Reasonlet's counters and timestamps.</summary>
-    private async Task<(int Runs, int Successes, DateTime LastExecutedAt, DateTime LastSuccessAt)> MetricsAsync(ReasonletId id)
+    private async Task<(int Runs, int Successes, int JudgedRuns, int JudgedSuccesses, DateTime LastExecutedAt, DateTime LastSuccessAt)> MetricsAsync(ReasonletId id)
     {
         var (runs, successes) = await RunsAsync(id);
         return (
             runs,
             successes,
+            await Entries.ScalarAsync<int>(fixture.DataSource, "SELECT judged_runs FROM mnemosyne.reasonlet_metrics WHERE reasonlet_id = $1", id.Value),
+            await Entries.ScalarAsync<int>(fixture.DataSource, "SELECT judged_successes FROM mnemosyne.reasonlet_metrics WHERE reasonlet_id = $1", id.Value),
             await Entries.ScalarAsync<DateTime>(fixture.DataSource, "SELECT last_executed_at FROM mnemosyne.reasonlet_metrics WHERE reasonlet_id = $1", id.Value),
             await Entries.ScalarAsync<DateTime>(fixture.DataSource, "SELECT last_success_at FROM mnemosyne.reasonlet_metrics WHERE reasonlet_id = $1", id.Value));
     }

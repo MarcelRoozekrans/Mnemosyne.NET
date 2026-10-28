@@ -101,15 +101,28 @@ public class GraphAndDefinitionTests
 
     [Fact]
     public void Match_Valid_Passes() =>
-        Assert.True(new ReasonletMatch(TestData.Definition(), default).Validate().IsSuccess);
+        Assert.True(new ReasonletMatch(TestData.Definition(), default, default).Validate().IsSuccess);
 
     [Fact]
     public void Match_NullReasonlet_Fails() =>
-        AssertInvalid(new ReasonletMatch(null!, default).Validate(), "Reasonlet");
+        AssertInvalid(new ReasonletMatch(null!, default, default).Validate(), "Reasonlet");
 
     [Fact]
     public void Match_BadScore_ReportsNestedPath() =>
-        AssertInvalid(new ReasonletMatch(TestData.Definition(), new ReasonletScore(2, 0, 0, 0)).Validate(), "Score.Similarity");
+        AssertInvalid(new ReasonletMatch(TestData.Definition(), new ReasonletScore(2, 0, 0, 0), default).Validate(), "Score.Similarity");
+
+    [Fact]
+    public void Match_BadEvidence_ReportsNestedPath() =>
+        AssertInvalid(
+            new ReasonletMatch(TestData.Definition(), default, new ReasonletEvidence(1, 2, false)).Validate(),
+            "Evidence.JudgedRuns");
+
+    [Fact]
+    public void Match_CarriesItsEvidence()
+    {
+        var evidence = new ReasonletEvidence(7, 3, true);
+        Assert.Equal(evidence, new ReasonletMatch(TestData.Definition(), default, evidence).Evidence);
+    }
 
     [Fact]
     public void Graph_NullEdgeElement_Fails() =>
@@ -144,6 +157,6 @@ public class GraphAndDefinitionTests
     [Fact]
     public void Match_InvalidDefinition_ReportsNestedPath() =>
         AssertInvalid(
-            new ReasonletMatch(TestData.Definition() with { Version = "" }, default).Validate(),
+            new ReasonletMatch(TestData.Definition() with { Version = "" }, default, default).Validate(),
             "Reasonlet.Version");
 }

@@ -20,10 +20,10 @@ internal sealed partial class ReasonletRepository(IAsyncDbConnection connection)
     /// The nearest Active Reasonlets of a scope to an embedding, sorted by distance, each with its similarity and
     /// execution metrics. The <c>ORDER BY</c> uses the bare distance operator so the HNSW index can serve it. The
     /// metrics come from the Reasonlet's counter row; a Reasonlet without one, which the store never leaves, reads as
-    /// no runs and its last execution as its creation time. The parent's metrics come from a left join on the parent's
-    /// counter row in the same scope, and are null for a root, a cut lineage link or a parent without a counter row. A
-    /// null intent applies no intent filter. Run it in a transaction that has set the iterative-scan settings, or the
-    /// index scan can return fewer rows than the limit.
+    /// no runs, none of them judged, and its last execution as its creation time. The parent's metrics come from a left
+    /// join on the parent's counter row in the same scope, and are null for a root, a cut lineage link or a parent
+    /// without a counter row. A null intent applies no intent filter. Run it in a transaction that has set the
+    /// iterative-scan settings, or the index scan can return fewer rows than the limit.
     /// </summary>
     [Query("""
         SELECT r.id, r.scope, r.name, r.intent, r.version, r.graph, r.parent_id, r.status,
@@ -31,7 +31,9 @@ internal sealed partial class ReasonletRepository(IAsyncDbConnection connection)
                greatest(0, 1 - (r.embedding <=> @embedding::vector)) AS similarity,
                coalesce(m.runs, 0), coalesce(m.successes, 0), m.last_success_at,
                coalesce(m.last_executed_at, r.created_at),
-               pm.runs, pm.successes, pm.last_success_at, pm.last_executed_at
+               pm.runs, pm.successes, pm.last_success_at, pm.last_executed_at,
+               coalesce(m.judged_runs, 0), coalesce(m.judged_successes, 0),
+               pm.judged_runs, pm.judged_successes
         FROM mnemosyne.reasonlets r
         LEFT JOIN mnemosyne.reasonlet_metrics m ON m.reasonlet_id = r.id AND m.scope = r.scope
         LEFT JOIN mnemosyne.reasonlet_metrics pm ON pm.reasonlet_id = r.parent_id AND pm.scope = r.scope

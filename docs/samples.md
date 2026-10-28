@@ -41,8 +41,8 @@ The heart of the output is the ranked list:
 
 ```text
   #  Reasonlet                Version  Similarity  Success  Freshness   Total
-  1  refund an order          1.1           0.816    0.917      1.000   0.883
-  2  refund an order          1.0           0.816    0.900      1.000   0.878
+  1  refund an order          1.1           0.816    0.848      1.000   0.863
+  2  refund an order          1.0           0.816    0.833      1.000   0.858
   3  refund a partial order   1.0           0.904    0.500      1.000   0.802
 ```
 

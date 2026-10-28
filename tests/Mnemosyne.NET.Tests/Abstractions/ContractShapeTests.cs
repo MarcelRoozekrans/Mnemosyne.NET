@@ -148,6 +148,42 @@ public class ContractShapeTests
         Assert.Equal(typeof(ValueTask<Result<ReasonletRunReceipt, MnemosyneError>>), method.ReturnType);
     }
 
+    private static string[] PositionalShape(Type record) =>
+        [.. record.GetConstructors().Single(c => c.GetParameters().Length > 1).GetParameters().Select(p => p.ParameterType.Name + " " + p.Name)];
+
+    [Fact]
+    public void TheMatchCarriesTheEvidenceBehindItsScore()
+    {
+        Assert.False(typeof(ReasonletMatch).IsValueType);
+        Assert.Equal(
+            ["ReasonletDefinition Reasonlet", "ReasonletScore Score", "ReasonletEvidence Evidence"],
+            PositionalShape(typeof(ReasonletMatch)));
+    }
+
+    [Fact]
+    public void TheEvidenceIsAPositionalValue()
+    {
+        Assert.True(typeof(ReasonletEvidence).IsValueType);
+        Assert.True(typeof(ReasonletEvidence).IsPublic);
+        Assert.Equal("Mnemosyne.NET.Abstractions", typeof(ReasonletEvidence).Namespace);
+        Assert.Equal(["Int32 Runs", "Int32 JudgedRuns", "Boolean UsesParentPrior"], PositionalShape(typeof(ReasonletEvidence)));
+    }
+
+    [Fact]
+    public void TheMetricsEndWithOptionalJudgedCounters()
+    {
+        Assert.True(typeof(ReasonletMetrics).IsValueType);
+        Assert.Equal(
+            ["Int32 Runs", "Int32 Successes", "Nullable`1 LastSuccessAt", "DateTimeOffset LastExecutedAt", "Int32 JudgedRuns", "Int32 JudgedSuccesses"],
+            PositionalShape(typeof(ReasonletMetrics)));
+        var parameters = typeof(ReasonletMetrics).GetConstructors().Single(c => c.GetParameters().Length > 1).GetParameters();
+        foreach (var judged in parameters[^2..])
+        {
+            Assert.True(judged.HasDefaultValue);
+            Assert.Equal(0, judged.DefaultValue);
+        }
+    }
+
     [Fact]
     public void AppendFeedbackKeepsItsSignature() =>
         Assert.Equal(

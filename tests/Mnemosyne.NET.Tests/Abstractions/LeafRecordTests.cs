@@ -169,6 +169,55 @@ public class LeafRecordTests
         Assert.True(new ReasonletMetrics(2, 2, DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch).Validate().IsSuccess);
     }
 
+    [Theory]
+    [InlineData(3, 2, -1, 0, "JudgedRuns")]
+    [InlineData(3, 2, 4, 0, "JudgedRuns")]
+    [InlineData(3, 2, 2, -1, "JudgedSuccesses")]
+    [InlineData(3, 3, 2, 3, "JudgedSuccesses")]
+    [InlineData(3, 1, 2, 2, "JudgedSuccesses")]
+    public void Metrics_InvalidJudgedCounters_Fail(int runs, int successes, int judgedRuns, int judgedSuccesses, string path) =>
+        AssertInvalid(new ReasonletMetrics(runs, successes, null, DateTimeOffset.UnixEpoch, judgedRuns, judgedSuccesses).Validate(), path);
+
+    [Fact]
+    public void Metrics_MoreUnjudgedSuccessesThanUnjudgedRuns_FailsOnSuccesses()
+    {
+        var result = new ReasonletMetrics(3, 2, null, DateTimeOffset.UnixEpoch, 2, 0).Validate();
+        AssertInvalid(result, "Successes");
+        Assert.Contains("unjudged", result.Error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Metrics_MixedJudgedAndAgentRuns_Pass()
+    {
+        // Ten runs: four judged, two of them successes; six agent-only, all six successes.
+        Assert.True(new ReasonletMetrics(10, 8, null, DateTimeOffset.UnixEpoch, 4, 2).Validate().IsSuccess);
+        Assert.True(new ReasonletMetrics(4, 4, null, DateTimeOffset.UnixEpoch, 4, 4).Validate().IsSuccess);
+        Assert.True(new ReasonletMetrics(4, 0, null, DateTimeOffset.UnixEpoch, 4, 0).Validate().IsSuccess);
+    }
+
+    [Fact]
+    public void Metrics_JudgedCountersDefaultToZero()
+    {
+        var metrics = new ReasonletMetrics(3, 2, null, DateTimeOffset.UnixEpoch);
+        Assert.Equal(0, metrics.JudgedRuns);
+        Assert.Equal(0, metrics.JudgedSuccesses);
+    }
+
+    [Fact]
+    public void Evidence_Valid_Passes()
+    {
+        Assert.True(default(ReasonletEvidence).Validate().IsSuccess);
+        Assert.True(new ReasonletEvidence(5, 5, true).Validate().IsSuccess);
+        Assert.True(new ReasonletEvidence(5, 0, false).Validate().IsSuccess);
+    }
+
+    [Theory]
+    [InlineData(-1, 0, "Runs")]
+    [InlineData(2, -1, "JudgedRuns")]
+    [InlineData(2, 3, "JudgedRuns")]
+    public void Evidence_Invalid_Fails(int runs, int judgedRuns, string path) =>
+        AssertInvalid(new ReasonletEvidence(runs, judgedRuns, false).Validate(), path);
+
     [Fact]
     public void Metrics_LastExecutedAt_RoundTrips()
     {

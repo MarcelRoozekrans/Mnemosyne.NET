@@ -92,6 +92,37 @@ A new release can bring a new migration, which `MigrateAsync` applies. Until it 
 
 Each migration applies in one transaction, whole or not at all. `0002_evaluation` rewrites every row of `mnemosyne.reasonlet_executions` and holds that table under an exclusive lock while it does, so on a large table, plan for the pause.
 
+Migration `0003_judged_counters` adds two counters to each Reasonlet's metrics row, `judged_runs` and `judged_successes`, which the trust-weighted success rate needs. It counts the executions still stored, so a run that retention pruned before the upgrade counts as agent-only. It also adds four `CHECK` constraints, which keep the counters consistent:
+
+- `judged_runs` is between 0 and `runs`;
+- `judged_successes` is between 0 and `judged_runs`;
+- `judged_successes` is at most `successes`;
+- `successes - judged_successes` is at most `runs - judged_runs`, so the agent-only successes never outnumber the agent-only runs.
+
+A write that breaks one fails with a constraint violation instead of storing a count the rate would trust. The backfill meets all four as long as `runs`, `successes` and the failures, `runs - successes`, each count at least the stored executions of that kind, which every writer has kept since `0001`. A row that doesn't makes the migration fail whole.
+
+**If 0003 fails.** The `CHECK` constraints fail when a row's counters drifted below the executions stored for it. The migration then rolls back whole. This query lists the metrics rows that drifted:
+
+```sql
+SELECT m.scope, m.reasonlet_id, m.runs, m.successes, x.stored_successes, x.stored_failures
+FROM mnemosyne.reasonlet_metrics m
+JOIN (
+    SELECT scope, reasonlet_id,
+           count(*) FILTER (WHERE success)     AS stored_successes,
+           count(*) FILTER (WHERE NOT success) AS stored_failures
+    FROM mnemosyne.reasonlet_executions
+    GROUP BY scope, reasonlet_id
+) x ON x.scope = m.scope AND x.reasonlet_id = m.reasonlet_id
+WHERE m.successes < x.stored_successes
+   OR m.runs - m.successes < x.stored_failures;
+```
+
+Recount `runs` and `successes` of those rows up to at least the stored counts, then run `MigrateAsync` again.
+
+**Upgrade with a full stop.** Stop every old instance, run `MigrateAsync`, then start the new ones. A release from before `0003` leaves the new counters alone, and the constraints refuse some of its writes. Do not run old and new instances against one database.
+
+`0003` also records `min_binary_schema` in the `mnemosyne.settings` table, set to 3. A store whose schema is lower than that value answers `Unavailable`, with a message that says the binary is too old for the database, from `MigrateAsync` and from every other store method. The check exists only in releases from `0003` on, so a release built before `0003` is not refused: it still accepts schema 3. That is why the upgrade needs every old instance stopped first. From here on, a later migration can raise the setting to lock out the releases before it. A missing setting counts as 0.
+
 ## Connections and privileges
 
 ### `search_path`

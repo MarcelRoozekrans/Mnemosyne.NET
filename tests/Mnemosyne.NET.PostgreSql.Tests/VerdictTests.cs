@@ -61,6 +61,79 @@ public sealed class VerdictTests(PgVectorFixture fixture) : IClassFixture<PgVect
                 + "FROM mnemosyne.reasonlet_executions WHERE id = $1",
                 run.Value));
         Assert.Equal((2, effective ? 2 : 1), await CountersAsync(r.Id));
+        var isJudged = evaluated is not null || worked is not null;
+        Assert.Equal((isJudged ? 1 : 0, isJudged && effective ? 1 : 0), await JudgedCountersAsync(r.Id));
+        await AssertMetricsMatchTheExecutionsAsync(scope);
+    }
+
+    public static TheoryData<bool, bool?, bool?, int, int, int, int> JudgedFeedback() => new()
+    {
+        // agent, evaluator, worked: runs, successes, judged runs, judged successes, beside the remembered run, an
+        // agent-only success.
+        { true, null, true, 2, 2, 1, 1 },
+        { false, null, false, 2, 1, 1, 0 },
+        { true, null, false, 2, 1, 1, 0 },
+        { false, null, true, 2, 2, 1, 1 },
+        { true, true, false, 2, 1, 1, 0 },
+        { false, false, true, 2, 2, 1, 1 },
+        { true, true, true, 2, 2, 1, 1 },
+        { true, null, null, 2, 2, 0, 0 },
+        { true, false, null, 2, 1, 1, 0 },
+    };
+
+    [Theory]
+    [MemberData(nameof(JudgedFeedback))]
+    public async Task FeedbackMovesTheJudgedCountersWithTheRunsJudgedState(
+        bool agent, bool? evaluated, bool? worked, int runs, int successes, int judgedRuns, int judgedSuccesses)
+    {
+        // A verdict that agrees with the agent changes no success, yet it makes the run judged, so the judged counters
+        // must move on their own.
+        var (store, scope, r) = await RememberedAsync();
+        var evaluation = evaluated is { } judged ? new ReasonletEvaluation(judged, 0.5, "judge") : (ReasonletEvaluation?)null;
+        var run = await AppendAsync(store, scope, r.Id, agent, evaluation);
+
+        Assert.True((await store.AppendFeedbackAsync(scope, run, new ReasonletFeedback(0.5, 0.5, 0.5, worked), Ct)).IsSuccess);
+
+        Assert.Equal((runs, successes), await CountersAsync(r.Id));
+        Assert.Equal((judgedRuns, judgedSuccesses), await JudgedCountersAsync(r.Id));
+        await AssertMetricsMatchTheExecutionsAsync(scope);
+    }
+
+    [Theory]
+    [InlineData(null, 1, 0, 0)]
+    [InlineData(true, 1, 1, 1)]
+    [InlineData(false, 0, 1, 0)]
+    public async Task RememberCountsTheJudgedStateOfItsFirstRun(bool? evaluated, int successes, int judgedRuns, int judgedSuccesses)
+    {
+        var store = fixture.CreateStore();
+        Assert.True((await store.MigrateAsync(Ct)).IsSuccess);
+        var scope = PgVectorFixture.NewScope();
+        var evaluation = evaluated is { } judged ? new ReasonletEvaluation(judged, 0.5, "judge") : (ReasonletEvaluation?)null;
+
+        var root = (await store.RememberAsync(Entries.Entry(scope) with { Evaluation = evaluation }, Ct)).Value;
+        var child = (await store.RememberAsync(Entries.Entry(scope, Entries.Graph("child"), root.Id) with { Evaluation = evaluation }, Ct)).Value;
+
+        Assert.Equal((1, successes), await CountersAsync(root.Id));
+        Assert.Equal((judgedRuns, judgedSuccesses), await JudgedCountersAsync(root.Id));
+        Assert.Equal((1, successes), await CountersAsync(child.Id));
+        Assert.Equal((judgedRuns, judgedSuccesses), await JudgedCountersAsync(child.Id));
+        await AssertMetricsMatchTheExecutionsAsync(scope);
+    }
+
+    [Theory]
+    [InlineData(true, null, 2, 0, 0)]
+    [InlineData(false, null, 1, 0, 0)]
+    [InlineData(false, true, 2, 1, 1)]
+    [InlineData(true, false, 1, 1, 0)]
+    public async Task AnAppendCountsItsJudgedState(bool agent, bool? evaluated, int successes, int judgedRuns, int judgedSuccesses)
+    {
+        var (store, scope, r) = await RememberedAsync();
+        var evaluation = evaluated is { } judged ? new ReasonletEvaluation(judged, 0.5, "judge") : (ReasonletEvaluation?)null;
+
+        await AppendAsync(store, scope, r.Id, agent, evaluation);
+
+        Assert.Equal((2, successes), await CountersAsync(r.Id));
+        Assert.Equal((judgedRuns, judgedSuccesses), await JudgedCountersAsync(r.Id));
         await AssertMetricsMatchTheExecutionsAsync(scope);
     }
 
@@ -101,6 +174,7 @@ public sealed class VerdictTests(PgVectorFixture fixture) : IClassFixture<PgVect
         {
             Assert.True((await store.AppendFeedbackAsync(scope, run, new ReasonletFeedback(0.5, 0.5, 0.5, worked), Ct)).IsSuccess);
             Assert.Equal((2, successes), await CountersAsync(r.Id));
+            Assert.Equal((1, successes - 1), await JudgedCountersAsync(r.Id));
             await AssertMetricsMatchTheExecutionsAsync(scope);
         }
     }
@@ -217,6 +291,27 @@ public sealed class VerdictTests(PgVectorFixture fixture) : IClassFixture<PgVect
         Assert.Equal(2, pruned.Value.Executions);
         Assert.Equal(before, await MetricsRowAsync(r.Id));
         Assert.Equal((2, 1), await CountersAsync(r.Id));
+        Assert.Equal((1, 0), await JudgedCountersAsync(r.Id));
+    }
+
+    // PostgreSQL reports the first violated CHECK by constraint name; the judged_runs = -1 and judged_runs = runs + 1 rows
+    // also break the rules after judged_runs, so they name the first one.
+    [Theory]
+    [InlineData("judged_runs = -1", "reasonlet_metrics_judged_runs")]
+    [InlineData("judged_runs = runs + 1", "reasonlet_metrics_judged_runs")]
+    [InlineData("judged_runs = 1, judged_successes = -1", "reasonlet_metrics_judged_successes")]
+    [InlineData("judged_runs = 1, judged_successes = 2", "reasonlet_metrics_judged_successes")]
+    [InlineData("successes = 0, judged_runs = 1, judged_successes = 1", "reasonlet_metrics_judged_successes_counted")]
+    [InlineData("runs = 2, successes = 2, judged_runs = 1, judged_successes = 0", "reasonlet_metrics_unjudged_successes")]
+    public async Task AHandWrittenUpdateThatBreaksAJudgedCounterRuleIsRefused(string set, string constraint)
+    {
+        var (_, _, r) = await RememberedAsync();
+
+        var refused = await Assert.ThrowsAsync<PostgresException>(() => Entries.ExecuteAsync(
+            fixture.DataSource, $"UPDATE mnemosyne.reasonlet_metrics SET {set} WHERE reasonlet_id = $1", r.Id.Value));
+
+        Assert.Equal(PostgresErrorCodes.CheckViolation, refused.SqlState);
+        Assert.Equal(constraint, refused.ConstraintName);
     }
 
     [Fact]
@@ -586,6 +681,10 @@ public sealed class VerdictTests(PgVectorFixture fixture) : IClassFixture<PgVect
         await Entries.ScalarAsync<int>(fixture.DataSource, "SELECT runs FROM mnemosyne.reasonlet_metrics WHERE reasonlet_id = $1", id.Value),
         await Entries.ScalarAsync<int>(fixture.DataSource, "SELECT successes FROM mnemosyne.reasonlet_metrics WHERE reasonlet_id = $1", id.Value));
 
+    private async Task<(int JudgedRuns, int JudgedSuccesses)> JudgedCountersAsync(ReasonletId id) => (
+        await Entries.ScalarAsync<int>(fixture.DataSource, "SELECT judged_runs FROM mnemosyne.reasonlet_metrics WHERE reasonlet_id = $1", id.Value),
+        await Entries.ScalarAsync<int>(fixture.DataSource, "SELECT judged_successes FROM mnemosyne.reasonlet_metrics WHERE reasonlet_id = $1", id.Value));
+
     private async Task<(int Runs, int Successes, DateTimeOffset? LastSuccessAt, DateTimeOffset LastExecutedAt)> MetricsRowAsync(ReasonletId id)
     {
         var (runs, successes) = await CountersAsync(id);
@@ -617,7 +716,10 @@ public sealed class VerdictTests(PgVectorFixture fixture) : IClassFixture<PgVect
         "SELECT concat_ws('|', utility, correctness, reusability) FROM mnemosyne.reasonlet_feedback WHERE execution_id = $1",
         run.Value);
 
-    /// <summary>Asserts that every Reasonlet of the scope has a metrics row equal to an aggregate of its executions.</summary>
+    /// <summary>
+    /// Asserts that every Reasonlet of the scope has a metrics row equal to an aggregate of its executions, the judged
+    /// counters included: a run is judged when an evaluator or a human gave it a verdict.
+    /// </summary>
     private async Task AssertMetricsMatchTheExecutionsAsync(ReasonletScope scope) => Assert.Equal(
         0L,
         await Entries.ScalarAsync<long>(
@@ -626,11 +728,15 @@ public sealed class VerdictTests(PgVectorFixture fixture) : IClassFixture<PgVect
             SELECT count(*) FROM mnemosyne.reasonlets r
             LEFT JOIN mnemosyne.reasonlet_metrics m ON m.reasonlet_id = r.id
             LEFT JOIN LATERAL (SELECT count(*)::int AS runs, (count(*) FILTER (WHERE success))::int AS successes,
+                                      (count(*) FILTER (WHERE evaluated_success IS NOT NULL OR feedback_worked IS NOT NULL))::int AS judged_runs,
+                                      (count(*) FILTER (WHERE (evaluated_success IS NOT NULL OR feedback_worked IS NOT NULL) AND success))::int
+                                          AS judged_successes,
                                       max(executed_at) FILTER (WHERE success) AS last_success_at,
                                       max(executed_at) AS last_executed_at
                                FROM mnemosyne.reasonlet_executions e WHERE e.reasonlet_id = r.id) a ON true
             WHERE r.scope = $1
-              AND (m.reasonlet_id IS NULL OR (m.runs, m.successes) <> (a.runs, a.successes)
+              AND (m.reasonlet_id IS NULL
+                   OR (m.runs, m.successes, m.judged_runs, m.judged_successes) <> (a.runs, a.successes, a.judged_runs, a.judged_successes)
                    OR m.last_success_at IS DISTINCT FROM a.last_success_at
                    OR m.last_executed_at IS DISTINCT FROM a.last_executed_at)
             """,

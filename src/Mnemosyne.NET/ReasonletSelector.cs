@@ -11,7 +11,10 @@ namespace Mnemosyne.NET;
 /// A new version's success rate is smoothed toward its parent's smoothed rate when that is above the neutral 0.5, and
 /// toward 0.5 otherwise. Inheritance only lifts: a version of a proven procedure starts with its parent's head start, a
 /// version of a failing one starts like any new procedure, and, given the same own runs, a version never scores below a
-/// Reasonlet without a parent. Ties order by similarity descending, then by id ascending, so the order is deterministic.
+/// Reasonlet without a parent. A run that only the agent judged counts at
+/// <see cref="ReasonletRankingOptions.AgentVerdictWeight"/>, in the Reasonlet's own rate and in its parent's, and every
+/// match carries the evidence behind its rate. Ties order by similarity descending, then by id ascending, so the order is
+/// deterministic.
 /// </remarks>
 public sealed class ReasonletSelector : IReasonletSelector
 {
@@ -55,11 +58,13 @@ public sealed class ReasonletSelector : IReasonletSelector
             }
 
             var similarity = Clamp(candidate.Similarity);
-            var successRate = Clamp(SuccessRate(candidate.Metrics, candidate.ParentMetrics, _options.PriorWeight));
+            var rate = SuccessRate(candidate.Metrics, candidate.ParentMetrics, _options.PriorWeight, _options.AgentVerdictWeight);
+            var successRate = Clamp(rate.Rate);
             var freshness = Clamp(Freshness(now - candidate.Metrics.LastExecutedAt, _options.FreshnessHalfLife));
             var total = Clamp(
                 (_options.SimilarityWeight * similarity) + (_options.SuccessRateWeight * successRate) + (_options.FreshnessWeight * freshness));
-            scored.Add(new ReasonletMatch(candidate.Reasonlet, new ReasonletScore(similarity, successRate, freshness, total)));
+            var evidence = new ReasonletEvidence(candidate.Metrics.Runs, candidate.Metrics.JudgedRuns, rate.UsesParentPrior);
+            scored.Add(new ReasonletMatch(candidate.Reasonlet, new ReasonletScore(similarity, successRate, freshness, total), evidence));
         }
 
         scored.Sort(Compare);
@@ -72,22 +77,32 @@ public sealed class ReasonletSelector : IReasonletSelector
     }
 
     /// <summary>
-    /// Computes the smoothed success rate <c>(successes + k * prior) / (runs + k)</c>. The prior is 0.5 for a root, and
-    /// <c>max(parentRate, 0.5)</c> for a version that has a parent, where the parent's rate is its own, smoothed with the
-    /// neutral prior.
+    /// Computes the smoothed success rate <c>(weightedSuccesses + k * prior) / (weightedRuns + k)</c>, where a run that only
+    /// the agent judged counts at <paramref name="agentVerdictWeight"/> <c>w</c>:
+    /// <c>weightedRuns = JudgedRuns + w * (Runs - JudgedRuns)</c> and
+    /// <c>weightedSuccesses = JudgedSuccesses + w * (Successes - JudgedSuccesses)</c>. The prior is 0.5 for a root, and
+    /// <c>max(parentRate, 0.5)</c> for a version that has a parent, where the parent's rate is its own, weighted the same
+    /// way and smoothed with the neutral prior. At <c>w = 1</c> every run counts in full.
     /// </summary>
-    internal static double SuccessRate(ReasonletMetrics own, ReasonletMetrics? parent, double priorWeight)
+    /// <returns>The rate, and whether the parent's rate was the prior, which is when it is above 0.5.</returns>
+    internal static SmoothedRate SuccessRate(ReasonletMetrics own, ReasonletMetrics? parent, double priorWeight, double agentVerdictWeight)
     {
-        var prior = parent is { } p ? Math.Max(Smooth(p, NeutralPrior, priorWeight), NeutralPrior) : NeutralPrior;
-        return Smooth(own, prior, priorWeight);
+        var parentRate = parent is { } p ? Smooth(p, NeutralPrior, priorWeight, agentVerdictWeight) : NeutralPrior;
+        var usesParentPrior = parentRate > NeutralPrior;
+        var prior = usesParentPrior ? parentRate : NeutralPrior;
+        return new SmoothedRate(Smooth(own, prior, priorWeight, agentVerdictWeight), usesParentPrior);
     }
 
     /// <summary>Computes <c>0.5 ^ (age / halfLife)</c>. A negative age, which clock skew can cause, counts as zero.</summary>
     internal static double Freshness(TimeSpan age, TimeSpan halfLife) =>
         age <= TimeSpan.Zero ? 1.0 : Math.Pow(0.5, age / halfLife);
 
-    private static double Smooth(ReasonletMetrics metrics, double prior, double priorWeight) =>
-        (metrics.Successes + (priorWeight * prior)) / (metrics.Runs + priorWeight);
+    private static double Smooth(ReasonletMetrics metrics, double prior, double priorWeight, double agentVerdictWeight)
+    {
+        var weightedRuns = metrics.JudgedRuns + (agentVerdictWeight * (metrics.Runs - metrics.JudgedRuns));
+        var weightedSuccesses = metrics.JudgedSuccesses + (agentVerdictWeight * (metrics.Successes - metrics.JudgedSuccesses));
+        return (weightedSuccesses + (priorWeight * prior)) / (weightedRuns + priorWeight);
+    }
 
     private static double Clamp(double value) => Math.Clamp(value, 0.0, 1.0);
 
@@ -102,4 +117,9 @@ public sealed class ReasonletSelector : IReasonletSelector
         var bySimilarity = y.Score.Similarity.CompareTo(x.Score.Similarity);
         return bySimilarity != 0 ? bySimilarity : x.Reasonlet.Id.Value.CompareTo(y.Reasonlet.Id.Value);
     }
+
+    /// <summary>A smoothed success rate and whether its prior came from the parent.</summary>
+    /// <param name="Rate">The smoothed success rate.</param>
+    /// <param name="UsesParentPrior">Whether the parent's smoothed rate, being above 0.5, was the prior.</param>
+    internal readonly record struct SmoothedRate(double Rate, bool UsesParentPrior);
 }
