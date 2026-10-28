@@ -89,7 +89,7 @@ Design: [roadmap design](../superpowers/specs/2026-10-21-roadmap-design.md), bui
 **Completed:** 2026-10-24
 
 ### Phase 2.4: Metrics feeding ranking [status: active]
-**Goal:** Metrics computed from evaluated executions, with a minimum run count, feeding the success-rate term.
+**Goal:** A trust-weighted success rate that counts agent-only runs at a configurable weight, and the evidence behind each recall match (#9).
 **Surface:** Data
 **HelpWanted:** no
 **Plan:** `docs/superpowers/plans/2026-10-28-phase-2.4-trusted-success-rate.md`

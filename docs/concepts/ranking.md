@@ -72,6 +72,8 @@ A human's feedback on an agent-only run makes it judged even when the verdict ag
 
 Runs that retention pruned still count in `Runs` and `Successes`, but their verdicts went with them. The upgrade to phase 2.4 builds the judged counters from the executions still stored, so a Reasonlet's pruned history counts as agent-only. That understates how much of its history was judged, and in the safe direction: its rate leans on its prior a little more.
 
+Upgrading from 0.1, the rankings of runs without an evaluator or human verdict change. Set `AgentVerdictWeight = 1` for the previous behaviour.
+
 #### The evidence on each match
 
 A rate of 0.9 can mean 200 judged runs, or two runs and a good prior. Each `ReasonletMatch` carries a `ReasonletEvidence` so a caller can tell:
