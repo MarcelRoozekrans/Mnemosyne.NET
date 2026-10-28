@@ -122,6 +122,7 @@ public sealed class ReasonletSelectorTests
         // With no weight on agent-only runs the same parent has nothing but its four judged successes.
         var judgedOnly = ReasonletSelector.SuccessRate(Judged(0, 0, 0, 0), Judged(10, 10, 4, 4), 5, 0);
         Assert.Equal((4 + 2.5) / 9, judgedOnly.Rate, Tolerance);
+        Assert.True(judgedOnly.UsesParentPrior);
     }
 
     [Fact]

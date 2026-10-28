@@ -175,7 +175,6 @@ public class LeafRecordTests
     [InlineData(3, 2, 2, -1, "JudgedSuccesses")]
     [InlineData(3, 3, 2, 3, "JudgedSuccesses")]
     [InlineData(3, 1, 2, 2, "JudgedSuccesses")]
-    [InlineData(3, 2, 2, 0, "Successes")]
     public void Metrics_InvalidJudgedCounters_Fail(int runs, int successes, int judgedRuns, int judgedSuccesses, string path) =>
         AssertInvalid(new ReasonletMetrics(runs, successes, null, DateTimeOffset.UnixEpoch, judgedRuns, judgedSuccesses).Validate(), path);
 

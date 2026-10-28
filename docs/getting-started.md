@@ -215,7 +215,7 @@ If the agent changed the procedure and the new one worked better, remember it wi
 dotnet run
 ```
 
-The output shows the stored Reasonlet, then the match with its score, then the recorded run with the verdict that counted, `Agent` here. Its similarity depends on the model. Its success rate is 0.583, from one successful run smoothed toward a neutral 0.5, and its freshness is close to 1 because it ran moments ago.
+The output shows the stored Reasonlet, then the match with its score, then the recorded run with the verdict that counted, `Agent` here. Its similarity depends on the model. Its success rate is 0.545, from one successful run that only the agent vouched for, counted at the default `AgentVerdictWeight` of 0.5 and smoothed toward a neutral 0.5, and its freshness is close to 1 because it ran moments ago.
 
 Run it a second time and the remember stores another Reasonlet, so recall returns two matches: without a `ParentId`, every capture is a new one.
 
