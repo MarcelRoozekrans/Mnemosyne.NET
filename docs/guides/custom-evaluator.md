@@ -11,7 +11,7 @@ By default a run counts as a success when the agent says it worked. An evaluator
 ValueTask<Result<ReasonletEvaluation, MnemosyneError>> EvaluateAsync(ReasonletEvaluationRequest request, CancellationToken ct);
 ```
 
-The facade calls it for each run that arrives with a question and a usable answer. A rule, a classifier, a call to a service of your own: anything that can say whether the run worked will do. The [worked example](#the-worked-example) at the end is a complete one.
+[Evaluation](../concepts/evaluation.md) explains the whole loop, from the request to a person's feedback. The facade calls it for each run that arrives with a question and a usable answer. A rule, a classifier, a call to a service of your own: anything that can say whether the run worked will do. The [worked example](#the-worked-example) at the end is a complete one.
 
 ## The request
 
