@@ -20,6 +20,30 @@ public sealed class ReasonletSelectorTests
     private static ReasonletMetrics Metrics(int runs, int successes, DateTimeOffset? executed = null) =>
         new(runs, successes, null, executed ?? Now);
 
+    private static ReasonletMetrics Judged(int runs, int successes, int judgedRuns, int judgedSuccesses) =>
+        new(runs, successes, null, Now, judgedRuns, judgedSuccesses);
+
+    // The phase 1.6 formula, before agent verdicts were weighted: every run counts in full.
+    private static double UnweightedRate(ReasonletMetrics own, ReasonletMetrics? parent, double k)
+    {
+        var prior = parent is { } p ? Math.Max((p.Successes + (k * 0.5)) / (p.Runs + k), 0.5) : 0.5;
+        return (own.Successes + (k * prior)) / (own.Runs + k);
+    }
+
+    private static ReasonletMetrics RandomMetrics(Random random)
+    {
+        var runs = random.Next(0, 1000);
+        var successes = random.Next(0, runs + 1);
+        var judgedRuns = random.Next(0, runs + 1);
+        var minJudgedSuccesses = Math.Max(0, successes - (runs - judgedRuns));
+        var maxJudgedSuccesses = Math.Min(judgedRuns, successes);
+        var metrics = Judged(runs, successes, judgedRuns, random.Next(minJudgedSuccesses, maxJudgedSuccesses + 1));
+        Assert.True(metrics.Validate().IsSuccess);
+        return metrics;
+    }
+
+    private static readonly ReasonletRankingOptions FullAgentWeight = new() { AgentVerdictWeight = 1 };
+
     private static ReasonletCandidate Candidate(double similarity, ReasonletMetrics? metrics = null, ReasonletMetrics? parent = null, ReasonletId? id = null) =>
         new(TestData.Definition() with { Id = id ?? ReasonletId.New() }, similarity, metrics ?? Metrics(0, 0), parent);
 
@@ -32,21 +56,21 @@ public sealed class ReasonletSelectorTests
 
     [Fact]
     public void SuccessRateOfAnUntriedRootIsNeutral() =>
-        Assert.Equal(0.5, ReasonletSelector.SuccessRate(Metrics(0, 0), null, 5), Tolerance);
+        Assert.Equal(0.5, ReasonletSelector.SuccessRate(Metrics(0, 0), null, 5, 1).Rate, Tolerance);
 
     [Fact]
     public void SuccessRateIsSmoothedTowardsTheNeutralPrior()
     {
-        Assert.Equal(12.5 / 15, ReasonletSelector.SuccessRate(Metrics(10, 10), null, 5), Tolerance);
-        Assert.Equal(3.5 / 6, ReasonletSelector.SuccessRate(Metrics(1, 1), null, 5), Tolerance);
+        Assert.Equal(12.5 / 15, ReasonletSelector.SuccessRate(Metrics(10, 10), null, 5, 1).Rate, Tolerance);
+        Assert.Equal(3.5 / 6, ReasonletSelector.SuccessRate(Metrics(1, 1), null, 5, 1).Rate, Tolerance);
     }
 
     [Fact]
     public void SuccessRateStartsFromTheParentRecord()
     {
         var parent = Metrics(100, 100);
-        Assert.Equal(102.5 / 105, ReasonletSelector.SuccessRate(Metrics(0, 0), parent, 5), Tolerance);
-        Assert.Equal(5 * (102.5 / 105) / 7, ReasonletSelector.SuccessRate(Metrics(2, 0), parent, 5), Tolerance);
+        Assert.Equal(102.5 / 105, ReasonletSelector.SuccessRate(Metrics(0, 0), parent, 5, 1).Rate, Tolerance);
+        Assert.Equal(5 * (102.5 / 105) / 7, ReasonletSelector.SuccessRate(Metrics(2, 0), parent, 5, 1).Rate, Tolerance);
     }
 
     [Fact]
@@ -54,13 +78,90 @@ public sealed class ReasonletSelectorTests
     {
         // The parent's own rate is 2.5 / 25 = 0.1, below neutral, so the version starts from 0.5 like any new procedure.
         var parent = Metrics(20, 0);
-        Assert.Equal((1 + (5 * 0.5)) / 6, ReasonletSelector.SuccessRate(Metrics(1, 1), parent, 5), Tolerance);
-        Assert.Equal(0.5, ReasonletSelector.SuccessRate(Metrics(0, 0), parent, 5), Tolerance);
+        Assert.Equal((1 + (5 * 0.5)) / 6, ReasonletSelector.SuccessRate(Metrics(1, 1), parent, 5, 1).Rate, Tolerance);
+        Assert.Equal(0.5, ReasonletSelector.SuccessRate(Metrics(0, 0), parent, 5, 1).Rate, Tolerance);
     }
 
     [Fact]
     public void ANeutralParentGivesTheNeutralPrior() =>
-        Assert.Equal(0.5, ReasonletSelector.SuccessRate(Metrics(0, 0), Metrics(0, 0), 5), Tolerance);
+        Assert.Equal(0.5, ReasonletSelector.SuccessRate(Metrics(0, 0), Metrics(0, 0), 5, 1).Rate, Tolerance);
+
+    [Fact]
+    public void AFullAgentWeightReproducesTheUnweightedRate()
+    {
+        var random = new Random(2404);
+        for (var i = 0; i < 200; i++)
+        {
+            var own = RandomMetrics(random);
+            ReasonletMetrics? parent = random.Next(2) == 0 ? null : RandomMetrics(random);
+            var k = 0.1 + (random.NextDouble() * 20);
+            Assert.Equal(UnweightedRate(own, parent, k), ReasonletSelector.SuccessRate(own, parent, k, 1).Rate);
+        }
+    }
+
+    [Fact]
+    public void AZeroAgentWeightIgnoresAgentOnlyRuns() =>
+        Assert.Equal(0.5, ReasonletSelector.SuccessRate(Judged(10, 10, 0, 0), null, 5, 0).Rate);
+
+    [Fact]
+    public void AgentOnlyRunsCountAtTheAgentWeight() =>
+        Assert.Equal(
+            (2 + (0.5 * 6) + (5 * 0.5)) / (4 + (0.5 * 6) + 5),
+            ReasonletSelector.SuccessRate(Judged(10, 8, 4, 2), null, 5, 0.5).Rate,
+            Tolerance);
+
+    [Fact]
+    public void TheParentPriorIsWeightedToo()
+    {
+        // The parent has four judged successes and six agent-only ones: 4 + 0.5 * 6 = 7 of 7 weighted runs.
+        var parentRate = (7 + 2.5) / (7 + 5.0);
+        var rate = ReasonletSelector.SuccessRate(Judged(2, 0, 0, 0), Judged(10, 10, 4, 4), 5, 0.5);
+        Assert.Equal((0 + (5 * parentRate)) / ((0.5 * 2) + 5), rate.Rate, Tolerance);
+        Assert.True(rate.UsesParentPrior);
+
+        // With no weight on agent-only runs the same parent has nothing but its four judged successes.
+        var judgedOnly = ReasonletSelector.SuccessRate(Judged(0, 0, 0, 0), Judged(10, 10, 4, 4), 5, 0);
+        Assert.Equal((4 + 2.5) / 9, judgedOnly.Rate, Tolerance);
+    }
+
+    [Fact]
+    public void AParentOfOnlyAgentRunsIsNeutralWithoutAgentWeight()
+    {
+        var rate = ReasonletSelector.SuccessRate(Metrics(0, 0), Metrics(10, 10), 5, 0);
+        Assert.Equal(0.5, rate.Rate);
+        Assert.False(rate.UsesParentPrior);
+    }
+
+    [Fact]
+    public void UsesParentPriorOnlyWhenTheParentBeatsNeutral()
+    {
+        Assert.False(ReasonletSelector.SuccessRate(Metrics(3, 3), null, 5, 1).UsesParentPrior);
+        Assert.False(ReasonletSelector.SuccessRate(Metrics(3, 3), Metrics(0, 0), 5, 1).UsesParentPrior);
+        Assert.False(ReasonletSelector.SuccessRate(Metrics(3, 3), Metrics(20, 0), 5, 1).UsesParentPrior);
+        Assert.True(ReasonletSelector.SuccessRate(Metrics(3, 3), Metrics(1, 1), 5, 1).UsesParentPrior);
+    }
+
+    [Fact]
+    public async Task EveryMatchCarriesTheCandidatesOwnEvidence()
+    {
+        var withParent = Candidate(0.9, Judged(10, 8, 4, 2), Metrics(100, 100));
+        var root = Candidate(0.8, Judged(3, 1, 3, 1));
+        var weakParent = Candidate(0.7, Metrics(2, 2), Metrics(20, 0));
+        var matches = await Rank(Selector(), TestData.Query(), withParent, root, weakParent);
+        Assert.Equal(
+            [new ReasonletEvidence(10, 4, true), new ReasonletEvidence(3, 3, false), new ReasonletEvidence(2, 0, false)],
+            matches.Select(m => m.Evidence));
+    }
+
+    [Fact]
+    public async Task RankingUsesTheConfiguredAgentWeight()
+    {
+        var metrics = Judged(10, 8, 4, 2);
+        var byDefault = await Rank(Selector(), TestData.Query(), Candidate(0.8, metrics));
+        Assert.Equal((2 + 3 + 2.5) / (4 + 3 + 5.0), byDefault[0].Score.SuccessRate, Tolerance);
+        var judgedOnly = await Rank(Selector(new ReasonletRankingOptions { AgentVerdictWeight = 0 }), TestData.Query(), Candidate(0.8, metrics));
+        Assert.Equal((2 + 2.5) / (4 + 5.0), judgedOnly[0].Score.SuccessRate, Tolerance);
+    }
 
     [Fact]
     public void FreshnessDecaysByHalfLife()
@@ -138,7 +239,7 @@ public sealed class ReasonletSelectorTests
     public async Task ScoreComponentsFollowTheFormula()
     {
         var metrics = Metrics(4, 3, Now - TimeSpan.FromDays(15));
-        var matches = await Rank(Selector(), TestData.Query(), Candidate(0.8, metrics));
+        var matches = await Rank(Selector(FullAgentWeight), TestData.Query(), Candidate(0.8, metrics));
         var score = matches[0].Score;
         var rate = (3 + 2.5) / 9;
         var freshness = Math.Pow(0.5, 0.5);
@@ -162,7 +263,7 @@ public sealed class ReasonletSelectorTests
         var a = Candidate(0.92, Metrics(10, 5));
         var b = Candidate(0.85, Metrics(40, 40));
         var c = Candidate(0.86, Metrics(0, 0), Metrics(40, 40));
-        var matches = await Rank(Selector(), TestData.Query(), a, b, c);
+        var matches = await Rank(Selector(FullAgentWeight), TestData.Query(), a, b, c);
         Assert.Equal([c.Reasonlet.Id, b.Reasonlet.Id, a.Reasonlet.Id], matches.Select(m => m.Reasonlet.Id));
         Assert.Equal((0.5 * 0.86) + (0.3 * (42.5 / 45)) + 0.2, matches[0].Score.Total, Tolerance);
         Assert.Equal(0.91333333333333, matches[0].Score.Total, 1e-9);
@@ -181,7 +282,14 @@ public sealed class ReasonletSelectorTests
         Assert.Equal(0.5, options.MinSimilarity);
         Assert.Equal(5, options.PriorWeight);
         Assert.Equal(TimeSpan.FromDays(30), options.FreshnessHalfLife);
+        Assert.Equal(0.5, options.AgentVerdictWeight);
     }
+
+    [Theory]
+    [InlineData(0.0)]
+    [InlineData(1.0)]
+    public void TheAgentWeightBoundsAreValidAndOutsideTheWeightSum(double weight) =>
+        Assert.True(new ReasonletRankingOptions { AgentVerdictWeight = weight }.Validate().IsSuccess);
 
     public static TheoryData<ReasonletRankingOptions, string> InvalidOptions => new()
     {
@@ -196,6 +304,9 @@ public sealed class ReasonletSelectorTests
         { new ReasonletRankingOptions { FreshnessHalfLife = TimeSpan.FromDays(-1) }, "FreshnessHalfLife" },
         { new ReasonletRankingOptions { MinSimilarity = 1.5 }, "MinSimilarity" },
         { new ReasonletRankingOptions { MinSimilarity = -0.5 }, "MinSimilarity" },
+        { new ReasonletRankingOptions { AgentVerdictWeight = -0.01 }, "AgentVerdictWeight" },
+        { new ReasonletRankingOptions { AgentVerdictWeight = 1.01 }, "AgentVerdictWeight" },
+        { new ReasonletRankingOptions { AgentVerdictWeight = double.NaN }, "AgentVerdictWeight" },
     };
 
     [Theory]

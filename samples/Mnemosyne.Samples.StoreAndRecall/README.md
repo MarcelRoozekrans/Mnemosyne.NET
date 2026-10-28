@@ -33,15 +33,15 @@ The output:
 
 ```text
   #  Reasonlet                Version  Similarity  Success  Freshness   Total
-  1  refund an order          1.1           0.816    0.917      1.000   0.883
-  2  refund an order          1.0           0.816    0.900      1.000   0.878
+  1  refund an order          1.1           0.816    0.848      1.000   0.863
+  2  refund an order          1.0           0.816    0.833      1.000   0.858
   3  refund a partial order   1.0           0.904    0.500      1.000   0.802
 ```
 
 Recall ranks by 0.5 × similarity + 0.3 × success rate + 0.2 × freshness:
 
-- **Success rate** is smoothed: (successes + 5 × prior) / (runs + 5). The original's prior is 0.5, so 20 of 20 gives 22.5 / 25 = 0.900.
-- **A new version inherits its parent's record** as its prior: max(0.900, 0.5) = 0.900. Its one successful run gives (1 + 4.5) / 6 = 0.917, so it ranks just above the original it refines.
+- **Success rate** is smoothed: (successes + 5 × prior) / (runs + 5). No evaluator or human judged these runs, so each carries only the agent's own verdict and counts as half a run, the default `AgentVerdictWeight` of 0.5. The original's prior is 0.5, so 20 of 20, counted as 10 of 10, gives 12.5 / 15 = 0.833.
+- **A new version inherits its parent's record** as its prior: max(0.833, 0.5) = 0.833. Its one successful run, counted as half, gives (0.5 + 5 × 0.833) / 5.5 = 0.848, so it ranks just above the original it refines.
 - **The close match** scores the highest similarity, but its 5-of-10 record ranks it last.
 - **Freshness** is 1.000 because every procedure ran moments ago.
 

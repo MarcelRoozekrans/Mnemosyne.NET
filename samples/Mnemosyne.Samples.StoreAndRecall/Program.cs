@@ -171,7 +171,7 @@ static async Task<int> Walkthrough(IReasonletMemory memory, ReasonletScope scope
     Console.WriteLine($"  {"#",-2} {"Reasonlet",-24} {"Version",-8} {"Similarity",10} {"Success",8} {"Freshness",10} {"Total",7}");
     for (var i = 0; i < matches.Count; i++)
     {
-        var (reasonlet, score) = matches[i];
+        var (reasonlet, score, _) = matches[i];
         Console.WriteLine(string.Create(
             CultureInfo.InvariantCulture,
             $"  {i + 1,-2} {reasonlet.Name,-24} {reasonlet.Version,-8} {score.Similarity,10:F3} {score.SuccessRate,8:F3} {score.Freshness,10:F3} {score.Total,7:F3}"));
@@ -190,7 +190,7 @@ static async Task<int> Walkthrough(IReasonletMemory memory, ReasonletScope scope
     // 4. Check the ranking the docs describe: three matches, the new version first, the proven original second and
     // the close match last, with the totals the docs publish. Freshness is 1.000 within a run, so they are stable.
     ReasonletId[] expected = [newVersion.Id, original.Id, closeMatch.Id];
-    double[] expectedTotals = [0.883, 0.878, 0.802];
+    double[] expectedTotals = [0.863, 0.858, 0.802];
     var actual = matches.Select(m => m.Reasonlet.Id).ToArray();
     var actualTotals = matches.Select(m => Math.Round(m.Score.Total, 3)).ToArray();
     if (matches.Count != expected.Length || !actual.SequenceEqual(expected) || !actualTotals.SequenceEqual(expectedTotals))

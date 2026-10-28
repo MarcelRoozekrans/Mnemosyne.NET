@@ -102,25 +102,25 @@ The [store-and-recall sample](../samples.md) stores three procedures in one scop
 - **New version** of it, `1.1`: the same question with an improved graph, and one successful run of its own.
 - **Close match**, "refund a partial order" `1.0`: a question worded closer to the query, but only 5 successes in 10 runs.
 
-All three ran seconds before the recall, so each freshness is 1.000 to three decimals. The sample prints:
+All three ran seconds before the recall, so each freshness is 1.000 to three decimals. No evaluator or human judged any of the runs, so each carries only the agent's own verdict and counts as half a run, the default `ReasonletRankingOptions.AgentVerdictWeight` of 0.5. The sample prints:
 
 | Reasonlet | Similarity | Success rate | Freshness | Total |
 |---|---|---|---|---|
-| New version, `1.1` | 0.816 | 0.917 | 1.000 | **0.883** |
-| Proven original, `1.0` | 0.816 | 0.900 | 1.000 | 0.878 |
+| New version, `1.1` | 0.816 | 0.848 | 1.000 | **0.863** |
+| Proven original, `1.0` | 0.816 | 0.833 | 1.000 | 0.858 |
 | Close match, `1.0` | 0.904 | 0.500 | 1.000 | 0.802 |
 
 Working through each row:
 
-- **Proven original.** It has no parent, so its prior is 0.5: (20 + 5 × 0.5) / (20 + 5) = 22.5 / 25 = 0.900. Total: 0.5 × 0.816 + 0.3 × 0.900 + 0.2 × 1.000 = 0.878.
-- **New version.** Its parent's rate is 0.900, which beats 0.5, so its prior is 0.900. With one success of its own: (1 + 5 × 0.900) / (1 + 5) = 5.5 / 6 = 0.917. Total: 0.5 × 0.816 + 0.3 × 0.917 + 0.2 × 1.000 = 0.883.
-- **Close match.** No parent, prior 0.5: (5 + 2.5) / (10 + 5) = 7.5 / 15 = 0.500. Total: 0.5 × 0.904 + 0.3 × 0.500 + 0.2 × 1.000 = 0.802.
+- **Proven original.** Its 20 successes out of 20 count as 10 out of 10. It has no parent, so its prior is 0.5: (10 + 5 × 0.5) / (10 + 5) = 12.5 / 15 = 0.833. Total: 0.5 × 0.816 + 0.3 × 0.833 + 0.2 × 1.000 = 0.858.
+- **New version.** Its parent's rate is 0.833, which beats 0.5, so its prior is 0.833. Its one success of its own counts as half: (0.5 + 5 × 0.833) / (0.5 + 5) = 0.848. Total: 0.5 × 0.816 + 0.3 × 0.848 + 0.2 × 1.000 = 0.863.
+- **Close match.** Its 5 out of 10 count as 2.5 out of 5. No parent, prior 0.5: (2.5 + 2.5) / (5 + 5) = 5 / 10 = 0.500. Total: 0.5 × 0.904 + 0.3 × 0.500 + 0.2 × 1.000 = 0.802.
 
 Three things to take from it:
 
 - **The close match has the highest similarity and still ranks last.** Its record costs it more than its similarity gains.
 - **The new version ranks first after a single run.** It inherits the original's record, so the improvement isn't buried below what it improves on.
-- **Without inheritance, it would rank last.** With the neutral prior its success rate would be (1 + 2.5) / 6 = 0.583, for a total of 0.783, below both others.
+- **Without inheritance, it would rank last.** With the neutral prior its success rate would be (0.5 + 2.5) / 5.5 = 0.545, for a total of 0.772, below both others.
 
 The similarities come from the sample's offline stand-in for an embedding model, which only counts shared words. A real model gives different numbers, but the same reasoning applies.
 

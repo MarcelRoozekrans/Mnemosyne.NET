@@ -89,6 +89,10 @@ public interface IReasonletStore
     /// and <see cref="ReasonletCandidate.ParentMetrics"/> when the Reasonlet has a parent in its scope, null otherwise.
     /// The default selector ranks on both: a store that leaves <c>ParentMetrics</c> null disables inheritance, and one that
     /// leaves <c>LastExecutedAt</c> at its default makes every candidate's freshness zero.
+    /// Both metrics must also carry <see cref="ReasonletMetrics.JudgedRuns"/> and <see cref="ReasonletMetrics.JudgedSuccesses"/>,
+    /// the runs an evaluator or a human judged and how many of them succeeded. Zero is the valid value for "nothing judged",
+    /// so a store that leaves them at zero makes the default selector rank every run as one only the agent judged, at
+    /// <c>ReasonletRankingOptions.AgentVerdictWeight</c>.
     /// Error codes: <see cref="MnemosyneErrorCode.Validation"/> when the limit is not positive or an argument breaks another invariant, such as a <c>default</c> scope,
     /// <see cref="MnemosyneErrorCode.Unavailable"/> when the backing store fails.
     /// </remarks>

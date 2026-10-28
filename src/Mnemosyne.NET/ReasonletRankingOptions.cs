@@ -34,6 +34,13 @@ public sealed class ReasonletRankingOptions
     /// </summary>
     public double PriorWeight { get; init; } = 5.0;
 
+    /// <summary>
+    /// Gets how much a run that only the agent judged counts toward the success rate, against a full 1 for a run that an
+    /// evaluator or a human judged. In [0, 1], and not part of the three weights that must sum to 1. Defaults to 0.5. At 1
+    /// every run counts in full; at 0 the rate rests on judged runs only.
+    /// </summary>
+    public double AgentVerdictWeight { get; init; } = 0.5;
+
     /// <summary>Gets the time in which freshness halves. Must be positive. Defaults to 30 days.</summary>
     public TimeSpan FreshnessHalfLife { get; init; } = TimeSpan.FromDays(30);
 
@@ -50,6 +57,7 @@ public sealed class ReasonletRankingOptions
         () => double.IsFinite(PriorWeight) && PriorWeight > 0.0
             ? UnitResult<MnemosyneError>.Success()
             : Check.Fail(nameof(PriorWeight), "must be a finite number above 0"),
+        () => Check.UnitInterval(AgentVerdictWeight, nameof(AgentVerdictWeight)),
         () => FreshnessHalfLife > TimeSpan.Zero
             ? UnitResult<MnemosyneError>.Success()
             : Check.Fail(nameof(FreshnessHalfLife), "must be positive"));

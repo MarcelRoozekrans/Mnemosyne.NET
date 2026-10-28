@@ -57,18 +57,22 @@ public sealed class RecallTests(PgVectorFixture fixture) : IClassFixture<PgVecto
 
         var result = await memory.RecallAsync(new ReasonletQuery { Scope = scope, Question = Query }, Ct);
 
-        // With k = 5 and freshness 1, the totals are 0.5 * similarity + 0.3 * successRate + 0.2:
-        //   original:    successRate (40 + 5 * 0.5) / (40 + 5) = 42.5 / 45 = 0.94444
-        //                total 0.425 + 0.28333 + 0.2 = 0.90833
-        //   new version: its prior is max(the original's rate, 0.5) = 42.5 / 45, so successRate (1 + 5 * 42.5 / 45) / (1 + 5) = 0.95370
-        //                total 0.43 + 0.28611 + 0.2 = 0.91611
-        //   close match: successRate (5 + 5 * 0.5) / (10 + 5) = 7.5 / 15 = 0.5
+        // With k = 5, freshness 1 and every run judged by the agent alone, so each counts at the default agent weight of
+        // 0.5, the totals are 0.5 * similarity + 0.3 * successRate + 0.2:
+        //   original:    20 weighted successes of 20 weighted runs, successRate (20 + 5 * 0.5) / (20 + 5) = 22.5 / 25 = 0.9
+        //                total 0.425 + 0.27 + 0.2 = 0.895
+        //   new version: its prior is max(the original's rate, 0.5) = 0.9, so successRate (0.5 + 5 * 0.9) / (0.5 + 5) = 0.90909
+        //                total 0.43 + 0.27273 + 0.2 = 0.90273
+        //   close match: successRate (2.5 + 5 * 0.5) / (5 + 5) = 5 / 10 = 0.5
         //                total 0.46 + 0.15 + 0.2 = 0.81
         Assert.True(result.IsSuccess);
         Assert.Equal([newVersion, original, closeMatch], result.Value.Select(m => m.Reasonlet.Id));
-        AssertScore(result.Value[0].Score, 0.86, (1 + (5 * 42.5 / 45)) / 6);
-        AssertScore(result.Value[1].Score, 0.85, 42.5 / 45);
-        AssertScore(result.Value[2].Score, 0.92, 7.5 / 15);
+        AssertScore(result.Value[0].Score, 0.86, (0.5 + (5 * 0.9)) / 5.5);
+        AssertScore(result.Value[1].Score, 0.85, 22.5 / 25);
+        AssertScore(result.Value[2].Score, 0.92, 5.0 / 10);
+        Assert.Equal(
+            [new ReasonletEvidence(1, 0, true), new ReasonletEvidence(40, 0, false), new ReasonletEvidence(10, 0, false)],
+            result.Value.Select(m => m.Evidence));
         Assert.Equal("1.1", result.Value[0].Reasonlet.Version);
         Assert.Equal(original, result.Value[0].Reasonlet.ParentId);
     }
@@ -106,21 +110,24 @@ public sealed class RecallTests(PgVectorFixture fixture) : IClassFixture<PgVecto
         var child = await RememberAsync(memory, scope, NewVersion, "new-version", parent: parent, subject: "kept");
         var query = new ReasonletQuery { Scope = scope, Question = Query };
 
-        // While the parent lives, the child's prior is the parent's 40 out of 40: (1 + 5 * 42.5 / 45) / 6.
+        // While the parent lives, the child's prior is the parent's 40 out of 40 agent-only runs, which count at the default
+        // agent weight of 0.5: (0.5 + 5 * 22.5 / 25) / 5.5.
         var before = await memory.RecallAsync(query, Ct);
         Assert.Equal(child, before.Value[0].Reasonlet.Id);
-        Assert.Equal((1 + (5 * 42.5 / 45)) / 6, before.Value[0].Score.SuccessRate, 1e-12);
+        Assert.Equal((0.5 + (5 * 22.5 / 25)) / 5.5, before.Value[0].Score.SuccessRate, 1e-12);
+        Assert.True(before.Value[0].Evidence.UsesParentPrior);
 
         var erased = await memory.EraseAsync(new ReasonletErasure(scope, "erased"), Ct);
         Assert.Equal(1, erased.Value.Reasonlets);
 
-        // The parent link is cut, so the child is a root: its 1 out of 1 is smoothed with 0.5, (1 + 2.5) / 6.
+        // The parent link is cut, so the child is a root: its 1 out of 1, weighted 0.5, is smoothed with 0.5, (0.5 + 2.5) / 5.5.
         var after = await memory.RecallAsync(query, Ct);
 
         var match = Assert.Single(after.Value);
         Assert.Equal(child, match.Reasonlet.Id);
         Assert.Null(match.Reasonlet.ParentId);
-        AssertScore(match.Score, 1.0, 3.5 / 6);
+        AssertScore(match.Score, 1.0, 3.0 / 5.5);
+        Assert.Equal(new ReasonletEvidence(1, 0, false), match.Evidence);
     }
 
     [Fact]

@@ -74,7 +74,7 @@ public sealed class RecallTelemetryTests
         _store.SearchResult = Result<IReadOnlyList<ReasonletCandidate>, MnemosyneError>.Success(candidates);
         var chosen = candidates[1].Reasonlet with { Version = "2.1.0" };
         _selector.Result = Result<IReadOnlyList<ReasonletMatch>, MnemosyneError>.Success(
-            [new(chosen, new ReasonletScore(0.8, 1, 1, 0.77)), new(candidates[0].Reasonlet, new ReasonletScore(0.9, 0, 0, 0.45))]);
+            [new(chosen, new ReasonletScore(0.8, 1, 1, 0.77), default), new(candidates[0].Reasonlet, new ReasonletScore(0.9, 0, 0, 0.45), default)]);
         using var capture = new TelemetryCapture();
 
         var result = await Memory().RecallAsync(TestData.Query() with { Intent = "caller", Top = 4 }, Ct);
