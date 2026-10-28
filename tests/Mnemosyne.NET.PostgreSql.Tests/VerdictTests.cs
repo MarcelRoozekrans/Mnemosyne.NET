@@ -294,6 +294,8 @@ public sealed class VerdictTests(PgVectorFixture fixture) : IClassFixture<PgVect
         Assert.Equal((1, 0), await JudgedCountersAsync(r.Id));
     }
 
+    // PostgreSQL reports the first violated CHECK by constraint name; the judged_runs = -1 and judged_runs = runs + 1 rows
+    // also break the rules after judged_runs, so they name the first one.
     [Theory]
     [InlineData("judged_runs = -1", "reasonlet_metrics_judged_runs")]
     [InlineData("judged_runs = runs + 1", "reasonlet_metrics_judged_runs")]

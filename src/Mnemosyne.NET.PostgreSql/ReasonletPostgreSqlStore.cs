@@ -553,10 +553,10 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
     /// stay in <c>successes</c>, so <c>last_success_at</c> can be null while <c>successes</c> is above zero. A
     /// <c>Worked</c> verdict also makes the run judged: an agent-only run adds one to <c>judged_runs</c>, even when the
     /// verdict agrees with the agent's and its success does not flip, and <c>judged_successes</c> moves by the change in
-    /// whether the run is a judged success. Recorded feedback
-    /// that gives a <c>Worked</c> verdict tags its <c>mnemosyne.feedback.append</c> activity with
-    /// <c>mnemosyne.verdict_source</c> <c>feedback</c>, whether or not it flips the effective success, so a human override
-    /// that agrees with the judge shows too; feedback with <c>Worked</c> null, or that fails, is not tagged.
+    /// whether the run is a judged success. Recorded feedback that gives a <c>Worked</c> verdict tags its
+    /// <c>mnemosyne.feedback.append</c> activity with <c>mnemosyne.verdict_source</c> <c>feedback</c>, whether or not it
+    /// flips the effective success, so a human override that agrees with the judge shows too; feedback with <c>Worked</c>
+    /// null, or that fails, is not tagged.
     /// </para>
     /// <para>
     /// One READ COMMITTED transaction of separate statements, so each step sees what committed while an earlier one
