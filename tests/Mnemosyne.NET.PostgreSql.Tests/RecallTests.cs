@@ -78,6 +78,45 @@ public sealed class RecallTests(PgVectorFixture fixture) : IClassFixture<PgVecto
     }
 
     [Fact]
+    public async Task RecallRanksAJudgedSuccessOverAnAgentOnlyOne()
+    {
+        // Both questions embed to the query's own vector, so both similarities are 1 and only the record tells them apart.
+        var embeddings = new FixedEmbeddings { [Query] = [1f, 0f, 0f], [Original] = [1f, 0f, 0f], [CloseMatch] = [1f, 0f, 0f] };
+        var (memory, scope) = await MemoryAsync(embeddings);
+
+        // Agent-only: one run that the agent called a success and nobody judged.
+        var agentOnly = await RememberAsync(memory, scope, Original, "agent-only");
+
+        // Judged: one run that the agent called a success and a human confirmed with Worked = true.
+        var judgedReceipt = await memory.RememberAsync(
+            new ReasonletCapture
+            {
+                Scope = scope,
+                Question = CloseMatch,
+                Graph = Entries.Graph("judged"),
+                Outcome = Success,
+                Provenance = new ReasonletProvenance { Source = "test" },
+            },
+            Ct);
+        Assert.True(judgedReceipt.IsSuccess);
+        var feedback = await memory.RecordFeedbackAsync(scope, judgedReceipt.Value.Execution, new ReasonletFeedback(1, 1, 1, true), Ct);
+        Assert.True(feedback.IsSuccess);
+
+        var result = await memory.RecallAsync(new ReasonletQuery { Scope = scope, Question = Query }, Ct);
+
+        // With k = 5, w = 0.5 and the neutral prior 0.5:
+        //   judged:     1 weighted success of 1 weighted run, (1 + 2.5) / (1 + 5) = 3.5 / 6 = 0.58333
+        //   agent-only: 0.5 weighted successes of 0.5 weighted runs, (0.5 + 2.5) / (0.5 + 5) = 3 / 5.5 = 0.54545
+        Assert.True(result.IsSuccess);
+        Assert.Equal([judgedReceipt.Value.Id, agentOnly], result.Value.Select(m => m.Reasonlet.Id));
+        AssertScore(result.Value[0].Score, 1.0, 3.5 / 6);
+        AssertScore(result.Value[1].Score, 1.0, 3.0 / 5.5);
+        Assert.Equal(
+            [new ReasonletEvidence(1, 1, false), new ReasonletEvidence(1, 0, false)],
+            result.Value.Select(m => m.Evidence));
+    }
+
+    [Fact]
     public async Task RecallReturnsEmptyBelowTheCutOff()
     {
         // The stored question's vector (0.4, sqrt(0.84), 0) has cosine 0.4 with the query's (1, 0, 0), below the default
