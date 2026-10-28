@@ -42,13 +42,7 @@ Each part is between 0 and 1, so the total is too. Every match carries all four 
 
 ### Success rate
 
-The success rate is the share of runs that succeeded, smoothed so that a handful of runs can't swing it to 0 or 1:
-
-```text
-success rate = (successes + 5 × prior) / (runs + 5)
-```
-
-The 5 is the prior weight: the prior counts as five extra runs. For a procedure with no parent, the prior is a neutral 0.5. So a brand-new procedure with one successful run scores (1 + 2.5) / 6 = 0.583, not 1. After 20 successes out of 20 it scores 22.5 / 25 = 0.900, and the prior matters less and less as runs accumulate.
+The success rate is the share of runs that succeeded, smoothed so that a handful of runs can't swing it to 0 or 1, and weighted by how much each run's verdict can be trusted.
 
 Every remember records one run, and every `RecordExecutionAsync` records another. Whether a run counts as a success depends on its effective verdict, the first of these that exists:
 
@@ -58,6 +52,38 @@ Every remember records one run, and every `RecordExecutionAsync` records another
 
 Feedback that changes a run's verdict moves the success count with it. Feedback with `Worked` null keeps an earlier verdict, so a verdict can be changed but not withdrawn. Feedback's three scores are stored, but ranking doesn't use them.
 
+#### Judged and agent-only runs
+
+A run is **judged** when a human or an evaluator gave it a verdict. A run with only the agent's own verdict is **agent-only**. The agent grades its own work, so its verdict is the weakest evidence, and the rate counts an agent-only run for less than a judged one:
+
+```text
+weighted runs      = judged runs + w × (runs − judged runs)
+weighted successes = judged successes + w × (successes − judged successes)
+
+success rate = (weighted successes + 5 × prior) / (weighted runs + 5)
+```
+
+- `w` is `ReasonletRankingOptions.AgentVerdictWeight`, 0.5 by default. An agent-only run counts as half a run, and an agent-only success as half a success.
+- **A judged success** is a judged run whose effective verdict is a success. A judged failure counts in full too, so a human or evaluator can pull a rate down as hard as they lift it.
+- **The 5** is the prior weight: the prior counts as five extra runs. For a procedure with no parent, the prior is a neutral 0.5. A brand-new procedure with one agent-only success scores (0.5 + 2.5) / 5.5 = 0.545. With one judged success it scores (1 + 2.5) / 6 = 0.583. After 20 agent-only successes out of 20 it scores (10 + 2.5) / 15 = 0.833, and the prior matters less and less as runs accumulate.
+- **`AgentVerdictWeight = 1`** counts every run in full and restores the plain rate, `(successes + 5 × prior) / (runs + 5)`. At 0 the rate rests on judged runs alone, and a procedure nobody judged keeps its prior.
+
+A human's feedback on an agent-only run makes it judged even when the verdict agrees with the agent's: the run then counts in full.
+
+Runs that retention pruned still count in `Runs` and `Successes`, but their verdicts went with them. The upgrade to phase 2.4 builds the judged counters from the executions still stored, so a Reasonlet's pruned history counts as agent-only. That understates how much of its history was judged, and in the safe direction: its rate leans on its prior a little more.
+
+#### The evidence on each match
+
+A rate of 0.9 can mean 200 judged runs, or two runs and a good prior. Each `ReasonletMatch` carries a `ReasonletEvidence` so a caller can tell:
+
+| Field | Meaning |
+|---|---|
+| `Runs` | The Reasonlet's own number of runs, pruned ones included. |
+| `JudgedRuns` | How many of them a human or an evaluator judged. The rest are agent-only. |
+| `UsesParentPrior` | Whether the rate was smoothed toward the parent's rate rather than toward 0.5. |
+
+A match with `JudgedRuns` of 0 rests on the agent's word alone. Use the evidence to decide whether to trust the best match, show a caveat, or ask for a check. It is not part of the score, and ranking doesn't change with it beyond the weights above.
+
 ### A new version inherits upward only
 
 A new version has had few runs of its own. With the neutral prior it would look as unproven as any new procedure and rank below the parent it improves on. So a version takes its parent's record as its prior, as long as that record is better than neutral:
@@ -66,7 +92,8 @@ A new version has had few runs of its own. With the neutral prior it would look 
 prior = max(parent's success rate, 0.5)
 ```
 
-- The parent's success rate here is the parent's own, smoothed with the neutral 0.5 prior.
+- The parent's success rate here is the parent's own, weighted the same way and smoothed with the neutral 0.5 prior.
+- **`UsesParentPrior`** on the match's evidence is true exactly when the parent's rate is above 0.5, so the prior really was the parent's.
 - **It only lifts.** A version of a proven procedure starts from its parent's record. A version of a failing procedure, which is usually a fix, starts at 0.5 like anything new, so its parent's failures don't drag it down.
 - **It goes one level.** Only the parent counts, not the grandparent, because the parent is the version this one replaced.
 - **It needs a parent.** When the parent has been erased, the link is cut and the version ranks as a root, with the 0.5 prior. See [Versions and lineage](versions.md#what-erasure-does-to-a-lineage).
@@ -183,11 +210,12 @@ services.AddMnemosyne(new MnemosyneOptions
 | `Ranking.FreshnessWeight` | 0.2 | 0 to 1 |
 | `Ranking.MinSimilarity` | 0.5 | 0 to 1 |
 | `Ranking.PriorWeight` | 5 | finite and above 0 |
+| `Ranking.AgentVerdictWeight` | 0.5 | 0 to 1 |
 | `Ranking.FreshnessHalfLife` | 30 days | positive |
 | `CandidatePool` | 20 | 1 to 200 |
 | `MinIntentConfidence` | 0.7 | 0 to 1 |
 | `EvaluationTimeout` | 30 seconds | positive and at most about 49.7 days, or `Timeout.InfiniteTimeSpan` for none |
 
-The three weights must add up to 1, within 1e-9. `AddMnemosyne` checks the options when you register them and throws `ArgumentException` for an invalid value.
+The three weights must add up to 1, within 1e-9. `AgentVerdictWeight` is not one of them. `AddMnemosyne` checks the options when you register them and throws `ArgumentException` for an invalid value.
 
 On each query, `Top` sets how many matches come back, from 1 to 50 with a default of 3, and `MinSimilarity` overrides the cut-off.
