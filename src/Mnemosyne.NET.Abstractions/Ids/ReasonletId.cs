@@ -10,4 +10,8 @@ public readonly record struct ReasonletId(Guid Value)
 
     /// <summary>Gets a value indicating whether this is the default, empty identifier.</summary>
     public bool IsDefault => Value == Guid.Empty;
+
+    /// <summary>Returns the GUID in its standard form, so logs and interpolated strings show the bare identifier.</summary>
+    /// <returns>The GUID, formatted as <see cref="Guid.ToString()"/> formats it.</returns>
+    public override string ToString() => Value.ToString();
 }
