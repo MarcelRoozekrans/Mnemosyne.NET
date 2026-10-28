@@ -66,7 +66,7 @@ Design: [roadmap design](../superpowers/specs/2026-10-21-roadmap-design.md), bui
 **Definition of Done:**
 - [x] Runs are scored by a pluggable evaluator, with explicit feedback overriding it
 - [x] A Minos.NET default evaluator and an LLM-as-judge evaluator are shipped
-- [ ] Success rate in ranking comes from evaluated executions
+- [x] Success rate in ranking comes from evaluated executions
 - [ ] Docs and a sample cover evaluation
 
 ### Phase 2.1: Evaluator contract and feedback API [status: complete]
@@ -88,11 +88,12 @@ Design: [roadmap design](../superpowers/specs/2026-10-21-roadmap-design.md), bui
 **Plan:** `docs/superpowers/plans/2026-10-24-phase-2.3-chat-judge.md`
 **Completed:** 2026-10-24
 
-### Phase 2.4: Metrics feeding ranking [status: active]
+### Phase 2.4: Metrics feeding ranking [status: complete]
 **Goal:** A trust-weighted success rate that counts agent-only runs at a configurable weight, and the evidence behind each recall match (#9).
 **Surface:** Data
 **HelpWanted:** no
 **Plan:** `docs/superpowers/plans/2026-10-28-phase-2.4-trusted-success-rate.md`
+**Completed:** 2026-10-28
 
 ### Phase 2.5: Evaluation docs and sample [status: pending]
 **Goal:** Docsite pages and a sample for evaluation and feedback.

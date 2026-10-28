@@ -14,14 +14,14 @@ See the [roadmap](ROADMAP.md#milestone-2-evaluation-status-active). Milestone 1 
 ## Definition of Done
 - [x] Runs are scored by a pluggable evaluator, with explicit feedback overriding it
 - [x] A Minos.NET default evaluator and an LLM-as-judge evaluator are shipped
-- [ ] Success rate in ranking comes from evaluated executions
+- [x] Success rate in ranking comes from evaluated executions
 - [ ] Docs and a sample cover evaluation
 
 ## Phases
 1. Phase 2.1 — Evaluator contract and feedback API [complete]
 2. Phase 2.2 — Minos.NET evaluator [complete]
 3. Phase 2.3 — LLM-as-judge evaluator [complete]
-4. Phase 2.4 — Metrics feeding ranking [active]
+4. Phase 2.4 — Metrics feeding ranking [complete]
 5. Phase 2.5 — Evaluation docs and sample [pending]
 
 ## Audit History
