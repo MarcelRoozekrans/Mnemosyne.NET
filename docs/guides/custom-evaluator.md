@@ -55,7 +55,7 @@ Return an error only when the judge's backend fails, such as a model that is dow
 | What your evaluator does | What the facade does |
 | --- | --- |
 | Returns `Unavailable` | Treats the judge as down. The run is stored, and the agent's verdict counts. The call does not fail. |
-| Throws an exception that is not a cancellation | The same: the judge is down, and the agent's verdict counts. |
+| Throws an exception that is not the caller's cancellation | The same: the judge is down, and the agent's verdict counts. This includes an `OperationCanceledException` thrown while the caller's token is not cancelled. |
 | Outlasts `EvaluationTimeout` | The same, see [cancellation](#cancellation). |
 | Returns any other error code | Throws `InvalidOperationException`, which names only the code. |
 | Returns a verdict that fails `Validate` | Throws `InvalidOperationException`. |
@@ -90,6 +90,8 @@ The order does not matter. `AddMnemosyne` looks the evaluator up when the facade
 ## Test it
 
 Test the evaluator alone, with no store, no facade and no database. Build a request and call `EvaluateAsync`.
+
+`ChecklistEvaluator` is `internal`, so a test project outside its assembly needs the evaluator to be public, or needs `InternalsVisibleTo`. Your own evaluator is yours to make public.
 
 ```csharp
 var evaluator = new ChecklistEvaluator();
