@@ -1,7 +1,7 @@
 using System.Text;
 using Microsoft.Extensions.AI;
 
-namespace Mnemosyne.Samples.StoreAndRecall;
+namespace Mnemosyne.Samples;
 
 /// <summary>
 /// A stand-in embedding generator, so the sample runs offline with no API key. It is NOT a real model: it only

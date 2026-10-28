@@ -267,6 +267,19 @@ jobs:
           MNEMOSYNE_SAMPLE_PG: Host=localhost;Port=5432;Username=postgres;Password=postgres;Database=mnemosyne_sample
         run: dotnet run --project samples/Mnemosyne.Samples.StoreAndRecall -c Release
 
+      # The evaluation sample checks the receipts, the order and the totals the docs describe for evaluation, and exits
+      # 1 when any differ. It needs a database of its own as well: the schema is migrated with 256 dimensions.
+      # It gates publish-nuget through aot-publish on purpose: a release must not ship docs whose sample fails.
+      - name: Create the evaluation sample's database
+        env:
+          PGPASSWORD: postgres
+        run: psql -h localhost -U postgres -c 'CREATE DATABASE mnemosyne_evaluation_sample'
+
+      - name: Run the evaluation sample
+        env:
+          MNEMOSYNE_SAMPLE_PG: Host=localhost;Port=5432;Username=postgres;Password=postgres;Database=mnemosyne_evaluation_sample
+        run: dotnet run --project samples/Mnemosyne.Samples.Evaluation -c Release
+
   # The real push to nuget.org. Two ways in: a published release (the automatic path), or a
   # manual dispatch with publish_to_nuget set, for re-running a push that died partway.
   # Both run the full matrix and pack-validate on that commit first, and both refuse a prerelease.

@@ -92,7 +92,7 @@ Each run you record carries its own provenance too.
 
 Every capture records one run, with the capture's `ReasonletOutcome`: whether it succeeded, how long it took, and an optional quality score between 0 and 1. After that, `RecordExecutionAsync` records each further run.
 
-Mnemosyne keeps a running count of runs and successes for each Reasonlet, and the times of its latest run and latest success. Ranking reads these. A run counts as a success by its effective verdict: a human's `Worked` verdict from feedback when there is one, else an evaluator's verdict when one judged the run, else the agent's own `Success`. [Ranking](ranking.md#success-rate) explains the order. You can attach feedback to a recorded run with `RecordFeedbackAsync`. Its `Worked` verdict, when you give one, counts as described; its three scores are stored, but ranking doesn't use them.
+Mnemosyne keeps a running count of runs and successes for each Reasonlet, and the times of its latest run and latest success. Ranking reads these. A run counts as a success by its effective verdict: a human's `Worked` verdict from feedback when there is one, else an evaluator's verdict when one judged the run, else the agent's own `Success`. [Ranking](ranking.md#success-rate) explains the order, and [Evaluation](evaluation.md#who-decides-whether-a-run-worked) explains who decides whether a run worked. You can attach feedback to a recorded run with `RecordFeedbackAsync`. Its `Worked` verdict, when you give one, counts as described; its three scores are stored, but ranking doesn't use them.
 
 ## Status: Active and PendingReview
 

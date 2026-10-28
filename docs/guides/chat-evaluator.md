@@ -16,7 +16,7 @@ Both judges ask the same question. They differ in what the number means.
 - A [Minos judge](minos-evaluator.md) reads a probability off a decision model, and Minos can measure how well those probabilities match reality, so you can tune a threshold against labelled runs.
 - The chat judge asks the model to state its own confidence. That confidence is **uncalibrated**: a model saying 0.9 is not right nine times in ten. Treat the score as a rough signal, not a measured probability.
 
-Choose the chat judge when you already have a chat client and want the judge running quickly, or have no decision-model provider. Choose Minos when you want to calibrate the judge. If neither fits, write your own `IReasonletEvaluator`.
+Choose the chat judge when you already have a chat client and want the judge running quickly, or have no decision-model provider. Choose Minos when you want to calibrate the judge. If neither fits, [write your own `IReasonletEvaluator`](custom-evaluator.md). [Evaluation](../concepts/evaluation.md) explains the loop all three plug into.
 
 ## What the judge asks
 

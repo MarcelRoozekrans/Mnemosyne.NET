@@ -4,7 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Mnemosyne.NET;
 using Mnemosyne.NET.Abstractions;
 using Mnemosyne.NET.PostgreSql;
-using Mnemosyne.Samples.StoreAndRecall;
+using Mnemosyne.Samples;
 using Npgsql;
 using ZeroAlloc.Results;
 

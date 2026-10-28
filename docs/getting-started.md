@@ -205,7 +205,7 @@ if (recalled.Value is [var best, ..])
 }
 ```
 
-The outcome is the agent's own view of the run. The result is a receipt: the run's execution id, which feedback needs, and the verdict that counted, its `Source` and `Success`. To have an `IReasonletEvaluator` judge the run instead, register one and set the run's `Question` and `Answer`. The answer goes to the evaluator and is never stored. A judge that is down or times out, or an answer that is blank or longer than 32,000 code points, doesn't fail the call: the agent's verdict counts, and the receipt's `Source` is `Agent`. When a person later says whether the run worked, record it with `RecordFeedbackAsync` and `Worked`, which overrides both.
+The outcome is the agent's own view of the run. The result is a receipt: the run's execution id, which feedback needs, and the verdict that counted, its `Source` and `Success`. To have an `IReasonletEvaluator` judge the run instead, register one and set the run's `Question` and `Answer`. The answer goes to the evaluator and is never stored. A judge that is down or times out, or an answer that is blank or longer than 32,000 code points, doesn't fail the call: the agent's verdict counts, and the receipt's `Source` is `Agent`. When a person later says whether the run worked, record it with `RecordFeedbackAsync` and `Worked`, which overrides both. [Evaluation](concepts/evaluation.md) explains who decides whether a run worked.
 
 If the agent changed the procedure and the new one worked better, remember it with `ParentId` set to the recalled Reasonlet's id instead. That stores a new version, which [Versions and lineage](concepts/versions.md) describes.
 
@@ -241,5 +241,6 @@ docker rm -f mnemosyne-pg
 
 - [The store-and-recall sample](samples.md) builds a track record, captures a new version and shows it ranking first.
 - [Reasonlets](concepts/reasonlets.md) covers what a capture holds.
+- [Evaluation](concepts/evaluation.md) covers how a run is judged, and [the evaluation sample](samples.md#evaluation) shows a verdict changing the ranking.
 - [Ranking](concepts/ranking.md) covers the cut-off, the weights and how to tune them.
 - [PostgreSQL store](guides/postgresql.md) covers privileges, options and migrations in depth, and [Data lifecycle](guides/data-lifecycle.md) covers erasure and pruning.
