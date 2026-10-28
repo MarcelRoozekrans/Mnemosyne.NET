@@ -12,8 +12,9 @@
 -- The four CHECKs let the database itself hold the rules, so a writer that drifts fails loudly rather than storing a
 -- count the rate would trust. The last one keeps the agent-only successes, successes - judged_successes, at or below
 -- the agent-only runs, runs - judged_runs, which the first three alone allow to break. Every row the backfill writes
--- meets them as long as runs, successes and failures each count at least the stored executions of that kind, which
--- every writer has kept since 0001; a row that does not makes the migration fail whole rather than apply in part.
+-- meets them as long as runs, successes and the failures, runs - successes, each count at least the stored executions
+-- of that kind, which every writer has kept since 0001; a row that does not makes the migration fail whole rather than
+-- apply in part.
 --
 -- The ZeroAlloc.ORM migration runner applies each file in one transaction, with its history row, so this file applies
 -- whole or not at all. It has no BEGIN or COMMIT of its own, which would end the runner's transaction early. The ALTERs

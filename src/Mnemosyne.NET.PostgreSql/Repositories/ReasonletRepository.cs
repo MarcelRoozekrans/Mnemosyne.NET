@@ -22,8 +22,8 @@ internal sealed partial class ReasonletRepository(IAsyncDbConnection connection)
     /// metrics come from the Reasonlet's counter row; a Reasonlet without one, which the store never leaves, reads as
     /// no runs, none of them judged, and its last execution as its creation time. The parent's metrics come from a left
     /// join on the parent's counter row in the same scope, and are null for a root, a cut lineage link or a parent
-    /// without a counter row. A null intent applies no intent filter. Run it in a transaction that has set the iterative-scan settings, or the
-    /// index scan can return fewer rows than the limit.
+    /// without a counter row. A null intent applies no intent filter. Run it in a transaction that has set the
+    /// iterative-scan settings, or the index scan can return fewer rows than the limit.
     /// </summary>
     [Query("""
         SELECT r.id, r.scope, r.name, r.intent, r.version, r.graph, r.parent_id, r.status,

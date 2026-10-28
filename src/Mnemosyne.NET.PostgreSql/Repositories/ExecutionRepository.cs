@@ -398,8 +398,8 @@ internal sealed partial class ExecutionRepository(IAsyncDbConnection connection)
     /// human judged, and those of them whose effective success is true, so a removed agent-only run leaves them alone.
     /// A doomed Reasonlet's metrics row is not updated, because it cascades with the Reasonlet. A timestamp is recomputed
     /// only when the latest removed value is at or after the stored one, as the latest remaining execution, or success,
-    /// of the Reasonlet. Every CTE of a statement reads one snapshot, in
-    /// which the deleted rows are still visible, so "remaining" leaves out the deleted ids explicitly.
+    /// of the Reasonlet. Every CTE of a statement reads one snapshot, in which the deleted rows are still visible, so
+    /// "remaining" leaves out the deleted ids explicitly.
     /// </para>
     /// <para>
     /// When no qualifying execution remains, the stored value cannot stay: the latest execution is always the one that

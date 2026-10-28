@@ -99,11 +99,11 @@ Migration `0003_judged_counters` adds two counters to each Reasonlet's metrics r
 - `judged_successes` is at most `successes`;
 - `successes - judged_successes` is at most `runs - judged_runs`, so the agent-only successes never outnumber the agent-only runs.
 
-A write that breaks one fails with a constraint violation instead of storing a count the rate would trust. The backfill meets all four as long as `runs`, `successes` and `failures` each count at least the stored executions of that kind, which every writer has kept since `0001`. A row that doesn't makes the migration fail whole.
+A write that breaks one fails with a constraint violation instead of storing a count the rate would trust. The backfill meets all four as long as `runs`, `successes` and the failures, `runs - successes`, each count at least the stored executions of that kind, which every writer has kept since `0001`. A row that doesn't makes the migration fail whole.
 
 **Upgrade with a full stop.** Stop every old instance, run `MigrateAsync`, then start the new ones. A release from before `0003` leaves the new counters alone, and the constraints refuse some of its writes. Do not run old and new instances against one database.
 
-`0003` also records `min_binary_schema` in the `mnemosyne.settings` table, set to 3. A store whose schema is lower than that value answers `Unavailable`, with a message that says the binary is too old for the database, from `MigrateAsync` and from every other store method. So a stray old instance that connects after the upgrade is refused instead of writing. A later migration can raise the setting the same way to lock out the binaries before it. A missing setting counts as 0.
+`0003` also records `min_binary_schema` in the `mnemosyne.settings` table, set to 3. A store whose schema is lower than that value answers `Unavailable`, with a message that says the binary is too old for the database, from `MigrateAsync` and from every other store method. The check exists only in releases from `0003` on, so a release built before `0003` is not refused: it still accepts schema 3. That is why the upgrade needs every old instance stopped first. From here on, a later migration can raise the setting to lock out the releases before it. A missing setting counts as 0.
 
 ## Connections and privileges
 
