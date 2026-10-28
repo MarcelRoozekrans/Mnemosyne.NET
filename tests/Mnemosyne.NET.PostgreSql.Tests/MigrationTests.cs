@@ -534,6 +534,31 @@ public sealed class MigrationTests(PgVectorFixture fixture) : IClassFixture<PgVe
     }
 
     [Fact]
+    public async Task ADatabaseThatNeedsANewerBinaryRefusesEveryCallUntilTheSettingIsGone()
+    {
+        var dataSource = await fixture.CreateEmptyDatabaseAsync();
+        Assert.True((await new ReasonletPostgreSqlStore(dataSource, new MnemosynePostgreSqlOptions { Dimensions = 3 }).MigrateAsync(Ct)).IsSuccess);
+        await Entries.ExecuteAsync(dataSource, "UPDATE mnemosyne.settings SET value = '4' WHERE key = 'min_binary_schema'");
+        var store = new ReasonletPostgreSqlStore(dataSource, new MnemosynePostgreSqlOptions { Dimensions = 3 });
+        var scope = PgVectorFixture.NewScope();
+
+        AssertTooOld((await store.MigrateAsync(Ct)).Error);
+        AssertTooOld((await store.GetAsync(scope, ReasonletId.New(), Ct)).Error);
+        AssertTooOld((await store.RememberAsync(Entries.Entry(scope), Ct)).Error);
+        AssertTooOld((await store.AppendExecutionAsync(scope, ReasonletId.New(), default, new ReasonletProvenance { Source = "test" }, null, Ct)).Error);
+        AssertTooOld((await store.AppendFeedbackAsync(scope, ExecutionId.New(), default, Ct)).Error);
+        AssertTooOld((await store.SearchAsync(scope, new float[] { 1, 0, 0 }, null, 10, Ct)).Error);
+        AssertTooOld((await store.EraseAsync(new ReasonletErasure(scope, null), Ct)).Error);
+        AssertTooOld((await store.PruneAsync(new ReasonletRetention { Scope = scope, ExecutionsOlderThan = TimeSpan.FromDays(1) }, Ct)).Error);
+
+        // A missing setting counts as 0, so it asks nothing of the binary.
+        await Entries.ExecuteAsync(dataSource, "DELETE FROM mnemosyne.settings WHERE key = 'min_binary_schema'");
+
+        Assert.True((await store.RememberAsync(Entries.Entry(scope), Ct)).IsSuccess);
+        Assert.True((await new ReasonletPostgreSqlStore(dataSource, new MnemosynePostgreSqlOptions { Dimensions = 3 }).MigrateAsync(Ct)).IsSuccess);
+    }
+
+    [Fact]
     public async Task ASchemaVersionBelowThreeIsNotMigrated()
     {
         var dataSource = await fixture.CreateEmptyDatabaseAsync();
@@ -584,6 +609,14 @@ public sealed class MigrationTests(PgVectorFixture fixture) : IClassFixture<PgVe
         public string Name => inner.Name;
 
         public IReadOnlyList<Migration> GetMigrations() => [.. inner.GetMigrations().Where(m => m.Version <= last)];
+    }
+
+    private static void AssertTooOld(MnemosyneError error)
+    {
+        Assert.Equal(MnemosyneErrorCode.Unavailable, error.Code);
+        Assert.Equal(
+            "binary too old for the database: the database needs a binary of schema 4 or later, and this one is schema 3; upgrade Mnemosyne.NET.PostgreSql",
+            error.Message);
     }
 
     /// <summary>Reads a Reasonlet's runs, successes, judged runs and judged successes, joined by bars.</summary>

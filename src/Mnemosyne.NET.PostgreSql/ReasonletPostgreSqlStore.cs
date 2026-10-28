@@ -71,7 +71,8 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
     /// A later call with a different dimension fails with <see cref="MnemosyneErrorCode.Validation"/> and changes
     /// nothing, because mixing embedding models would corrupt similarity; so does a later call with different HNSW
     /// options, because they apply only when the index is built. A database failure answers
-    /// <see cref="MnemosyneErrorCode.Unavailable"/>.
+    /// <see cref="MnemosyneErrorCode.Unavailable"/>, and so does a database that a newer release migrated and marked
+    /// as too new for this binary.
     /// </remarks>
     /// <param name="ct">The cancellation token.</param>
     /// <returns>Success, or the error.</returns>
@@ -109,6 +110,13 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
 
         var source = new EmbeddedResourceMigrationSource(typeof(ReasonletPostgreSqlStore).Assembly, MigrationResourcePrefix);
         await new MigrationRunner(connection, source, new PostgresMigrationDialect()).RunAsync(ct).ConfigureAwait(false);
+
+        // After the migrations, which record the setting, and before the store counts as migrated: a host calls
+        // MigrateAsync at startup, so a binary that a later migration locked out must refuse here too.
+        if (BinaryTooOld(await new SettingsRepository(connection).GetMinBinarySchemaAsync(ct).ConfigureAwait(false)) is { } tooOld)
+        {
+            return tooOld;
+        }
 
         var vectorVersion = await new SettingsRepository(connection).GetVectorVersionAsync(ct).ConfigureAwait(false);
         if (!PgVectorVersion.IsSupported(vectorVersion))
@@ -1306,7 +1314,9 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
     /// Succeeds once the schema is migrated to <see cref="SchemaVersion"/> with this store's dimension, and caches
     /// that. Answers <see cref="MnemosyneErrorCode.Unavailable"/> before <see cref="MigrateAsync"/> has run, and on a
     /// database that an older release migrated, which needs <see cref="MigrateAsync"/> again: a statement would
-    /// otherwise fail on a missing column. Answers <see cref="MnemosyneErrorCode.Validation"/> when the recorded
+    /// otherwise fail on a missing column. Also answers <see cref="MnemosyneErrorCode.Unavailable"/> on a database whose
+    /// <c>min_binary_schema</c> is above <see cref="SchemaVersion"/>, which a newer release migrated for binaries no
+    /// older than itself. Answers <see cref="MnemosyneErrorCode.Validation"/> when the recorded
     /// dimension differs from the configured one.
     /// </summary>
     internal async ValueTask<UnitResult<MnemosyneError>> EnsureMigratedAsync(CancellationToken ct)
@@ -1341,6 +1351,11 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
             return new MnemosyneError(MnemosyneErrorCode.Unavailable, "schema not migrated: call MigrateAsync");
         }
 
+        if (BinaryTooOld(await settings.GetMinBinarySchemaAsync(ct).ConfigureAwait(false)) is { } tooOld)
+        {
+            return tooOld;
+        }
+
         if (dimensions != _options.Dimensions)
         {
             return DimensionMismatch(dimensions);
@@ -1349,6 +1364,17 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
         _migrated = true;
         return UnitResult<MnemosyneError>.Success();
     }
+
+    /// <summary>
+    /// The error for a database whose <c>min_binary_schema</c> is above <see cref="SchemaVersion"/>, which a later
+    /// migration records when binaries older than it must not write through, or null. A missing setting counts as 0.
+    /// </summary>
+    private static MnemosyneError? BinaryTooOld(int? minimum) =>
+        minimum is { } required && required > SchemaVersion
+            ? new MnemosyneError(
+                MnemosyneErrorCode.Unavailable,
+                $"binary too old for the database: the database needs a binary of schema {required} or later, and this one is schema {SchemaVersion}; upgrade Mnemosyne.NET.PostgreSql")
+            : null;
 
     // DDL takes no parameters, so these statements are raw text. Only the dimension and the HNSW
     // parameters are interpolated: integers that MnemosynePostgreSqlOptions.Validate has range-checked,

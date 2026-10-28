@@ -30,6 +30,13 @@ internal sealed partial class SettingsRepository(IAsyncDbConnection connection)
     [Query("SELECT value::int FROM mnemosyne.settings WHERE key = 'schema_version'")]
     public partial Task<int?> GetSchemaVersionAsync(CancellationToken ct);
 
+    /// <summary>
+    /// The oldest binary schema the database lets through, or null when none is recorded, which asks nothing: migration
+    /// 0003 records 3, and a later migration raises it when binaries older than it must not write through.
+    /// </summary>
+    [Query("SELECT value::int FROM mnemosyne.settings WHERE key = 'min_binary_schema'")]
+    public partial Task<int?> GetMinBinarySchemaAsync(CancellationToken ct);
+
     /// <summary>Reads every recorded setting as one row; a setting that was never recorded reads as null.</summary>
     [Query("""
         SELECT (SELECT value::int FROM mnemosyne.settings WHERE key = 'dimensions'),
