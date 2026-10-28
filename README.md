@@ -33,7 +33,7 @@ Part of the same family as [Minos.NET](https://github.com/MarcelRoozekrans/Minos
 | Minos.NET | Decisions | What decision should be made? |
 | **Mnemosyne.NET** | **Procedures** | **How did we solve this before, and did it work?** |
 
-Status: pre-release.
+Status: preview. 0.1.0 is on NuGet, and the API may change before 1.0.
 
 ## License
 

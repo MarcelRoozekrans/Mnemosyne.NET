@@ -5,10 +5,6 @@ sidebar_position: 2
 
 # Getting started
 
-:::note
-The packages are published with the first release, 0.1.0, so step 1 fails until then. Until then, the [store-and-recall sample](samples.md) runs from source.
-:::
-
 This page wires Mnemosyne into a console app. It remembers a procedure, recalls it for a new question and records a run. It takes about ten minutes.
 
 You need the .NET 10 SDK, Docker, and an embedding model. The steps below use [Ollama](https://ollama.com), which runs locally. If you'd rather not install a model at all, the [store-and-recall sample](samples.md) does the same with a built-in stand-in and needs only Docker.
