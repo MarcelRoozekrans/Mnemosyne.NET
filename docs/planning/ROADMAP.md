@@ -92,7 +92,7 @@ Design: [roadmap design](../superpowers/specs/2026-10-21-roadmap-design.md), bui
 **Goal:** Metrics computed from evaluated executions, with a minimum run count, feeding the success-rate term.
 **Surface:** Data
 **HelpWanted:** no
-**Plan:** _to be written_
+**Plan:** `docs/superpowers/plans/2026-10-28-phase-2.4-trusted-success-rate.md`
 
 ### Phase 2.5: Evaluation docs and sample [status: pending]
 **Goal:** Docsite pages and a sample for evaluation and feedback.
