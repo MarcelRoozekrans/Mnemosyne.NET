@@ -47,7 +47,7 @@ The success rate is the share of runs that succeeded, smoothed so that a handful
 Every remember records one run, and every `RecordExecutionAsync` records another. Whether a run counts as a success depends on its effective verdict, the first of these that exists:
 
 1. **A human's verdict**, `ReasonletFeedback.Worked`, recorded with `RecordFeedbackAsync`.
-2. **An evaluator's verdict**, when an `IReasonletEvaluator` is registered and the run was recorded with its answer. [Judging runs with Minos](../guides/minos-evaluator.md) and [a chat model](../guides/chat-evaluator.md) are ready-made ones.
+2. **An evaluator's verdict**, when an `IReasonletEvaluator` is registered and the run was recorded with its answer. [Judging runs with Minos](../guides/minos-evaluator.md) and [a chat model](../guides/chat-evaluator.md) are ready-made ones, and [Evaluation](evaluation.md) explains the loop and how to [write your own](../guides/custom-evaluator.md).
 3. **The agent's own verdict**, `ReasonletOutcome.Success`.
 
 Feedback that changes a run's verdict moves the success count with it. Feedback with `Worked` null keeps an earlier verdict, so a verdict can be changed but not withdrawn. Feedback's three scores are stored, but ranking doesn't use them.

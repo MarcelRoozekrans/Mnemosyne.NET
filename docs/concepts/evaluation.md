@@ -30,7 +30,7 @@ A run with a human or an evaluator verdict is **judged**. A run with only the ag
 The facade asks the evaluator when all of these hold:
 
 - An `IReasonletEvaluator` is registered. Without one, the agent's verdict counts for every run.
-- The run arrives with a question and an answer. A capture always has a question, so for remember the answer is what counts.
+- The run arrives with a question and an answer. On a capture only the answer is optional, so remember judges the run when the capture carries one.
 - The answer is usable: not blank, and at most 32,000 Unicode code points.
 
 It asks in two places. `RememberAsync` judges the run it records, when the capture carries an `Answer`. `RecordExecutionAsync` judges the run it records, when the `ReasonletRun` carries a `Question` and an `Answer`.

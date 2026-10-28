@@ -82,3 +82,68 @@ services.AddMnemosynePostgreSql(new MnemosynePostgreSqlOptions { Dimensions = 15
 ```
 
 A real model gives different similarities, so the numbers above change, and you should [tune the cut-off](concepts/ranking.md#the-cut-off) for it. A database migrated with one dimension count can't take another, so use a new database when you switch models.
+
+## Evaluation
+
+[`samples/Mnemosyne.Samples.Evaluation`](https://github.com/MarcelRoozekrans/Mnemosyne.NET/tree/main/samples/Mnemosyne.Samples.Evaluation) is a console app that shows how a run's verdict changes the ranking. It needs only Docker and the .NET 10 SDK. It needs no API key and no model.
+
+### What it does
+
+1. Registers the PostgreSQL store, an embedding generator, a rule-based evaluator and the facade, and runs the migrations. The evaluator calls an answer a success when it holds a refund reference like `REF-4821` and the word "notified".
+2. Remembers two procedures for near-identical questions, so their similarity is equal and the success rate decides:
+   - **"refund by hand"**: 8 runs, none with an answer, so the agent's verdict counts for each;
+   - **"refund through the API"**: 5 runs, each with an answer that meets the rule, so the evaluator judges each.
+3. Recalls "How do I refund an order?" three times. Between the recalls, one run on "refund through the API" is recorded and then given feedback.
+4. Checks every receipt, the order after each act and the totals shown below, and exits with code 1 if not.
+5. Erases the scope, so a run leaves nothing behind.
+
+### Run it
+
+Clone the repository, then from the sample's folder:
+
+```bash
+cd samples/Mnemosyne.Samples.Evaluation
+docker compose up -d --wait
+dotnet run
+docker compose down
+```
+
+The database listens on port 5433, so it can run next to the store-and-recall sample's. To use another server, set the `MNEMOSYNE_SAMPLE_PG` environment variable to its connection string. The server needs PostgreSQL 15 or later with pgvector 0.8.0 or later.
+
+### The output
+
+Three recalls, one after each act:
+
+```text
+Act 1. Every answer for "refund through the API" meets the rule, so its runs count in full.
+  #  Reasonlet                Similarity  Success   Total  Runs  Judged
+  1  refund through the API        0.926    0.750   0.888     5       5
+  2  refund by hand                0.926    0.722   0.880     8       0
+
+Act 2. One more run on "refund through the API": the agent reports success, and the answer has a refund reference but does not say the customer was notified.
+  Receipt: source Evaluator, success False, execution <execution id>. The agent said true; the evaluator said false.
+  #  Reasonlet                Similarity  Success   Total  Runs  Judged
+  1  refund by hand                0.926    0.722   0.880     8       0
+  2  refund through the API        0.926    0.682   0.867     6       6
+
+Act 3. A person checks and says the customer was in fact notified: feedback with Worked true on that run overrides the evaluator.
+  #  Reasonlet                Similarity  Success   Total  Runs  Judged
+  1  refund through the API        0.926    0.773   0.895     6       6
+  2  refund by hand                0.926    0.722   0.880     8       0
+```
+
+The execution id in the act 2 receipt is different on every run, so it is shown as a placeholder.
+
+- **Act 1.** Five judged successes give a success rate of (5 + 5 × 0.5) / (5 + 5) = 0.750. "Refund by hand" has 8 runs and none judged, so it ranks second.
+- **Act 2.** The agent said the run worked, but the evaluator overruled it. The failed judged run drops the rate to 0.682, and "refund by hand" ranks first.
+- **Act 3.** Feedback with `Worked` true overrides the evaluator, so the run counts as a success and the rate rises to 0.773.
+
+[Evaluation](concepts/evaluation.md) explains who decides whether a run worked, and [Ranking](concepts/ranking.md#success-rate) works through the success rate.
+
+The sample checks all of this itself, and the repository's CI runs it. If a change to judging or ranking broke what this page shows, CI would fail.
+
+### The evaluator is a stand-in
+
+A word check is not how to judge real answers. In an application, implement `IReasonletEvaluator` over whatever decides whether an answer worked. The [custom evaluator guide](guides/custom-evaluator.md) shows the contract.
+
+The sample also uses the same offline embedding stand-in as store and recall, so [the same caveat applies](#the-embedding-generator-is-a-stand-in).

@@ -7,7 +7,7 @@ sidebar_position: 4
 
 By default a run counts as a success when the agent says it worked. `Mnemosyne.NET.Minos` swaps that for a second opinion: after each run, a [Minos.NET](https://github.com/MarcelRoozekrans/Minos.NET) decision model reads the question, the procedure and the answer, and says whether the answer resolves the question by following the procedure. The verdict counts instead of the agent's own, as [ranking](../concepts/ranking.md) explains.
 
-If you have no decision-model provider, [a chat model can judge runs](chat-evaluator.md) instead, or you can write your own `IReasonletEvaluator`.
+If you have no decision-model provider, [a chat model can judge runs](chat-evaluator.md) instead, or you can [write your own `IReasonletEvaluator`](custom-evaluator.md). [Evaluation](../concepts/evaluation.md) explains the loop all three plug into.
 
 ## What the judge asks
 
