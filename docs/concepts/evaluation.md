@@ -30,7 +30,7 @@ A run with a human or an evaluator verdict is **judged**. A run with only the ag
 The facade asks the evaluator when all of these hold:
 
 - An `IReasonletEvaluator` is registered. Without one, the agent's verdict counts for every run.
-- The run arrives with a question and an answer.
+- The run arrives with a question and an answer. A capture always has a question, so for remember the answer is what counts.
 - The answer is usable: not blank, and at most 32,000 Unicode code points.
 
 It asks in two places. `RememberAsync` judges the run it records, when the capture carries an `Answer`. `RecordExecutionAsync` judges the run it records, when the `ReasonletRun` carries a `Question` and an `Answer`.
@@ -78,29 +78,25 @@ await memory.RecordFeedbackAsync(
     scope, receipt.Value.Execution, new ReasonletFeedback(Utility: 0.9, Correctness: 1, Reusability: 0.8, Worked: true), ct);
 ```
 
-- **`Worked` is the verdict.** When it is set, it counts instead of the evaluator's and the agent's. When the new verdict differs from the old one, the success count moves with it.
+- **`Worked` is the verdict.** When it is set, it counts instead of the evaluator's and the agent's.
 - **A verdict can be changed but not withdrawn.** Feedback with `Worked` null keeps the earlier verdict. To change it, record the other value.
-- **The three scores are stored but not ranked.** `Utility`, `Correctness` and `Reusability` are each from 0 to 1. Feedback replaces the run's earlier scores. Ranking ignores them.
+- **The three scores are stored but not ranked.** Each is from 0 to 1, and new feedback replaces the earlier scores.
 - **Feedback makes an agent-only run judged.** That holds even when the person agrees with the agent: the run then counts in full.
 - **It can fail.** An execution that does not exist in the scope gives `NotFound`, also when it exists only in another scope.
 
 ## When the judge is down
 
-A judge that fails never fails the call. The run is stored with the agent's own verdict, and the receipt's `Source` is `Agent`. This happens when:
+A judge that fails never fails the call. The run is stored with the agent's own verdict, and the receipt's `Source` is `Agent`. A judge counts as down when:
 
-| Situation | Result |
-|---|---|
-| The evaluator returns `Unavailable`. | The judge is down. The agent's verdict counts. |
-| It throws, or times out on its own. | The same. |
-| It outlasts `MnemosyneOptions.EvaluationTimeout`. | The same. The facade cancels the token it gave the judge and stops waiting, even for a judge that ignores the token. The default is 30 seconds. |
-| The answer is blank or longer than 32,000 code points. | The judge is not asked. The answer is the agent's own output, so it doesn't fail the call. |
+- it returns `Unavailable`;
+- it throws, including an `OperationCanceledException` raised while the caller's token is not cancelled;
+- it outlasts `MnemosyneOptions.EvaluationTimeout`.
 
-Two things still stop the call:
+An answer that is blank or too long is not judged at all, and the agent's verdict counts the same way.
 
-- **An adapter bug.** Any other error code from the evaluator, or a verdict that fails `ReasonletEvaluation.Validate`, throws `InvalidOperationException`, and the run is not stored. It names only the code or the failing field, never the answer.
-- **Your own cancellation.** It throws `OperationCanceledException`.
+Two things still stop the call. An adapter bug, meaning any other error code or an invalid verdict, throws `InvalidOperationException`, and the run is not stored. Your own cancellation throws `OperationCanceledException`.
 
-[When recall fails](ranking.md#when-recall-fails) has the full table, and [settings](ranking.md#settings) lists `EvaluationTimeout`. The [custom evaluator guide](../guides/custom-evaluator.md#errors) says what your own evaluator should return.
+The [custom evaluator guide](../guides/custom-evaluator.md#errors) lists what each evaluator outcome does. [Settings](ranking.md#settings) has the timeout, and [when recall fails](ranking.md#when-recall-fails) the rest.
 
 ## Reading the evidence
 
