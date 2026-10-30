@@ -235,4 +235,29 @@ public sealed class ServiceCollectionTests
     [Fact]
     public void NullServicesAreRefused() =>
         Assert.Throws<ArgumentNullException>("services", () => ServiceCollectionExtensions.AddMnemosyne(null!));
+
+    [Fact]
+    public async Task AddMnemosyneUsesARegisteredGuard()
+    {
+        var guard = new FakeCaptureGuard { Respond = () => CaptureVerdict.Block("fake-guard", "pii.email") };
+        var services = Services();
+        services.AddSingleton<ICaptureGuard>(guard);
+        using var provider = services.AddMnemosyne().BuildServiceProvider();
+
+        var result = await provider.GetRequiredService<IReasonletMemory>().RememberAsync(TestData.Capture(), CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(MnemosyneErrorCode.Blocked, result.Error.Code);
+        Assert.Equal(1, guard.Calls);
+    }
+
+    [Fact]
+    public async Task AddMnemosyneWorksWithoutAGuard()
+    {
+        using var provider = Services().AddMnemosyne().BuildServiceProvider();
+
+        var result = await provider.GetRequiredService<IReasonletMemory>().RememberAsync(TestData.Capture(), CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+    }
 }

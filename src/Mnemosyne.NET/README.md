@@ -115,6 +115,14 @@ if (recorded.IsSuccess)
 
 Feedback with `Worked` null keeps an earlier verdict, so a verdict can be changed but not withdrawn.
 
+## Capture guard
+
+Register an `ICaptureGuard` and `RememberAsync` asks it before anything else is done with a capture. The guard sees the capture after it validates, and before the intent is resolved, the embedding is made and the judge runs. It answers with a verdict: allow, or block with the name of the detector that fired.
+
+A blocked capture is not stored. The remember fails with the error code `Blocked`. A guard that is down fails closed: if it throws, times out after `MnemosyneOptions.GuardTimeout` or answers `Unavailable`, the remember fails with `Unavailable` and nothing is stored. Only `RememberAsync` is guarded, not `RecordExecutionAsync`. Without a guard, every capture is remembered as before.
+
+An AI.Sentinel adapter for the guard arrives in a later package.
+
 ## Documentation
 
 - [Getting started](https://marcelroozekrans.github.io/Mnemosyne.NET/getting-started): a complete console app, and what `AddMnemosyne` registers.
