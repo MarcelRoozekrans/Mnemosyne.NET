@@ -943,6 +943,8 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
         return result.IsSuccess ? UnitResult<MnemosyneError>.Success() : result.Error;
     }
 
+    // One statement sets the status to Active, so an approve needs no transaction. It waits for the row lock of a
+    // concurrent reject, and when that reject deletes the row it finds nothing and answers NotFound.
     private async Task<Result<bool, MnemosyneError>> ApproveCoreAsync(ReasonletScope scope, ReasonletId id, CancellationToken ct)
     {
         await using var connection = (await _dataSource.OpenConnectionAsync(ct).ConfigureAwait(false)).AsAsync();
@@ -968,6 +970,17 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
         return result.IsSuccess ? UnitResult<MnemosyneError>.Success() : result.Error;
     }
 
+    // One READ COMMITTED transaction locks the Reasonlet FOR UPDATE before it reads the status and looks for
+    // children. A remember that adds a version below it holds it FOR NO KEY UPDATE, and an approve updates it,
+    // and both conflict with that lock, so each serializes with the reject: a reject that runs second sees the new
+    // version or the new status and answers Conflict; a remember or an approve that runs second finds no
+    // Reasonlet and answers NotFound, as after an erase.
+    //
+    // Because a Reasonlet with children is never rejected, a reject only deletes a leaf, and it deletes it in the
+    // order an erase does: the Reasonlet row's lock first, then its executions in id order, then the row itself,
+    // with the feedback and metrics rows that cascade. An erase locks deepest first, and a leaf is the deepest
+    // row of its branch, so taking that one row first keeps the erase's order. A deadlock or a serialization
+    // failure that still happens answers Conflict.
     private async Task<Result<bool, MnemosyneError>> RejectCoreAsync(ReasonletScope scope, ReasonletId id, CancellationToken ct)
     {
         await using var connection = (await _dataSource.OpenConnectionAsync(ct).ConfigureAwait(false)).AsAsync();
@@ -1045,6 +1058,7 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
         return null;
     }
 
+    // A Reasonlet without a metrics row reads as no runs, with its last execution at its creation time.
     private async Task<Result<IReadOnlyList<ReasonletReview>, MnemosyneError>> ListPendingCoreAsync(
         ReasonletScope scope, int limit, ReasonletId? after, CancellationToken ct)
     {

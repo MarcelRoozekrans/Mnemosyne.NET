@@ -104,7 +104,7 @@ public sealed class ReviewGateTests
     {
         var result = await Memory().ListPendingAsync(new ReasonletScope("tenant"), 10, default(ReasonletId), CancellationToken.None);
 
-        Assert.Contains("after", result.Error.Message);
+        Assert.Equal("after: must not be the default id", result.Error.Message);
     }
 
     [Fact]
