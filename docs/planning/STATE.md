@@ -4,15 +4,21 @@
 
 ## Current Position
 - **Milestone:** 3 — Off-the-shelf integrations, active since 2026-10-30. Design: `docs/superpowers/specs/2026-10-30-milestone-3-design.md`. Milestone 2 is archived in `docs/planning/milestones/milestone-2.md`.
-- **Phase:** none started. Phase 3.1 — Capture is the first pending phase.
-- **Last completed task:** `new-milestone` for milestone 3, on branch `chore/start-milestone-3`.
-- **Next task:** merge the `chore/start-milestone-3` PR, then start phase 3.1.
+- **Phase:** 3.1 — Capture, complete on branch `feat/phase-3.1-capture`. The branch's PR has not merged yet. Phase 3.2 — Redaction hook is the next pending phase.
+- **Last completed task:** phase 3.1. It added `ReasonletTranscript.ToGraph` and `ToCapture`, `TranscriptCaptureDetails` and `TranscriptSkipReason`, with unit tests, a PostgreSQL round trip through the facade and an AOT smoke check with a pinned hash.
+- **Next task:** merge the phase 3.1 PR, then start phase 3.2.
 
 ## Open Decisions
-- None. The milestone design settles graph content (tool shape only), capture trigger (every tool run, judged), recall injection (top match as a system message), flagged captures (dropped, with a telemetry event), packages (middleware and tool in core) and sequencing (7 phases, foundations first).
+- None. Phase 3.1 settled the captured shape:
+  - tool steps under `mnemosyne.arguments`;
+  - call/result pairing by position;
+  - a retry takes the failed call's place;
+  - parallel calls are sorted, and consecutive repeats collapse.
+
+  The pinned hash in `tests/Mnemosyne.NET.AotSmoke/Program.cs` is now a contract.
 
 ## Blockers
-- Merge the `chore/start-milestone-3` PR first, so phase 3.1 starts from a `main` that shows milestone 3 active.
+- Merge the `feat/phase-3.1-capture` PR first, so phase 3.2 starts from a `main` that has the builder.
 
 ## Recommended Next Step
-After the PR merges, cut a branch from `main` for phase 3.1 and run `start-next-phase`. It routes to brainstorming at phase scope, because phase 3.1 has no design spec yet.
+After the PR merges, cut `feat/phase-3.2-redaction-hook` from `main` and run `start-next-phase`. It routes to brainstorming at phase scope, because phase 3.2 has no design spec. The hook sits between `ReasonletTranscript.ToCapture` and `RememberAsync`, and sees the question, the answer, the intent and the name.
