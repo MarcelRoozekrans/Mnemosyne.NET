@@ -57,6 +57,15 @@ public sealed class MnemosyneOptions
     /// </remarks>
     public TimeSpan GuardTimeout { get; init; } = TimeSpan.FromSeconds(30);
 
+    /// <summary>
+    /// Gets whether a new Reasonlet or a new version is stored as pending review instead of active. Defaults to false.
+    /// </summary>
+    /// <remarks>
+    /// Turning it on leaves existing active Reasonlets active. Turning it off leaves existing pending Reasonlets pending until
+    /// they are approved or rejected, and stores new captures as active. Any value is valid.
+    /// </remarks>
+    public bool RequireReview { get; init; }
+
     /// <summary>Gets the settings of the default selector. Must not be null and must be valid.</summary>
     public ReasonletRankingOptions Ranking { get; init; } = new();
 
