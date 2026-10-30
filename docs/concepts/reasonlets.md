@@ -63,6 +63,8 @@ You can supply the intent yourself, on the capture and on the query. You can als
 
 If the extractor is needed and is down, the remember fails with `Unavailable` rather than storing a guess.
 
+If a capture guard is registered, it inspects the capture before the intent is resolved, and before the embedding and the judge. A blocked capture is not stored: the remember fails with `Blocked`. A guard that is down fails closed with `Unavailable`. See [Telemetry](../guides/telemetry.md#the-guard-activity).
+
 **When recalling**, the filter is:
 
 1. the query's own `Intent`, when it has one;
