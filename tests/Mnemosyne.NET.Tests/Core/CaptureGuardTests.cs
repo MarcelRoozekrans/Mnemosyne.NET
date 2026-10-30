@@ -183,6 +183,16 @@ public sealed class CaptureGuardTests
     }
 
     [Fact]
+    public async Task AnInvalidVerdictIsAnAdapterBug()
+    {
+        var guard = new FakeCaptureGuard { Respond = () => CaptureVerdict.Block("g", " ") };
+
+        await Assert.ThrowsAsync<InvalidOperationException>(async () => await Memory(guard).RememberAsync(Capture(), Ct));
+
+        AssertNothingDownstream();
+    }
+
+    [Fact]
     public async Task TheCallersCancellationPropagates()
     {
         using var cancelled = new CancellationTokenSource();

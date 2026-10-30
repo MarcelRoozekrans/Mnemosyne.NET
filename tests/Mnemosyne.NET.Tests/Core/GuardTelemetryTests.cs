@@ -139,8 +139,20 @@ public sealed class GuardTelemetryTests
         };
         errors.Add((await Memory(unavailable).RememberAsync(capture, Ct)).Error);
 
-        Assert.Equal(2, telemetry.Activities.Count);
+        var blocking = new FakeCaptureGuard { Respond = () => CaptureVerdict.Block("g", "pii.email") };
+        var blocked = (await Memory(blocking).RememberAsync(capture, Ct)).Error;
+        Assert.Equal(MnemosyneErrorCode.Blocked, blocked.Code);
+        errors.Add(blocked);
+
         var texts = new List<string>();
+        var buggy = new FakeCaptureGuard
+        {
+            Respond = () => new MnemosyneError(MnemosyneErrorCode.Validation, $"guard said {Canary}", $"detail {Canary}"),
+        };
+        var bug = await Assert.ThrowsAsync<InvalidOperationException>(async () => await Memory(buggy).RememberAsync(capture, Ct));
+        texts.Add(bug.Message);
+
+        Assert.Equal(4, telemetry.Activities.Count);
         foreach (var activity in telemetry.Activities)
         {
             texts.AddRange(activity.TagObjects.Select(tag => $"{tag.Key}={tag.Value}"));
@@ -166,6 +178,49 @@ public sealed class GuardTelemetryTests
         }
 
         Assert.All(texts, text => Assert.DoesNotContain(Canary, text, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task AnInvalidVerdictIsRecordedAsAnException()
+    {
+        var guard = new FakeCaptureGuard { Respond = () => CaptureVerdict.Block("g", " ") };
+        using var capture = new TelemetryCapture();
+
+        await Assert.ThrowsAsync<InvalidOperationException>(async () => await Memory(guard).RememberAsync(TestData.Capture(), Ct));
+
+        var activity = Single(capture);
+        Assert.Equal(ActivityStatusCode.Error, activity.Status);
+        Assert.Equal([new("error.type", "System.InvalidOperationException")], AllTags(activity));
+        AssertMeasurements(capture, "exception", "exception", guard: null);
+    }
+
+    [Fact]
+    public async Task ACancelledCallerIsAnException()
+    {
+        using var cancelled = new CancellationTokenSource();
+        await cancelled.CancelAsync();
+        using var before = new TelemetryCapture();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            async () => await Memory(new FakeCaptureGuard()).RememberAsync(TestData.Capture(), cancelled.Token));
+
+        var activity = Single(before);
+        Assert.Equal(ActivityStatusCode.Error, activity.Status);
+        Assert.DoesNotContain(AllTags(activity), tag => tag.Key == "mnemosyne.guard");
+        AssertMeasurements(before, "exception", "exception", guard: null);
+
+        using var cts = new CancellationTokenSource();
+        var hanging = new FakeCaptureGuard { Hang = true };
+        using var during = new TelemetryCapture();
+        var pending = Memory(hanging, clock: new ManualTimeProvider()).RememberAsync(TestData.Capture(), cts.Token).AsTask();
+        Assert.Equal(1, hanging.Calls);
+        await cts.CancelAsync();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => pending.WaitAsync(TimeSpan.FromSeconds(30), Ct));
+
+        var waited = Single(during);
+        Assert.Equal(ActivityStatusCode.Error, waited.Status);
+        Assert.DoesNotContain(AllTags(waited), tag => tag.Key == "mnemosyne.guard");
+        AssertMeasurements(during, "exception", "exception", guard: null);
     }
 
     [Fact]
