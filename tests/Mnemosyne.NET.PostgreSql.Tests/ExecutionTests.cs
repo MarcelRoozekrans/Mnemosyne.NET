@@ -185,7 +185,7 @@ public sealed class ExecutionTests(PgVectorFixture fixture) : IClassFixture<PgVe
     public async Task ADatabaseFailureIsMappedAndAnUnknownOneIsNot()
     {
         var (store, scope, receipt) = await RememberedAsync();
-        await Entries.ExecuteAsync(fixture.DataSource, "ALTER TABLE mnemosyne.reasonlet_feedback ADD CONSTRAINT utility_small CHECK (utility < 0.5)");
+        await Entries.ExecuteAsync(fixture.DataSource, "ALTER TABLE mnemosyne.reasonlet_feedback ADD CONSTRAINT utility_small CHECK (utility < 0.5) NOT VALID");
         try
         {
             // A check violation is neither a conflict nor an outage, so it is a bug that propagates.
