@@ -27,7 +27,7 @@ See the [milestone design](../superpowers/specs/2026-10-30-milestone-3-design.md
 ## Phases
 1. Phase 3.1 — Capture [complete]
 2. Phase 3.2 — Redaction hook [complete]
-3. Phase 3.3 — Human review gate [pending]
+3. Phase 3.3 — Human review gate [active]
 4. Phase 3.4 — AI.Sentinel adapter [pending]
 5. Phase 3.5 — UseReasonlets middleware and find_procedure tool [pending]
 6. Phase 3.6 — Agent Framework AIContextProvider [pending]
