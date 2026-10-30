@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.3.0](https://github.com/MarcelRoozekrans/Mnemosyne.NET/compare/v0.2.0...v0.3.0) (2026-10-30)
+
+
+### Features
+
+* phase 3.1 — capture a Reasonlet from a chat transcript ([#25](https://github.com/MarcelRoozekrans/Mnemosyne.NET/issues/25)) ([b7b756d](https://github.com/MarcelRoozekrans/Mnemosyne.NET/commit/b7b756d919777bc5c63d3a643f7acc0a6cf7eb1f))
+* phase 3.2 — capture guard before remembering ([#27](https://github.com/MarcelRoozekrans/Mnemosyne.NET/issues/27)) ([b338ac5](https://github.com/MarcelRoozekrans/Mnemosyne.NET/commit/b338ac5bcb0f2190dd6489585dd595d55d026392))
+
 ## [0.2.0](https://github.com/MarcelRoozekrans/Mnemosyne.NET/compare/v0.1.0...v0.2.0) (2026-10-28)
 
 
