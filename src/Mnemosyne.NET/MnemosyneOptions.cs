@@ -52,7 +52,8 @@ public sealed class MnemosyneOptions
     /// <remarks>
     /// When the time is up, the facade cancels the token it passes the guard and stops waiting, even for a guard that
     /// ignores the token. That call is abandoned: it may run on, but its outcome is discarded.
-    /// A guard that times out is down: the capture fails with the guard-down error. The caller's own cancellation still propagates.
+    /// A guard that times out is down: the capture answers <c>Unavailable</c> and stores nothing, and the guard call's telemetry shows
+    /// outcome <c>Unavailable</c>. The caller's own cancellation still propagates.
     /// </remarks>
     public TimeSpan GuardTimeout { get; init; } = TimeSpan.FromSeconds(30);
 

@@ -60,7 +60,7 @@ Return an error only when the judge's backend fails, such as a model that is dow
 | Returns any other error code | Throws `InvalidOperationException`, which names only the code. |
 | Returns a verdict that fails `Validate` | Throws `InvalidOperationException`. |
 
-Since the request is valid, there is nothing else to fail on. `Validation`, `NotFound` and `Conflict` from an evaluator are bugs, not outcomes.
+Since the request is valid, there is nothing else to fail on. `Validation`, `NotFound`, `Conflict` and `Blocked` from an evaluator are bugs, not outcomes.
 
 The facade keeps only the error code. Your error's text is dropped, so it cannot leak. Still, never quote the question or the answer in an error message, an exception or a log line: both can hold customer data.
 

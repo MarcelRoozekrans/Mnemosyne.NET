@@ -131,6 +131,6 @@ An AI.Sentinel adapter for the guard arrives in a later package.
 - [Versions and lineage](https://marcelroozekrans.github.io/Mnemosyne.NET/concepts/versions): how a capture becomes a new Reasonlet, a new version or a run.
 - [Judging runs with Minos](https://marcelroozekrans.github.io/Mnemosyne.NET/guides/minos-evaluator): a ready-made evaluator, its threshold, failures and privacy.
 - [Judging runs with a chat model](https://marcelroozekrans.github.io/Mnemosyne.NET/guides/chat-evaluator): an evaluator for any chat client, its criteria, reply format and failures.
-- [Telemetry](https://marcelroozekrans.github.io/Mnemosyne.NET/guides/telemetry): the recall and evaluate activities and metrics, alongside the store's.
+- [Telemetry](https://marcelroozekrans.github.io/Mnemosyne.NET/guides/telemetry): the recall, evaluate and guard activities and metrics, alongside the store's.
 
 See the [repository README](https://github.com/MarcelRoozekrans/Mnemosyne.NET#readme).
