@@ -52,7 +52,7 @@ if (recalled.IsSuccess)
 
 ## Capture from a chat transcript
 
-`ReasonletTranscript.ToCapture` turns the messages of a tool-calling chat into a `ReasonletCapture`. The question is the last user message, and the answer is the last assistant text after it. The graph is the run's tool shape: one `tool` node per successful call, in order, with the argument names, not their values, in a `mnemosyne.arguments` property. Failed calls are left out, calls made together are sorted, and repeats in a row merge into one step. So a rerun with other inputs has the same graph, and with the recalled Reasonlet as its parent it is recorded as an execution, not a new version. Graphs you write by hand without `mnemosyne.arguments` have a different shape from captured ones.
+`ReasonletTranscript.ToCapture` turns the messages of a tool-calling chat into a `ReasonletCapture`. The question is the last user message with text, and the answer is the last assistant text after it. The graph is the run's tool shape: one `tool` node per successful call, in order, with the argument names, not their values, in a `mnemosyne.arguments` property. Failed calls are left out, and a retry takes the failed call's place. Calls made together are sorted, and repeats in a row merge into one step. So a rerun with other inputs has the same graph, and with the recalled Reasonlet as its parent it is recorded as an execution, not a new version. Graphs you write by hand without `mnemosyne.arguments` have a different shape from captured ones.
 
 ```csharp
 // messages is the chat's IList<ChatMessage>, after the model's tool loop has run.

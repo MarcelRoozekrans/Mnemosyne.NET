@@ -175,6 +175,89 @@ public sealed class ReasonletTranscriptGraphTests
     }
 
     [Fact]
+    public void AReusedCallIdPairsWithTheNearestEarlierCall()
+    {
+        var graph = Graph(
+            User("Q"),
+            Calls(("0", "A", [])), Failed("0"),
+            Calls(("0", "A", [])), Results("0"),
+            Calls(("1", "B", [])), Results("1"));
+
+        Assert.Equal(["A", "B"], graph.Nodes.Select(n => n.Tool));
+    }
+
+    [Fact]
+    public void AReusedCallIdWithoutItsOwnResultDoesNotCount()
+    {
+        var graph = Graph(User("Q"), Calls(("0", "A", [])), Results("0"), Calls(("0", "B", [])));
+
+        Assert.Equal(["A"], graph.Nodes.Select(n => n.Tool));
+    }
+
+    [Fact]
+    public void AResultBeforeItsCallDoesNotCount()
+    {
+        var result = ReasonletTranscript.ToGraph([User("Q"), Results("x"), Calls(("x", "A", []))]);
+
+        Assert.Equal(TranscriptSkipReason.NoToolCalls, result.Error);
+    }
+
+    [Fact]
+    public void ARetryOfAFailedParallelCallTakesItsSlot()
+    {
+        var retried = Graph(
+            User("Q"),
+            Calls(("c1", "A", ["x"]), ("c2", "B", [])), Failed("c1"), Results("c2"),
+            Calls(("c3", "A", ["x"])), Results("c3"));
+        var clean = Graph(User("Q"), Calls(("d1", "B", []), ("d2", "A", ["x"])), Results("d1", "d2"));
+
+        Assert.Equal(["A", "B"], retried.Nodes.Select(n => n.Tool));
+        Assert.Equal(Hash(clean), Hash(retried));
+    }
+
+    [Fact]
+    public void ARetryAfterRepeatedFailuresTakesTheFirstSlotAndALaterCallStaysPut()
+    {
+        var graph = Graph(
+            User("Q"),
+            Calls(("c1", "A", []), ("c2", "B", [])), Failed("c1"), Results("c2"),
+            Calls(("c3", "A", [])), Failed("c3"),
+            Calls(("c4", "A", [])), Results("c4"),
+            Calls(("c5", "C", [])), Results("c5"),
+            Calls(("c6", "A", [])), Results("c6"));
+
+        Assert.Equal(["A", "B", "C", "A"], graph.Nodes.Select(n => n.Tool));
+    }
+
+    [Fact]
+    public void ACallWithOtherArgumentNamesIsNotARetry()
+    {
+        var graph = Graph(
+            User("Q"),
+            Calls(("c1", "A", ["x"]), ("c2", "B", [])), Failed("c1"), Results("c2"),
+            Calls(("c3", "A", ["y"])), Results("c3"));
+
+        Assert.Equal(["B", "A"], graph.Nodes.Select(n => n.Tool));
+    }
+
+    [Fact]
+    public void ToolOrderAndArgumentNamesReachTheHash()
+    {
+        var baseline = Hash(Graph(User("Q"), Calls(("c1", "A", ["x"])), Results("c1"), Calls(("c2", "B", [])), Results("c2")));
+
+        Assert.NotEqual(baseline, Hash(Graph(User("Q"), Calls(("c1", "B", [])), Results("c1"), Calls(("c2", "A", ["x"])), Results("c2"))));
+        Assert.NotEqual(baseline, Hash(Graph(User("Q"), Calls(("c1", "A", ["y"])), Results("c1"), Calls(("c2", "B", [])), Results("c2"))));
+    }
+
+    [Fact]
+    public void ALoneSurrogateInAnArgumentNameReachesValidation()
+    {
+        var graph = Graph(User("Q"), Calls(("c1", "A", ["x\uD800"])), Results("c1"));
+
+        Assert.True(graph.Validate().IsFailure);
+    }
+
+    [Fact]
     public void CallsBeforeTheQuestionAreIgnored()
     {
         var graph = Graph(
