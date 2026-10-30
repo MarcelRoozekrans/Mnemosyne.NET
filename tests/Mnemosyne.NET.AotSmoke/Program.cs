@@ -40,6 +40,33 @@ if (hash.IsFailure || !string.Equals(hash.Value, ExpectedHash, StringComparison.
     return 3;
 }
 
+// A transcript's tool shape must hash the same under native AOT. The captured shape is a contract like the canonical
+// form: a change to it makes every rerun of a stored procedure a new version, so this constant never changes either.
+const string ExpectedTranscriptHash = "6b621301322e2bcf9526794dd7f00a5161c85c7035ad235409495c6c30c092f3";
+
+ChatMessage[] transcript =
+[
+    new(ChatRole.User, "Refund order 7"),
+    new(ChatRole.Assistant, [new FunctionCallContent("c1", "orders.get", new Dictionary<string, object?> { ["id"] = 7 })]),
+    new(ChatRole.Tool, [new FunctionResultContent("c1", "found")]),
+    new(ChatRole.Assistant, [new FunctionCallContent("c2", "payments.refund", new Dictionary<string, object?> { ["orderId"] = 7, ["amount"] = 20 })]),
+    new(ChatRole.Tool, [new FunctionResultContent("c2", "refunded")]),
+];
+var shape = ReasonletTranscript.ToGraph(transcript);
+var shapeHash = shape.IsSuccess ? shape.Value.ComputeContentHash() : default;
+if (shape.IsFailure || shapeHash.IsFailure || !string.Equals(shapeHash.Value, ExpectedTranscriptHash, StringComparison.Ordinal))
+{
+    Console.Error.WriteLine($"Transcript hash differs:{Environment.NewLine}expected {ExpectedTranscriptHash}{Environment.NewLine}actual   {(shape.IsFailure ? shape.Error.ToString() : shapeHash.IsSuccess ? shapeHash.Value : shapeHash.Error.Message)}");
+    return 4;
+}
+
+var empty = ReasonletTranscript.ToGraph([new ChatMessage(ChatRole.User, "Refund order 7")]);
+if (empty.IsSuccess || empty.Error != TranscriptSkipReason.NoToolCalls)
+{
+    Console.Error.WriteLine("A transcript without tool calls was not skipped as NoToolCalls.");
+    return 5;
+}
+
 // The PostgreSQL half needs PostgreSQL 15 or later with pgvector 0.8.0 or later; CI starts one and sets
 // MNEMOSYNE_AOT_PG. A slim data source has no reflection-based type mapping, so EnableArrays() is what lets the
 // float[] embedding and the Guid[] parameters and columns work under native AOT. Each run works in a scope of its own
