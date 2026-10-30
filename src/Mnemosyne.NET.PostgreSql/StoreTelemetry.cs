@@ -163,8 +163,8 @@ internal static class StoreTelemetry
     };
 
     /// <summary>
-    /// Tags a successful remember with what it stored, the status the Reasonlet has afterwards, the verdict source of the run it recorded included, and counts it
-    /// by capture kind.
+    /// Tags a successful remember with what it stored, the status the Reasonlet has afterwards and the verdict source
+    /// of the run it recorded, and counts it by capture kind.
     /// </summary>
     internal static void Remember(Activity? activity, ReasonletReceipt receipt)
     {
