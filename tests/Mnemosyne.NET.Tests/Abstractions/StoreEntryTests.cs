@@ -14,6 +14,9 @@ public class StoreEntryTests
     }
 
     [Fact]
+    public void ReviewRequiredDefaultsToFalse() => Assert.False(TestData.StoreEntry().ReviewRequired);
+
+    [Fact]
     public void Valid_Passes() => Assert.True(TestData.StoreEntry().Validate().IsSuccess);
 
     [Fact]

@@ -44,11 +44,14 @@ Every store method is one operation, and so is each recall, each judge call and 
 | `search` | store | finding the nearest candidates |
 | `erase` | store | `EraseAsync` |
 | `prune` | store | `PruneAsync` |
+| `approve` | store | `ApproveAsync` |
+| `reject` | store | `RejectAsync` |
+| `list_pending` | store | `ListPendingAsync` |
 | `recall` | facade | `RecallAsync` |
 | `evaluate` | facade | one call to the registered `IReasonletEvaluator` |
 | `guard` | facade | one call to the registered `ICaptureGuard` |
 
-The facade instruments recall, judge and guard calls only. Remember, recording runs and feedback, and erase are instrumented by the store operations they call, and wrapping them again would count each twice. A judge call happens inside a remember or `RecordExecutionAsync`, before the store records the run, and is not a store operation, so it is counted on its own. A guard call happens inside a remember, after the capture is validated and before anything else touches it, and is counted on its own the same way. A recall's `mnemosyne.recall` activity is the parent of the `mnemosyne.search` activity the store emits for it.
+The facade instruments recall, judge and guard calls only. Remember, recording runs and feedback, erase, approve, reject and list pending are instrumented by the store operations they call, and wrapping them again would count each twice. A judge call happens inside a remember or `RecordExecutionAsync`, before the store records the run, and is not a store operation, so it is counted on its own. A guard call happens inside a remember, after the capture is validated and before anything else touches it, and is counted on its own the same way. A recall's `mnemosyne.recall` activity is the parent of the `mnemosyne.search` activity the store emits for it.
 
 ## Activities
 
@@ -57,13 +60,16 @@ There is one activity per operation, with these tags:
 | Activity | Tags |
 |---|---|
 | `mnemosyne.migrate` | none |
-| `mnemosyne.remember` | on success: `mnemosyne.capture_kind` (`NewReasonlet`, `ExecutionOnly` or `NewVersion`), `mnemosyne.reasonlet.id`, `mnemosyne.reasonlet.version`, and `mnemosyne.verdict_source` of the run it records: `evaluator` when the capture comes with an evaluator's verdict, else `agent` |
+| `mnemosyne.remember` | on success: `mnemosyne.capture_kind` (`NewReasonlet`, `ExecutionOnly` or `NewVersion`), `mnemosyne.reasonlet.id`, `mnemosyne.reasonlet.version`, and `mnemosyne.verdict_source` of the run it records: `evaluator` when the capture comes with an evaluator's verdict, else `agent`, and `mnemosyne.reasonlet.status`: `active` or `pending_review`, the status the receipt reports |
 | `mnemosyne.get` | none |
 | `mnemosyne.execution.append` | `mnemosyne.verdict_source`, always: `evaluator` when the run comes with an evaluator's verdict, else `agent` |
 | `mnemosyne.feedback.append` | on success, when the feedback gives a `Worked` verdict: `mnemosyne.verdict_source` `feedback`, whether or not it changes the run's verdict |
 | `mnemosyne.search` | `mnemosyne.search.limit`, always; on success `mnemosyne.search.returned`, and `mnemosyne.search.top_similarity` when at least one candidate is returned |
 | `mnemosyne.erase` | `mnemosyne.erase.by` (`scope` or `subject`), always; on success `mnemosyne.erased.reasonlets` and `mnemosyne.erased.executions` |
 | `mnemosyne.prune` | `mnemosyne.pruned.reasonlets` and `mnemosyne.pruned.executions`, always; they count the committed batches, including when the prune fails |
+| `mnemosyne.approve` | `mnemosyne.reasonlet.id`, set before it runs |
+| `mnemosyne.reject` | `mnemosyne.reasonlet.id`, set before it runs |
+| `mnemosyne.list_pending` | `mnemosyne.list.limit`, set before it runs; on success `mnemosyne.list.returned` |
 | `mnemosyne.recall` | see below |
 | `mnemosyne.evaluate` | see below |
 | `mnemosyne.guard` | see below |
@@ -149,10 +155,10 @@ A remember without a registered guard starts no `mnemosyne.guard` activity.
 | `allowed` or `blocked` | On `mnemosyne.guard.inspections` only: the guard answered with a valid verdict that let the capture through or stopped it. The shared `mnemosyne.operations` records `ok` for either, since the guard answered. |
 | `skipped` | On `mnemosyne.evaluations` only: the answer was blank or too long, so the judge was not called and the run kept the agent's verdict. |
 
-A rising `Conflict` count on `erase` or `prune` means concurrent writes are colliding; both are safe to retry. A rising `Unavailable` count means the database can't serve. On `evaluate`, a rising `Unavailable` or `exception` count means the judge is failing; while it is down, runs are stored with the agent's verdict. A `Validation`, `NotFound`, `Conflict` or `Blocked` outcome on `evaluate` means the evaluator adapter has a bug: the facade throws `InvalidOperationException` for it. On `guard`, a rising `Unavailable` or `exception` count means the guard is failing, and remembers are failing with it; a rising `blocked` count on `mnemosyne.guard.inspections` is the guard doing its work, and the `mnemosyne.guard.detector` tag on the activity says which detector. Any error code from a guard other than `Unavailable` is an adapter bug, and `Blocked` is included: a guard blocks with a verdict, not with an error. The facade throws `InvalidOperationException` for it. [Data lifecycle](data-lifecycle.md) and [the store's errors](postgresql.md#errors) explain when each happens.
+A rising `Conflict` count on `erase` or `prune` means concurrent writes are colliding; both are safe to retry. On `reject`, `Conflict` is mostly a reviewer's mistake: the Reasonlet is active, or has versions below it. A rising `Unavailable` count means the database can't serve. On `evaluate`, a rising `Unavailable` or `exception` count means the judge is failing; while it is down, runs are stored with the agent's verdict. A `Validation`, `NotFound`, `Conflict` or `Blocked` outcome on `evaluate` means the evaluator adapter has a bug: the facade throws `InvalidOperationException` for it. On `guard`, a rising `Unavailable` or `exception` count means the guard is failing, and remembers are failing with it; a rising `blocked` count on `mnemosyne.guard.inspections` is the guard doing its work, and the `mnemosyne.guard.detector` tag on the activity says which detector. Any error code from a guard other than `Unavailable` is an adapter bug, and `Blocked` is included: a guard blocks with a verdict, not with an error. The facade throws `InvalidOperationException` for it. [Data lifecycle](data-lifecycle.md) and [the store's errors](postgresql.md#errors) explain when each happens.
 
 ## Privacy
 
-No signal carries user data: no question, answer, intent, name, graph, tags, scope, subject or run id, and no error or exception message. Reasonlet ids and versions are opaque, so they appear, and so do scores. An evaluator's name appears too: it names the judge, such as `llm-judge`, and nothing about the run. A guard's name and its detector's appear the same way, such as `redactor` and `pii.email`: they name the check, not the text it matched, and a guard's own error text never reaches a signal or the error the facade returns.
+No signal carries user data: no question, answer, intent, name, graph, tags, scope, subject or run id, and no error or exception message. Reasonlet ids and versions are opaque, so they appear, and so do scores. So does a Reasonlet's review status, `active` or `pending_review`. No reviewer identity is recorded. An evaluator's name appears too: it names the judge, such as `llm-judge`, and nothing about the run. A guard's name and its detector's appear the same way, such as `redactor` and `pii.email`: they name the check, not the text it matched, and a guard's own error text never reaches a signal or the error the facade returns.
 
 Scope and subject are left out on purpose. A scope often names a tenant and a subject names a person, and telemetry is exported, sampled and kept in other systems with their own retention. If you need a breakdown by tenant, add it in your own wrapper, where you decide what may leave your application.

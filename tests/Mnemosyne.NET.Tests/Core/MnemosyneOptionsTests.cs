@@ -19,6 +19,9 @@ public sealed class MnemosyneOptionsTests
     }
 
     [Fact]
+    public void RequireReviewDefaultsToOff() => Assert.False(new MnemosyneOptions().RequireReview);
+
+    [Fact]
     public void TheBoundsAreInclusive()
     {
         Assert.True(new MnemosyneOptions { CandidatePool = 1, MinIntentConfidence = 0 }.Validate().IsSuccess);

@@ -266,6 +266,12 @@ static async Task<int> PostgreSqlSmoke(string connectionString, ReasonletGraph g
         return facade;
     }
 
+    var gate = await GateSmoke(dataSource, graph, ct);
+    if (gate != 0)
+    {
+        return gate;
+    }
+
     var minos = await MinosSmoke(dataSource, graph, ct);
     if (minos != 0)
     {
@@ -458,6 +464,105 @@ static async Task<int> FacadeSmoke(NpgsqlDataSource dataSource, ReasonletGraph g
 
     return 0;
 }
+
+// The review gate as a host wires it: RequireReview on, resolved from a container under native AOT. A new Reasonlet is
+// stored pending and invisible to recall until a reviewer approves it; a rejected one is deleted. The second capture
+// carries a different graph, so it is a Reasonlet of its own rather than a run of the first.
+static async Task<int> GateSmoke(NpgsqlDataSource dataSource, ReasonletGraph graph, CancellationToken ct)
+{
+    var services = new ServiceCollection();
+    services.AddSingleton(dataSource);
+    services.AddSingleton<IEmbeddingGenerator<string, Embedding<float>>>(new FixedEmbeddingGenerator());
+    services.AddMnemosynePostgreSql(new MnemosynePostgreSqlOptions { Dimensions = 3 });
+    services.AddMnemosyne(new MnemosyneOptions { RequireReview = true });
+    await using var provider = services.BuildServiceProvider();
+
+    var memory = provider.GetRequiredService<IReasonletMemory>();
+    var scope = new ReasonletScope($"aot-gate-{Guid.NewGuid():N}");
+    const string question = "How do I search through the review gate?";
+
+    var other = ReasonletGraphJson.Deserialize(
+        """{"nodes":[{"id":"a","type":"tool","name":"Lookup","tool":"lookup"},{"id":"b","type":"answer"}],"edges":[{"from":"a","to":"b"}],"schemaVersion":1}""");
+    if (other.IsFailure)
+    {
+        Console.Error.WriteLine($"Deserialize of the second gate graph failed: {other.Error.Message}");
+        return 50;
+    }
+
+    var first = await memory.RememberAsync(GateCapture(scope, question, graph), ct);
+    if (first.IsFailure || first.Value.Kind != ReasonletCaptureKind.NewReasonlet || first.Value.Status != ReasonletStatus.PendingReview)
+    {
+        Console.Error.WriteLine($"A gated remember was not pending review: {(first.IsFailure ? first.Error.Message : first.Value.ToString())}");
+        return 51;
+    }
+
+    var hidden = await memory.RecallAsync(new ReasonletQuery { Scope = scope, Question = question }, ct);
+    if (hidden.IsFailure || hidden.Value.Count != 0)
+    {
+        Console.Error.WriteLine($"Recall returned a pending Reasonlet: {(hidden.IsFailure ? hidden.Error.Message : $"{hidden.Value.Count} matches")}");
+        return 52;
+    }
+
+    var pending = await memory.ListPendingAsync(scope, 10, null, ct);
+    if (pending.IsFailure || pending.Value.Count != 1 || pending.Value[0].Definition.Id != first.Value.Id)
+    {
+        Console.Error.WriteLine($"The pending list did not hold the Reasonlet: {(pending.IsFailure ? pending.Error.Message : $"{pending.Value.Count} items")}");
+        return 53;
+    }
+
+    var approved = await memory.ApproveAsync(scope, first.Value.Id, ct);
+    if (approved.IsFailure)
+    {
+        Console.Error.WriteLine($"Approve failed: {approved.Error.Message}");
+        return 54;
+    }
+
+    var visible = await memory.RecallAsync(new ReasonletQuery { Scope = scope, Question = question }, ct);
+    if (visible.IsFailure || visible.Value.Count != 1 || visible.Value[0].Reasonlet.Id != first.Value.Id)
+    {
+        Console.Error.WriteLine($"Recall did not return the approved Reasonlet: {(visible.IsFailure ? visible.Error.Message : $"{visible.Value.Count} matches")}");
+        return 55;
+    }
+
+    var second = await memory.RememberAsync(GateCapture(scope, question, other.Value), ct);
+    if (second.IsFailure || second.Value.Kind != ReasonletCaptureKind.NewReasonlet || second.Value.Status != ReasonletStatus.PendingReview)
+    {
+        Console.Error.WriteLine($"The second gated remember was not pending review: {(second.IsFailure ? second.Error.Message : second.Value.ToString())}");
+        return 56;
+    }
+
+    var rejected = await memory.RejectAsync(scope, second.Value.Id, ct);
+    if (rejected.IsFailure)
+    {
+        Console.Error.WriteLine($"Reject failed: {rejected.Error.Message}");
+        return 57;
+    }
+
+    var left = await memory.ListPendingAsync(scope, 10, null, ct);
+    if (left.IsFailure || left.Value.Count != 0)
+    {
+        Console.Error.WriteLine($"The pending list was not empty after reject: {(left.IsFailure ? left.Error.Message : $"{left.Value.Count} items")}");
+        return 58;
+    }
+
+    var erased = await memory.EraseAsync(new ReasonletErasure(scope, null), ct);
+    if (erased.IsFailure || erased.Value.Reasonlets != 1)
+    {
+        Console.Error.WriteLine($"Erase after the gate failed: {(erased.IsFailure ? erased.Error.Message : $"{erased.Value.Reasonlets} Reasonlets deleted")}");
+        return 59;
+    }
+
+    return 0;
+}
+
+static ReasonletCapture GateCapture(ReasonletScope scope, string question, ReasonletGraph graph) => new()
+{
+    Scope = scope,
+    Question = question,
+    Graph = graph,
+    Outcome = new ReasonletOutcome(true, TimeSpan.FromMilliseconds(5), null),
+    Provenance = new ReasonletProvenance { Source = "aot-smoke" },
+};
 
 // The guard without a database: AddMnemosyne resolves the registered guard, and a capture it blocks answers Blocked
 // before the embedding generator or the store is touched. Both stubs throw, so reaching either one fails the smoke.
@@ -667,6 +772,12 @@ internal sealed class UnreachableStore : IReasonletStore
     public ValueTask<Result<ReasonletErasureResult, MnemosyneError>> EraseAsync(ReasonletErasure erasure, CancellationToken ct) => throw new InvalidOperationException();
 
     public ValueTask<Result<ReasonletPruneResult, MnemosyneError>> PruneAsync(ReasonletRetention retention, CancellationToken ct) => throw new InvalidOperationException();
+
+    public ValueTask<UnitResult<MnemosyneError>> ApproveAsync(ReasonletScope scope, ReasonletId id, CancellationToken ct) => throw new InvalidOperationException();
+
+    public ValueTask<UnitResult<MnemosyneError>> RejectAsync(ReasonletScope scope, ReasonletId id, CancellationToken ct) => throw new InvalidOperationException();
+
+    public ValueTask<Result<IReadOnlyList<ReasonletReview>, MnemosyneError>> ListPendingAsync(ReasonletScope scope, int limit, ReasonletId? after, CancellationToken ct) => throw new InvalidOperationException();
 }
 
 /// <summary>An embedding generator that throws, for a path that must stop before the embedding.</summary>

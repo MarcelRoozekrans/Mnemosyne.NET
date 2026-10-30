@@ -205,6 +205,64 @@ internal sealed partial class ReasonletRepository(IAsyncDbConnection connection)
     public partial Task<Guid[]> LockForErasureAsync(string scope, string? subjectId, IAsyncDbTransaction transaction, CancellationToken ct);
 
     /// <summary>
+    /// One page of the scope's Reasonlets that wait for review, ordered by id, each with its own execution metrics. A
+    /// null <c>after</c> starts at the beginning. A Reasonlet without a counter row, which the store never leaves,
+    /// reads as no runs and its last execution as its creation time. The partial index on pending rows serves it.
+    /// </summary>
+    [Query("""
+        SELECT r.id, r.scope, r.name, r.intent, r.version, r.graph, r.parent_id, r.status,
+               r.source, r.run_id, r.subject_id, r.tags, r.created_at,
+               coalesce(m.runs, 0), coalesce(m.successes, 0), m.last_success_at,
+               coalesce(m.last_executed_at, r.created_at),
+               coalesce(m.judged_runs, 0), coalesce(m.judged_successes, 0)
+        FROM mnemosyne.reasonlets r
+        LEFT JOIN mnemosyne.reasonlet_metrics m ON m.reasonlet_id = r.id AND m.scope = r.scope
+        WHERE r.scope = @scope AND r.status = 2 AND (@after::uuid IS NULL OR r.id > @after)
+        ORDER BY r.id
+        LIMIT @limit
+        """)]
+    public partial Task<List<PendingRow>> ListPendingAsync(string scope, Guid? after, int limit, CancellationToken ct);
+
+    /// <summary>
+    /// Sets a pending Reasonlet of the scope to Active, and answers its id, or null when no pending Reasonlet of that id is
+    /// in the scope. An Active one is left alone, so an approve that repeats writes no new row version.
+    /// </summary>
+    [Query("UPDATE mnemosyne.reasonlets SET status = 1 WHERE scope = @scope AND id = @id AND status = 2 RETURNING id")]
+    public partial Task<Guid?> ApproveAsync(string scope, Guid id, CancellationToken ct);
+
+    /// <summary>Answers 1 when a Reasonlet with the id is in the scope, whatever its status, and null when not.</summary>
+    [Query("SELECT 1 FROM mnemosyne.reasonlets WHERE scope = @scope AND id = @id")]
+    public partial Task<int?> ExistsAsync(string scope, Guid id, CancellationToken ct);
+
+    /// <summary>
+    /// Locks a Reasonlet in its scope <c>FOR UPDATE</c> until the transaction ends, and answers null when it is not in
+    /// the scope. The mode conflicts with a remember's parent lock and with an approve's update, and blocks every new
+    /// child and execution of it, whose foreign-key checks take <c>FOR KEY SHARE</c>.
+    /// </summary>
+    /// <remarks>
+    /// It reads nothing but the lock: <see cref="GetRejectTargetAsync"/> reads what the reject decides on, in a statement
+    /// of its own. At READ COMMITTED a statement keeps the snapshot it started with. When a <c>FOR UPDATE</c> waits,
+    /// PostgreSQL re-checks only the locked row once the lock is granted, and only when that row was updated; any
+    /// subquery, such as a look for children, keeps the snapshot from before the wait, so a version that a remember
+    /// committed while the reject waited would be missed and orphaned by the delete. The next statement takes a new
+    /// snapshot, after the lock, which sees it.
+    /// </remarks>
+    [Query("SELECT 1 FROM mnemosyne.reasonlets WHERE scope = @scope AND id = @id FOR UPDATE")]
+    public partial Task<int?> LockForRejectAsync(string scope, Guid id, IAsyncDbTransaction transaction, CancellationToken ct);
+
+    /// <summary>
+    /// Reads a Reasonlet's status and whether another Reasonlet in the scope has it as its parent. Run it after
+    /// <see cref="LockForRejectAsync"/> in the same READ COMMITTED transaction, so that it sees every change that
+    /// committed before the lock was granted, and nothing can change either answer until the transaction ends.
+    /// </summary>
+    [Query("""
+        SELECT r.status, EXISTS (SELECT 1 FROM mnemosyne.reasonlets c WHERE c.scope = @scope AND c.parent_id = r.id)
+        FROM mnemosyne.reasonlets r
+        WHERE r.scope = @scope AND r.id = @id
+        """)]
+    public partial Task<RejectTargetRow?> GetRejectTargetAsync(string scope, Guid id, IAsyncDbTransaction transaction, CancellationToken ct);
+
+    /// <summary>
     /// Deletes Reasonlets of the scope that <see cref="LockForErasureAsync"/> locked, and answers how many it deleted.
     /// Their children's <c>parent_id</c> is cut by <c>ON DELETE SET NULL</c>, which the count leaves out.
     /// </summary>

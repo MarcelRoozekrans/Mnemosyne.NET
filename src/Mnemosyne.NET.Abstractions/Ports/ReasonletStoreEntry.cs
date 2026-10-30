@@ -18,12 +18,17 @@ namespace Mnemosyne.NET.Abstractions;
 /// The evaluator's verdict on the run the capture records, or null when no evaluator judged it. When present it must be valid.
 /// The store derives the run's verdict source and effective success from it.
 /// </param>
+/// <param name="ReviewRequired">
+/// True when the review gate is on: a new Reasonlet or a new version is stored as <see cref="ReasonletStatus.PendingReview"/>
+/// instead of <see cref="ReasonletStatus.Active"/>. An execution-only capture never changes its parent's status. Defaults to false.
+/// </param>
 public sealed record ReasonletStoreEntry(
     ReasonletCapture Capture,
     string Intent,
     string Name,
     ReadOnlyMemory<float> Embedding,
-    ReasonletEvaluation? Evaluation = null)
+    ReasonletEvaluation? Evaluation = null,
+    bool ReviewRequired = false)
 {
     /// <summary>Validates the entry.</summary>
     /// <returns>Success, or the first validation failure with a path relative to this record.</returns>

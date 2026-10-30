@@ -68,6 +68,28 @@ public sealed class TelemetryTests(PgVectorFixture fixture) : IClassFixture<PgVe
     }
 
     [Fact]
+    public async Task RememberTagsTheStatus()
+    {
+        var store = await MigratedStoreAsync();
+        var scope = PgVectorFixture.NewScope();
+        using var capture = new TelemetryCapture();
+
+        var active = (await store.RememberAsync(Entries.Entry(scope), Ct)).Value;
+        var pending = (await store.RememberAsync(Entries.Entry(scope, Entries.Graph("b")) with { ReviewRequired = true }, Ct)).Value;
+
+        var execution = (await store.RememberAsync(
+            Entries.Entry(scope, Entries.Graph("b"), pending.Id) with { ReviewRequired = true }, Ct)).Value;
+
+        var activities = capture.Activities;
+        Assert.Equal("active", activities[0].GetTagItem("mnemosyne.reasonlet.status"));
+        Assert.Equal("pending_review", activities[1].GetTagItem("mnemosyne.reasonlet.status"));
+        Assert.Equal(ReasonletCaptureKind.ExecutionOnly, execution.Kind);
+        Assert.Equal("pending_review", activities[2].GetTagItem("mnemosyne.reasonlet.status"));
+        Assert.Equal(ReasonletStatus.PendingReview, pending.Status);
+        Assert.Equal(ReasonletStatus.Active, active.Status);
+    }
+
+    [Fact]
     public async Task RememberTagsTheVerdictSourceOfTheRunItRecords()
     {
         var store = await MigratedStoreAsync();
@@ -312,6 +334,147 @@ public sealed class TelemetryTests(PgVectorFixture fixture) : IClassFixture<PgVe
     }
 
     [Fact]
+    public async Task ApproveTagsTheReasonletId()
+    {
+        var store = await MigratedStoreAsync();
+        var scope = PgVectorFixture.NewScope();
+        var receipt = (await store.RememberAsync(Entries.Entry(scope) with { ReviewRequired = true }, Ct)).Value;
+        using var capture = new TelemetryCapture();
+
+        Assert.True((await store.ApproveAsync(scope, receipt.Id, Ct)).IsSuccess);
+
+        var activity = Single(capture, "mnemosyne.approve");
+        Assert.Equal(ActivityStatusCode.Unset, activity.Status);
+        Assert.Equal([new("mnemosyne.reasonlet.id", receipt.Id.Value.ToString())], AllTags(activity));
+        AssertOperation(capture, "approve", "ok");
+    }
+
+    [Fact]
+    public async Task RejectTagsTheReasonletId()
+    {
+        var store = await MigratedStoreAsync();
+        var scope = PgVectorFixture.NewScope();
+        var receipt = (await store.RememberAsync(Entries.Entry(scope) with { ReviewRequired = true }, Ct)).Value;
+        using var capture = new TelemetryCapture();
+
+        Assert.True((await store.RejectAsync(scope, receipt.Id, Ct)).IsSuccess);
+
+        var activity = Single(capture, "mnemosyne.reject");
+        Assert.Equal(ActivityStatusCode.Unset, activity.Status);
+        Assert.Equal([new("mnemosyne.reasonlet.id", receipt.Id.Value.ToString())], AllTags(activity));
+        AssertOperation(capture, "reject", "ok");
+    }
+
+    [Fact]
+    public async Task ARejectConflictCarriesTheErrorAndTheId()
+    {
+        var store = await MigratedStoreAsync();
+        var scope = PgVectorFixture.NewScope();
+        var receipt = (await store.RememberAsync(Entries.Entry(scope), Ct)).Value;
+        using var capture = new TelemetryCapture();
+
+        Assert.Equal(MnemosyneErrorCode.Conflict, (await store.RejectAsync(scope, receipt.Id, Ct)).Error.Code);
+
+        var activity = Single(capture, "mnemosyne.reject");
+        Assert.Equal(ActivityStatusCode.Error, activity.Status);
+        Assert.Equal(
+            [new("error.type", "Conflict"), new("mnemosyne.reasonlet.id", receipt.Id.Value.ToString())],
+            AllTags(activity));
+        AssertOperation(capture, "reject", "Conflict");
+    }
+
+    [Fact]
+    public async Task AFailedApproveCarriesTheErrorAndTheId()
+    {
+        var store = await MigratedStoreAsync();
+        var id = ReasonletId.New();
+        using var capture = new TelemetryCapture();
+
+        Assert.Equal(MnemosyneErrorCode.NotFound, (await store.ApproveAsync(PgVectorFixture.NewScope(), id, Ct)).Error.Code);
+
+        var activity = Single(capture, "mnemosyne.approve");
+        Assert.Equal(ActivityStatusCode.Error, activity.Status);
+        Assert.Equal([new("error.type", "NotFound"), new("mnemosyne.reasonlet.id", id.Value.ToString())], AllTags(activity));
+        AssertOperation(capture, "approve", "NotFound");
+    }
+
+    [Fact]
+    public async Task ListPendingTagsLimitAndReturned()
+    {
+        var store = await MigratedStoreAsync();
+        var scope = PgVectorFixture.NewScope();
+        await store.RememberAsync(Entries.Entry(scope) with { ReviewRequired = true }, Ct);
+        await store.RememberAsync(Entries.Entry(scope, Entries.Graph("b")) with { ReviewRequired = true }, Ct);
+        using var capture = new TelemetryCapture();
+
+        Assert.Equal(2, (await store.ListPendingAsync(scope, 5, null, Ct)).Value.Count);
+
+        var activity = Single(capture, "mnemosyne.list_pending");
+        Assert.Equal(ActivityStatusCode.Unset, activity.Status);
+        Assert.Equal([new("mnemosyne.list.limit", 5), new("mnemosyne.list.returned", 2)], AllTags(activity));
+        AssertOperation(capture, "list_pending", "ok");
+    }
+
+    [Fact]
+    public async Task NoGateSignalCarriesCaptureText()
+    {
+        const string Canary = "canary-7f3a91";
+        var store = await MigratedStoreAsync();
+        var scope = PgVectorFixture.NewScope();
+        var first = Entries.Entry(scope, Entries.Graph(Canary)) with { Intent = $"intent {Canary}", Name = $"name {Canary}", ReviewRequired = true };
+        var second = Entries.Entry(scope, Entries.Graph($"other-{Canary}")) with { Intent = $"intent {Canary}", Name = $"name {Canary}", ReviewRequired = true };
+        using var capture = new TelemetryCapture();
+        var errors = new List<MnemosyneError>();
+
+        var approved = (await store.RememberAsync(first with { Capture = first.Capture with { Question = $"question {Canary}" } }, Ct)).Value;
+        var rejected = (await store.RememberAsync(second, Ct)).Value;
+        Assert.Equal(2, (await store.ListPendingAsync(scope, 10, null, Ct)).Value.Count);
+        Assert.True((await store.ApproveAsync(scope, approved.Id, Ct)).IsSuccess);
+        Assert.True((await store.RejectAsync(scope, rejected.Id, Ct)).IsSuccess);
+        errors.Add((await store.RejectAsync(scope, approved.Id, Ct)).Error);
+        errors.Add((await store.ApproveAsync(scope, rejected.Id, Ct)).Error);
+
+        var texts = new List<string>();
+        Assert.Equal(7, capture.Activities.Count);
+        foreach (var activity in capture.Activities)
+        {
+            texts.AddRange(activity.TagObjects.Select(tag => $"{tag.Key}={tag.Value}"));
+            texts.Add(activity.StatusDescription ?? string.Empty);
+            foreach (var recorded in activity.Events)
+            {
+                texts.Add(recorded.Name);
+                texts.AddRange(recorded.Tags.Select(tag => $"{tag.Key}={tag.Value}"));
+            }
+        }
+
+        Assert.NotEmpty(capture.Measurements);
+        foreach (var measurement in capture.Measurements)
+        {
+            texts.Add(measurement.Instrument);
+            texts.Add(measurement.Value.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            texts.AddRange(measurement.Tags.Select(tag => $"{tag.Key}={tag.Value}"));
+        }
+
+        texts.AddRange(errors.Select(error => error.Message));
+        texts.AddRange(errors.Select(error => error.Detail ?? string.Empty));
+        Assert.All(texts, text => Assert.DoesNotContain(Canary, text, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task AFailedListPendingTagsOnlyTheLimit()
+    {
+        var store = await MigratedStoreAsync();
+        using var capture = new TelemetryCapture();
+
+        Assert.Equal(MnemosyneErrorCode.Validation, (await store.ListPendingAsync(PgVectorFixture.NewScope(), 0, null, Ct)).Error.Code);
+
+        Assert.Equal(
+            [new("error.type", "Validation"), new("mnemosyne.list.limit", 0)],
+            AllTags(Single(capture, "mnemosyne.list_pending")));
+        AssertOperation(capture, "list_pending", "Validation");
+    }
+
+    [Fact]
     public async Task AFailedEraseTagsOnlyHowItErases()
     {
         var store = await MigratedStoreAsync();
@@ -550,6 +713,7 @@ public sealed class TelemetryTests(PgVectorFixture fixture) : IClassFixture<PgVe
             [
                 new("mnemosyne.capture_kind", kind),
                 new("mnemosyne.reasonlet.id", receipt.Id.Value.ToString()),
+                new("mnemosyne.reasonlet.status", "active"),
                 new("mnemosyne.reasonlet.version", receipt.Version),
                 new("mnemosyne.verdict_source", source),
             ],

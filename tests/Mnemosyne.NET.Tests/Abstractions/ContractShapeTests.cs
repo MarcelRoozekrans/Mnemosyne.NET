@@ -256,14 +256,19 @@ public class ContractShapeTests
     }
 
     [Fact]
-    public void TheStoreEntryTakesAnOptionalEvaluationLast()
+    public void TheStoreEntryTakesAnOptionalEvaluationThenReviewRequiredLast()
     {
         var parameters = Assert.Single(typeof(ReasonletStoreEntry).GetConstructors(), c => c.GetParameters().Length > 1).GetParameters();
-        var evaluation = parameters[^1];
+        var evaluation = parameters[^2];
         Assert.Equal("Evaluation", evaluation.Name);
         Assert.Equal(typeof(ReasonletEvaluation?), evaluation.ParameterType);
         Assert.True(evaluation.HasDefaultValue);
         Assert.Null(evaluation.DefaultValue);
+        var review = parameters[^1];
+        Assert.Equal("ReviewRequired", review.Name);
+        Assert.Equal(typeof(bool), review.ParameterType);
+        Assert.True(review.HasDefaultValue);
+        Assert.Equal(false, review.DefaultValue);
     }
 
     [Fact]

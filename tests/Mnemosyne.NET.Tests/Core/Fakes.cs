@@ -99,6 +99,41 @@ internal sealed class FakeStore : IReasonletStore
 
     public ValueTask<Result<ReasonletPruneResult, MnemosyneError>> PruneAsync(ReasonletRetention retention, CancellationToken ct) =>
         throw new NotSupportedException();
+
+    public (ReasonletScope Scope, ReasonletId Id, CancellationToken Ct)? Approved { get; private set; }
+
+    public UnitResult<MnemosyneError> ApproveResult { get; set; } = UnitResult<MnemosyneError>.Success();
+
+    public ValueTask<UnitResult<MnemosyneError>> ApproveAsync(ReasonletScope scope, ReasonletId id, CancellationToken ct)
+    {
+        Calls++;
+        Approved = (scope, id, ct);
+        return ValueTask.FromResult(ApproveResult);
+    }
+
+    public (ReasonletScope Scope, ReasonletId Id, CancellationToken Ct)? Rejected { get; private set; }
+
+    public UnitResult<MnemosyneError> RejectResult { get; set; } = UnitResult<MnemosyneError>.Success();
+
+    public ValueTask<UnitResult<MnemosyneError>> RejectAsync(ReasonletScope scope, ReasonletId id, CancellationToken ct)
+    {
+        Calls++;
+        Rejected = (scope, id, ct);
+        return ValueTask.FromResult(RejectResult);
+    }
+
+    public (ReasonletScope Scope, int Limit, ReasonletId? After, CancellationToken Ct)? Listed { get; private set; }
+
+    public Result<IReadOnlyList<ReasonletReview>, MnemosyneError> ListPendingResult { get; set; } =
+        Result<IReadOnlyList<ReasonletReview>, MnemosyneError>.Success([]);
+
+    public ValueTask<Result<IReadOnlyList<ReasonletReview>, MnemosyneError>> ListPendingAsync(
+        ReasonletScope scope, int limit, ReasonletId? after, CancellationToken ct)
+    {
+        Calls++;
+        Listed = (scope, limit, after, ct);
+        return ValueTask.FromResult(ListPendingResult);
+    }
 }
 
 /// <summary>A selector that records what it was asked to rank and answers with a configurable result.</summary>

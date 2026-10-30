@@ -82,6 +82,9 @@ public sealed class ReasonletMemory : IReasonletMemory
     /// <summary>The most candidates recall asks the store for, the upper bound of <see cref="MnemosyneOptions.CandidatePool"/>.</summary>
     private const int MaxSearchLimit = 200;
 
+    /// <summary>The most pending Reasonlets one list call may ask for. The store enforces the same bound.</summary>
+    private const int MaxPendingLimit = 100;
+
     private static readonly char[] LineBreaks = ['\r', '\n'];
 
     private readonly IReasonletStore _store;
@@ -217,7 +220,7 @@ public sealed class ReasonletMemory : IReasonletMemory
 
         // The answer is for an evaluator alone and is never stored, so it is stripped here, as the entry requires.
         var entry = new ReasonletStoreEntry(
-            capture with { Intent = intent.Value, Name = name, Answer = null }, intent.Value, name, embedding.Value, evaluation);
+            capture with { Intent = intent.Value, Name = name, Answer = null }, intent.Value, name, embedding.Value, evaluation, _options.RequireReview);
         return await _store.RememberAsync(entry, ct).ConfigureAwait(false);
     }
 
@@ -395,6 +398,39 @@ public sealed class ReasonletMemory : IReasonletMemory
             () => Check.Nested(feedback.Validate(), nameof(feedback)));
         return valid.IsFailure ? ValueTask.FromResult(valid) : _store.AppendFeedbackAsync(scope, execution, feedback, ct);
     }
+
+    /// <inheritdoc />
+    public ValueTask<UnitResult<MnemosyneError>> ApproveAsync(ReasonletScope scope, ReasonletId id, CancellationToken ct)
+    {
+        var valid = ValidateReview(scope, id);
+        return valid.IsFailure ? ValueTask.FromResult(valid) : _store.ApproveAsync(scope, id, ct);
+    }
+
+    /// <inheritdoc />
+    public ValueTask<UnitResult<MnemosyneError>> RejectAsync(ReasonletScope scope, ReasonletId id, CancellationToken ct)
+    {
+        var valid = ValidateReview(scope, id);
+        return valid.IsFailure ? ValueTask.FromResult(valid) : _store.RejectAsync(scope, id, ct);
+    }
+
+    /// <inheritdoc />
+    public ValueTask<Result<IReadOnlyList<ReasonletReview>, MnemosyneError>> ListPendingAsync(
+        ReasonletScope scope, int limit, ReasonletId? after, CancellationToken ct)
+    {
+        var valid = Check.All(
+            () => Check.Nested(scope.Validate(), nameof(scope)),
+            () => limit is < 1 or > MaxPendingLimit
+                ? new MnemosyneError(MnemosyneErrorCode.Validation, $"limit: must be from 1 to {MaxPendingLimit}")
+                : UnitResult<MnemosyneError>.Success(),
+            () => after is { } cursor ? Check.NotDefault(cursor, nameof(after)) : UnitResult<MnemosyneError>.Success());
+        return valid.IsFailure
+            ? ValueTask.FromResult(Result<IReadOnlyList<ReasonletReview>, MnemosyneError>.Failure(valid.Error))
+            : _store.ListPendingAsync(scope, limit, after, ct);
+    }
+
+    private static UnitResult<MnemosyneError> ValidateReview(ReasonletScope scope, ReasonletId id) => Check.All(
+        () => Check.Nested(scope.Validate(), nameof(scope)),
+        () => Check.NotDefault(id, nameof(id)));
 
     /// <inheritdoc />
     /// <exception cref="ArgumentNullException"><paramref name="erasure"/> is null.</exception>

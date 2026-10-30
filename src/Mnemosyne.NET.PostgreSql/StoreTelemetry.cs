@@ -163,8 +163,8 @@ internal static class StoreTelemetry
     };
 
     /// <summary>
-    /// Tags a successful remember with what it stored, the verdict source of the run it recorded included, and counts it
-    /// by capture kind.
+    /// Tags a successful remember with what it stored, the status the Reasonlet has afterwards and the verdict source
+    /// of the run it recorded, and counts it by capture kind.
     /// </summary>
     internal static void Remember(Activity? activity, ReasonletReceipt receipt)
     {
@@ -173,6 +173,7 @@ internal static class StoreTelemetry
         VerdictSource(activity, receipt.Source);
         activity?.SetTag("mnemosyne.reasonlet.id", receipt.Id.Value.ToString());
         activity?.SetTag("mnemosyne.reasonlet.version", receipt.Version);
+        activity?.SetTag("mnemosyne.reasonlet.status", receipt.Status == ReasonletStatus.PendingReview ? "pending_review" : "active");
         Remembered.Add(1, new TagList { { "mnemosyne.capture_kind", kind } });
     }
 
@@ -184,6 +185,16 @@ internal static class StoreTelemetry
     /// </summary>
     internal static void VerdictSource(Activity? activity, ReasonletVerdictSource source) =>
         activity?.SetTag(VerdictSourceTag, VerdictSourceName(source));
+
+    /// <summary>Tags an operation on one Reasonlet with its id, before it runs, so a failed call has it too.</summary>
+    internal static void ReasonletId(Activity? activity, ReasonletId id) =>
+        activity?.SetTag("mnemosyne.reasonlet.id", id.Value.ToString());
+
+    /// <summary>Tags a pending-review list with its limit, before it runs, so a failed list has it too.</summary>
+    internal static void ListLimit(Activity? activity, int limit) => activity?.SetTag("mnemosyne.list.limit", limit);
+
+    /// <summary>Tags a successful pending-review list with how many Reasonlets it returned.</summary>
+    internal static void ListReturned(Activity? activity, int returned) => activity?.SetTag("mnemosyne.list.returned", returned);
 
     /// <summary>Tags a search with its limit, before it runs, so a failed search has it too.</summary>
     internal static void SearchLimit(Activity? activity, int limit) => activity?.SetTag("mnemosyne.search.limit", limit);
