@@ -118,12 +118,13 @@ Design: [roadmap design](../superpowers/specs/2026-10-21-roadmap-design.md), bui
 - [ ] An Agent Framework `AIContextProvider` gives an agent the same recall and capture over its thread
 - [ ] Docs and samples cover every integration
 
-### Phase 3.1: Capture [status: active]
+### Phase 3.1: Capture [status: complete]
 **Goal:** Turn a chat transcript's tool calls into a tool-shape graph: the tools called, in order, with argument names but not values. Capture it as a new Reasonlet, a new version or an execution of the recalled one.
 **Surface:** Backend
 **HelpWanted:** no
 **Design:** `docs/superpowers/specs/2026-10-30-phase-3.1-capture-design.md`
 **Plan:** `docs/superpowers/plans/2026-10-30-phase-3.1-capture.md`
+**Completed:** 2026-10-30
 
 ### Phase 3.2: Redaction hook [status: pending]
 **Goal:** A hook that runs on captured content before it is stored and can block a capture; a blocked capture is dropped and leaves a telemetry event without the content.
