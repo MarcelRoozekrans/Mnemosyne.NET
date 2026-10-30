@@ -60,26 +60,29 @@ Design: [roadmap design](../superpowers/specs/2026-10-21-roadmap-design.md), bui
 **HelpWanted:** no
 **Plan:** _to be written_
 
-## Milestone 2: Evaluation [status: active]
+## Milestone 2: Evaluation [status: complete]
 **Goal:** Answer "did it work?" without the caller hand-filling feedback, so the success-rate term in ranking is real (handover phase 3).
 **Started:** 2026-10-23
+**Completed:** 2026-10-30
 **Definition of Done:**
 - [x] Runs are scored by a pluggable evaluator, with explicit feedback overriding it
 - [x] A Minos.NET default evaluator and an LLM-as-judge evaluator are shipped
 - [x] Success rate in ranking comes from evaluated executions
-- [ ] Docs and a sample cover evaluation
+- [x] Docs and a sample cover evaluation
 
 ### Phase 2.1: Evaluator contract and feedback API [status: complete]
 **Goal:** `IReasonletEvaluator` and an explicit feedback API that takes precedence over automatic scoring.
 **Surface:** Backend
 **HelpWanted:** no
 **Plan:** `docs/superpowers/plans/2026-10-23-phase-2.1-evaluator-contract.md`
+**Completed:** 2026-10-23
 
 ### Phase 2.2: Minos.NET evaluator [status: complete]
 **Goal:** The default evaluator: it judges question, procedure and answer through Minos.NET's typed, calibrated decision questions, so a verdict needs no reply parsing. Decided 2026-10-23: Minos first, the chat judge after.
 **Surface:** Backend
 **HelpWanted:** no
 **Plan:** `docs/superpowers/plans/2026-10-23-phase-2.2-minos-evaluator.md`
+**Completed:** 2026-10-23
 
 ### Phase 2.3: LLM-as-judge evaluator [status: complete]
 **Goal:** An evaluator that judges through an `IChatClient`, for hosts without a decision-model provider. A reply it can't parse counts as the judge being down.
@@ -95,11 +98,12 @@ Design: [roadmap design](../superpowers/specs/2026-10-21-roadmap-design.md), bui
 **Plan:** `docs/superpowers/plans/2026-10-28-phase-2.4-trusted-success-rate.md`
 **Completed:** 2026-10-28
 
-### Phase 2.5: Evaluation docs and sample [status: active]
+### Phase 2.5: Evaluation docs and sample [status: complete]
 **Goal:** Docsite pages and a sample for evaluation and feedback.
 **Surface:** Docs
 **HelpWanted:** no
 **Plan:** `docs/superpowers/plans/2026-10-28-phase-2.5-evaluation-docs.md`
+**Completed:** 2026-10-28
 
 ## Milestone 3: Off-the-shelf integrations [status: pending]
 **Goal:** Any `IChatClient` app or Agent Framework agent gets recall, capture and learning without writing Mnemosyne-specific code.
