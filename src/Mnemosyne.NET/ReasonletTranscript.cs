@@ -51,6 +51,62 @@ public static class ReasonletTranscript
         return question < 0 ? TranscriptSkipReason.NoQuestion : BuildGraph(list, question);
     }
 
+    /// <summary>Builds a capture from the last question's run.</summary>
+    /// <remarks>
+    /// <see cref="ReasonletCapture.Question"/> is the question's text. <see cref="ReasonletCapture.Answer"/> is the text of
+    /// the run's last assistant message whose text is not blank, or null when there is none; it reaches the evaluator and is
+    /// never stored. The graph is <see cref="ToGraph"/>'s, and every other member comes from <paramref name="details"/>.
+    /// The text is copied as it is: nothing here redacts it.
+    /// </remarks>
+    /// <param name="messages">The transcript, oldest first. No element may be null.</param>
+    /// <param name="details">What the caller adds: scope, provenance, outcome and the optional parent, intent and name.</param>
+    /// <returns>The capture, or why there is nothing to capture.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="messages"/>, one of its elements or <paramref name="details"/> is null.</exception>
+    public static Result<ReasonletCapture, TranscriptSkipReason> ToCapture(
+        IEnumerable<ChatMessage> messages, TranscriptCaptureDetails details)
+    {
+        ArgumentNullException.ThrowIfNull(details);
+        var list = Materialize(messages);
+        var question = QuestionIndex(list);
+        if (question < 0)
+        {
+            return TranscriptSkipReason.NoQuestion;
+        }
+
+        var graph = BuildGraph(list, question);
+        if (graph.IsFailure)
+        {
+            return graph.Error;
+        }
+
+        return new ReasonletCapture
+        {
+            Scope = details.Scope,
+            Question = list[question].Text,
+            Graph = graph.Value,
+            Outcome = details.Outcome,
+            Provenance = details.Provenance,
+            Intent = details.Intent,
+            Name = details.Name,
+            Answer = Answer(list, question),
+            ParentId = details.ParentId,
+        };
+    }
+
+    /// <summary>Returns the text of the run's last assistant message with non-blank text, or null.</summary>
+    private static string? Answer(IReadOnlyList<ChatMessage> messages, int question)
+    {
+        for (var i = messages.Count - 1; i > question; i--)
+        {
+            if (messages[i].Role == ChatRole.Assistant && !string.IsNullOrWhiteSpace(messages[i].Text))
+            {
+                return messages[i].Text;
+            }
+        }
+
+        return null;
+    }
+
     /// <summary>Materializes the transcript once, rejecting null elements.</summary>
     internal static List<ChatMessage> Materialize(IEnumerable<ChatMessage> messages)
     {
