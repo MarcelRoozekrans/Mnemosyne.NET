@@ -136,6 +136,7 @@ public sealed class CaptureGuardTests
 
         Assert.Equal(MnemosyneErrorCode.Unavailable, result.Error.Code);
         Assert.Equal("The capture guard failed.", result.Error.Message);
+        Assert.Equal(typeof(TaskCanceledException).FullName, result.Error.Detail);
         Assert.Contains(TimeSpan.FromSeconds(1), clock.DueTimes);
         Assert.Equal(1, guard.Calls);
         AssertNothingDownstream();
@@ -191,11 +192,14 @@ public sealed class CaptureGuardTests
         Assert.Equal(0, first.Calls);
         AssertNothingDownstream();
 
+        // The guard is already being awaited when the caller cancels, so the cancellation stops a wait in progress.
         using var cts = new CancellationTokenSource();
-        var second = new FakeCaptureGuard { Hang = true, OnCall = cts.Cancel };
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
-            await Memory(second, clock: new ManualTimeProvider()).RememberAsync(Capture(), cts.Token).AsTask().WaitAsync(TimeSpan.FromSeconds(30), Ct));
+        var second = new FakeCaptureGuard { Hang = true };
+        var pending = Memory(second, clock: new ManualTimeProvider()).RememberAsync(Capture(), cts.Token).AsTask();
         Assert.Equal(1, second.Calls);
+        Assert.False(pending.IsCompleted);
+        await cts.CancelAsync();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => pending.WaitAsync(TimeSpan.FromSeconds(30), Ct));
         AssertNothingDownstream();
     }
 

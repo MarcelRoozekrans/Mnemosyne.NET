@@ -517,56 +517,24 @@ public sealed class ReasonletMemory : IReasonletMemory
     }
 
     /// <summary>
-    /// Calls the evaluator inside its <c>mnemosyne.evaluate</c> activity. It fails only with Unavailable, when the judge
-    /// is down, with the detail naming an exception's type. An error code other than Unavailable or an invalid
-    /// evaluation is an adapter bug and throws, and the caller's own cancellation propagates. The judge gets the caller's
-    /// token linked with one that <paramref name="timeProvider"/> cancels after <paramref name="timeout"/>, unless that is
-    /// <see cref="Timeout.InfiniteTimeSpan"/>, and stops waiting once that token is cancelled, whether or not the judge
-    /// honours it; a cancellation that is not the caller's is a timeout. The activity records how the judge call ended, a
-    /// judge that is down included.
+    /// Calls the evaluator inside its <c>mnemosyne.evaluate</c> activity, through <see cref="CallTimedAsync"/> and
+    /// <see cref="MnemosyneOptions.EvaluationTimeout"/>. It fails only with Unavailable, when the judge is down, with the
+    /// detail naming an exception's type. An error code other than Unavailable or an invalid evaluation is an adapter bug
+    /// and throws, and the caller's own cancellation propagates. The activity records how the judge call ended, a judge
+    /// that is down included.
     /// </summary>
     private static async ValueTask<Result<ReasonletEvaluation, MnemosyneError>> EvaluateAsync(
         IReasonletEvaluator evaluator, ReasonletEvaluationRequest request, TimeSpan timeout, TimeProvider timeProvider, CancellationToken ct)
     {
         using var telemetry = EvaluationTelemetry.Start();
-        using var timer = timeout == Timeout.InfiniteTimeSpan ? null : new CancellationTokenSource(timeout, timeProvider);
-        using var linked = timer is null ? null : CancellationTokenSource.CreateLinkedTokenSource(ct, timer.Token);
-        var token = linked?.Token ?? ct;
-        Task<Result<ReasonletEvaluation, MnemosyneError>>? pending = null;
-        Result<ReasonletEvaluation, MnemosyneError> evaluated;
-        try
+        var answered = await CallTimedAsync(
+            token => evaluator.EvaluateAsync(request, token), timeout, timeProvider, telemetry, EvaluatorFailed, ct).ConfigureAwait(false);
+        if (answered.IsFailure)
         {
-            if (token.CanBeCanceled)
-            {
-                // A hard stop: the wait ends when the token is cancelled, by the timeout or by the caller, even when
-                // the judge ignores the token it was given. A judge that honours it stops early too.
-                pending = evaluator.EvaluateAsync(request, token).AsTask();
-                evaluated = await pending.WaitAsync(token).ConfigureAwait(false);
-            }
-            else
-            {
-                evaluated = await evaluator.EvaluateAsync(request, token).ConfigureAwait(false);
-            }
-        }
-        catch (Exception ex) when (IsCallerCancellation(ex, ct))
-        {
-            Abandon(pending);
-            telemetry.Threw(ex);
-            throw;
-        }
-        catch (OperationCanceledException ex)
-        {
-            // Not the caller's cancellation, so a timeout, which counts as the judge being down.
-            Abandon(pending);
-            telemetry.Failed(MnemosyneErrorCode.Unavailable);
-            return DependencyFailed(EvaluatorFailed, ex);
-        }
-        catch (Exception ex)
-        {
-            telemetry.Threw(ex);
-            return DependencyFailed(EvaluatorFailed, ex);
+            return answered.Error;
         }
 
+        var evaluated = answered.Value;
         if (evaluated.IsFailure)
         {
             telemetry.Failed(evaluated.Error.Code);
@@ -594,61 +562,25 @@ public sealed class ReasonletMemory : IReasonletMemory
     }
 
     /// <summary>
-    /// Calls the capture guard inside its <c>mnemosyne.guard</c> activity. It succeeds for an allowed capture, fails with
+    /// Calls the capture guard inside its <c>mnemosyne.guard</c> activity, through <see cref="CallTimedAsync"/> and
+    /// <see cref="MnemosyneOptions.GuardTimeout"/>. It succeeds for an allowed capture, fails with
     /// <see cref="MnemosyneErrorCode.Blocked"/> for a blocked one, with the detail naming the guard and the detector, and
     /// fails with Unavailable when the guard is down, with the detail naming an exception's type. An error code other than
-    /// Unavailable or an invalid verdict is an adapter bug and throws, and the caller's own cancellation propagates. The
-    /// guard gets the caller's token linked with one that <paramref name="timeProvider"/> cancels after
-    /// <paramref name="timeout"/>, unless that is <see cref="Timeout.InfiniteTimeSpan"/>, and the facade stops waiting once
-    /// that token is cancelled, whether or not the guard honours it; a cancellation that is not the caller's is a timeout.
-    /// Unlike a judge, a guard that is down fails the remember: a capture that was not inspected is never stored. A caller's
-    /// token that is already cancelled throws before the guard is called, so no guard signal is emitted for it.
+    /// Unavailable or an invalid verdict is an adapter bug and throws, and the caller's own cancellation propagates.
+    /// Unlike a judge, a guard that is down fails the remember: a capture that was not inspected is never stored.
     /// </summary>
     private static async ValueTask<UnitResult<MnemosyneError>> InspectAsync(
         ICaptureGuard guard, ReasonletCapture capture, TimeSpan timeout, TimeProvider timeProvider, CancellationToken ct)
     {
-        // A guard that answers synchronously would otherwise let a cancelled call through, since waiting on a completed
-        // task never looks at the token.
-        ct.ThrowIfCancellationRequested();
         using var telemetry = GuardTelemetry.Start();
-        using var timer = timeout == Timeout.InfiniteTimeSpan ? null : new CancellationTokenSource(timeout, timeProvider);
-        using var linked = timer is null ? null : CancellationTokenSource.CreateLinkedTokenSource(ct, timer.Token);
-        var token = linked?.Token ?? ct;
-        Task<Result<CaptureVerdict, MnemosyneError>>? pending = null;
-        Result<CaptureVerdict, MnemosyneError> inspected;
-        try
+        var answered = await CallTimedAsync(
+            token => guard.InspectAsync(capture, token), timeout, timeProvider, telemetry, GuardFailed, ct).ConfigureAwait(false);
+        if (answered.IsFailure)
         {
-            if (token.CanBeCanceled)
-            {
-                // A hard stop: the wait ends when the token is cancelled, by the timeout or by the caller, even when
-                // the guard ignores the token it was given. A guard that honours it stops early too.
-                pending = guard.InspectAsync(capture, token).AsTask();
-                inspected = await pending.WaitAsync(token).ConfigureAwait(false);
-            }
-            else
-            {
-                inspected = await guard.InspectAsync(capture, token).ConfigureAwait(false);
-            }
-        }
-        catch (Exception ex) when (IsCallerCancellation(ex, ct))
-        {
-            Abandon(pending);
-            telemetry.Threw(ex);
-            throw;
-        }
-        catch (OperationCanceledException ex)
-        {
-            // Not the caller's cancellation, so a timeout, which counts as the guard being down.
-            Abandon(pending);
-            telemetry.Failed(MnemosyneErrorCode.Unavailable);
-            return DependencyFailed(GuardFailed, ex);
-        }
-        catch (Exception ex)
-        {
-            telemetry.Threw(ex);
-            return DependencyFailed(GuardFailed, ex);
+            return answered.Error;
         }
 
+        var inspected = answered.Value;
         if (inspected.IsFailure)
         {
             telemetry.Failed(inspected.Error.Code);
@@ -676,6 +608,70 @@ public sealed class ReasonletMemory : IReasonletMemory
         return verdict.IsBlocked
             ? new MnemosyneError(MnemosyneErrorCode.Blocked, GuardBlocked, $"{verdict.Guard}/{verdict.Detector}")
             : UnitResult<MnemosyneError>.Success();
+    }
+
+    /// <summary>
+    /// Makes one dependency call under a timeout, the judge's and the guard's alike. The dependency gets the caller's
+    /// token linked with one that <paramref name="timeProvider"/> cancels after <paramref name="timeout"/>, unless that is
+    /// <see cref="Timeout.InfiniteTimeSpan"/>, and the facade stops waiting once that token is cancelled, whether or not
+    /// the dependency honours it; a call it stops waiting for is abandoned with <see cref="Abandon"/>.
+    /// </summary>
+    /// <remarks>
+    /// The outer result succeeds with whatever the dependency answered, an error result included, which the caller maps
+    /// and reports itself. It fails with Unavailable, <paramref name="failedMessage"/> and the exception's type as the
+    /// detail when the dependency is down: when it throws, or times out, which is a cancellation that is not the caller's.
+    /// Those are reported to <paramref name="telemetry"/> here, as Threw and as Failed with Unavailable. The caller's own
+    /// cancellation is reported as Threw and propagates. A caller's token that is already cancelled throws before the
+    /// dependency is called, since waiting on a task that completed at once never looks at the token.
+    /// </remarks>
+    private static async ValueTask<Result<Result<T, MnemosyneError>, MnemosyneError>> CallTimedAsync<T>(
+        Func<CancellationToken, ValueTask<Result<T, MnemosyneError>>> call,
+        TimeSpan timeout,
+        TimeProvider timeProvider,
+        IDependencyCallTelemetry telemetry,
+        string failedMessage,
+        CancellationToken ct)
+    {
+        using var timer = timeout == Timeout.InfiniteTimeSpan ? null : new CancellationTokenSource(timeout, timeProvider);
+        using var linked = timer is null ? null : CancellationTokenSource.CreateLinkedTokenSource(ct, timer.Token);
+        var token = linked?.Token ?? ct;
+        Task<Result<T, MnemosyneError>>? pending = null;
+        Result<T, MnemosyneError> answered;
+        try
+        {
+            ct.ThrowIfCancellationRequested();
+            if (token.CanBeCanceled)
+            {
+                // A hard stop: the wait ends when the token is cancelled, by the timeout or by the caller, even when
+                // the dependency ignores the token it was given. One that honours it stops early too.
+                pending = call(token).AsTask();
+                answered = await pending.WaitAsync(token).ConfigureAwait(false);
+            }
+            else
+            {
+                answered = await call(token).ConfigureAwait(false);
+            }
+        }
+        catch (Exception ex) when (IsCallerCancellation(ex, ct))
+        {
+            Abandon(pending);
+            telemetry.Threw(ex);
+            throw;
+        }
+        catch (OperationCanceledException ex)
+        {
+            // Not the caller's cancellation, so a timeout, which counts as the dependency being down.
+            Abandon(pending);
+            telemetry.Failed(MnemosyneErrorCode.Unavailable);
+            return Result<Result<T, MnemosyneError>, MnemosyneError>.Failure(DependencyFailed(failedMessage, ex));
+        }
+        catch (Exception ex)
+        {
+            telemetry.Threw(ex);
+            return Result<Result<T, MnemosyneError>, MnemosyneError>.Failure(DependencyFailed(failedMessage, ex));
+        }
+
+        return Result<Result<T, MnemosyneError>, MnemosyneError>.Success(answered);
     }
 
     /// <summary>

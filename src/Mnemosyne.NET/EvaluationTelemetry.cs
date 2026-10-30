@@ -30,7 +30,7 @@ namespace Mnemosyne.NET;
 /// <c>mnemosyne.evaluations</c> with outcome <c>skipped</c>, and starts nothing else.
 /// </para>
 /// </remarks>
-internal sealed class EvaluationTelemetry : IDisposable
+internal sealed class EvaluationTelemetry : IDependencyCallTelemetry, IDisposable
 {
     private const string ActivityName = "mnemosyne.evaluate";
     private const string Operation = "evaluate";
@@ -81,7 +81,7 @@ internal sealed class EvaluationTelemetry : IDisposable
     }
 
     /// <summary>Reports an error result, or a timeout as Unavailable: the outcome and <c>error.type</c> are the code's name.</summary>
-    internal void Failed(MnemosyneErrorCode code)
+    public void Failed(MnemosyneErrorCode code)
     {
         _outcome = RecallTelemetry.ErrorName(code);
         RecallTelemetry.Failed(_activity, _outcome);
@@ -91,7 +91,7 @@ internal sealed class EvaluationTelemetry : IDisposable
     /// Reports an exception: outcome <c>exception</c>, and an <c>exception</c> event and <c>error.type</c> that carry only
     /// its full type name.
     /// </summary>
-    internal void Threw(Exception ex)
+    public void Threw(Exception ex)
     {
         _outcome = RecallTelemetry.ExceptionOutcome;
         RecallTelemetry.Threw(_activity, ex);

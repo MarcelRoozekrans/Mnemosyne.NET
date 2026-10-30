@@ -26,7 +26,7 @@ namespace Mnemosyne.NET;
 /// returned an invalid verdict, has no name to tag, so its signals carry no <c>mnemosyne.guard</c> tag.
 /// </para>
 /// </remarks>
-internal sealed class GuardTelemetry : IDisposable
+internal sealed class GuardTelemetry : IDependencyCallTelemetry, IDisposable
 {
     private const string ActivityName = "mnemosyne.guard";
     private const string Operation = "guard";
@@ -90,7 +90,7 @@ internal sealed class GuardTelemetry : IDisposable
     }
 
     /// <summary>Reports an error result, or a timeout as Unavailable: the outcome and <c>error.type</c> are the code's name.</summary>
-    internal void Failed(MnemosyneErrorCode code)
+    public void Failed(MnemosyneErrorCode code)
     {
         _outcome = RecallTelemetry.ErrorName(code);
         _operationOutcome = _outcome;
@@ -101,7 +101,7 @@ internal sealed class GuardTelemetry : IDisposable
     /// Reports an exception: outcome <c>exception</c>, and an <c>exception</c> event and <c>error.type</c> that carry only
     /// its full type name.
     /// </summary>
-    internal void Threw(Exception ex)
+    public void Threw(Exception ex)
     {
         _outcome = RecallTelemetry.ExceptionOutcome;
         _operationOutcome = RecallTelemetry.ExceptionOutcome;
