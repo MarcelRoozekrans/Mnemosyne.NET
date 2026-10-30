@@ -239,7 +239,26 @@ public sealed class ReviewTests(PgVectorFixture fixture) : IClassFixture<PgVecto
 
         Assert.Equal(ReasonletStatus.Active, (await store.GetAsync(scope, held.Id, Ct)).Value.Status);
 
-        // Then free-running races, each ending in one of the two serialized outcomes.
+        // Then the other order: a reject holds the row FOR UPDATE and deletes it, and the approve waits for it.
+        var doomed = await RememberAsync(store, scope, "doomed", review: true);
+        await using (var rejecter = await fixture.DataSource.OpenConnectionAsync(Ct))
+        {
+            await using var transaction = await rejecter.BeginTransactionAsync(Ct);
+            await RunAsync(rejecter, "SELECT id FROM mnemosyne.reasonlets WHERE scope = $1 AND id = $2 FOR UPDATE", scope.Value, doomed.Id.Value);
+            await RunAsync(rejecter, "DELETE FROM mnemosyne.reasonlets WHERE scope = $1 AND id = $2", scope.Value, doomed.Id.Value);
+
+            var approve = store.ApproveAsync(scope, doomed.Id, Ct).AsTask();
+            await WaitUntilBlockedByAsync(rejecter);
+            Assert.False(approve.IsCompleted);
+            await transaction.CommitAsync(Ct);
+
+            var result = await approve;
+            Assert.Equal((MnemosyneErrorCode.NotFound, NotFound), (result.Error.Code, result.Error.Message));
+        }
+
+        Assert.Equal(MnemosyneErrorCode.NotFound, (await store.GetAsync(scope, doomed.Id, Ct)).Error.Code);
+
+        // Then free-running races as a smoke test, each ending in one of the two serialized outcomes.
         for (var i = 0; i < 20; i++)
         {
             var pending = await RememberAsync(store, scope, $"race-{i}", review: true);
