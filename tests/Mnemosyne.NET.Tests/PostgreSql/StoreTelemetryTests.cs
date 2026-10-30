@@ -210,6 +210,7 @@ public sealed class StoreTelemetryTests : IAsyncDisposable
     [InlineData(MnemosyneErrorCode.NotFound, "NotFound")]
     [InlineData(MnemosyneErrorCode.Conflict, "Conflict")]
     [InlineData(MnemosyneErrorCode.Unavailable, "Unavailable")]
+    [InlineData(MnemosyneErrorCode.Blocked, "Blocked")]
     [InlineData((MnemosyneErrorCode)99, "99")]
     public void AnErrorCodeIsTaggedByItsName(MnemosyneErrorCode code, string name) =>
         Assert.Equal(name, StoreTelemetry.ErrorName(code));

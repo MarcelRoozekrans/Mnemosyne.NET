@@ -168,6 +168,7 @@ internal static class RecallTelemetry
         MnemosyneErrorCode.NotFound => nameof(MnemosyneErrorCode.NotFound),
         MnemosyneErrorCode.Conflict => nameof(MnemosyneErrorCode.Conflict),
         MnemosyneErrorCode.Unavailable => nameof(MnemosyneErrorCode.Unavailable),
+        MnemosyneErrorCode.Blocked => nameof(MnemosyneErrorCode.Blocked),
         _ => code.ToString(),
     };
 

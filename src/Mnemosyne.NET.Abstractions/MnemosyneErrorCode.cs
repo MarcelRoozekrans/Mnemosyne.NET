@@ -23,4 +23,7 @@ public enum MnemosyneErrorCode
 
     /// <summary>A backing dependency (store, embedding generator, intent extractor or selector) failed.</summary>
     Unavailable = 4,
+
+    /// <summary>A capture guard blocked the capture; nothing was stored.</summary>
+    Blocked = 5,
 }
