@@ -13,6 +13,7 @@ public sealed class MnemosyneOptionsTests
         Assert.Equal(20, options.CandidatePool);
         Assert.Equal(0.7, options.MinIntentConfidence);
         Assert.Equal(TimeSpan.FromSeconds(30), options.EvaluationTimeout);
+        Assert.Equal(TimeSpan.FromSeconds(30), options.GuardTimeout);
         Assert.NotNull(options.Ranking);
         Assert.True(options.Validate().IsSuccess);
     }
@@ -57,6 +58,21 @@ public sealed class MnemosyneOptionsTests
 
         Assert.Equal(MnemosyneErrorCode.Validation, result.Error.Code);
         Assert.Equal("EvaluationTimeout: must be positive and at most 4294967294 milliseconds, or Timeout.InfiniteTimeSpan", result.Error.Message);
+    }
+
+    [Theory]
+    [MemberData(nameof(UsableTimeouts))]
+    public void APositiveOrInfiniteGuardTimeoutPasses(TimeSpan timeout) =>
+        Assert.True(new MnemosyneOptions { GuardTimeout = timeout }.Validate().IsSuccess);
+
+    [Theory]
+    [MemberData(nameof(UnusableTimeouts))]
+    public void AnyOtherGuardTimeoutFails(TimeSpan timeout)
+    {
+        var result = new MnemosyneOptions { GuardTimeout = timeout }.Validate();
+
+        Assert.Equal(MnemosyneErrorCode.Validation, result.Error.Code);
+        Assert.Equal("GuardTimeout: must be positive and at most 4294967294 milliseconds, or Timeout.InfiniteTimeSpan", result.Error.Message);
     }
 
     [Fact]
