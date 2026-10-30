@@ -15,6 +15,8 @@ public interface IReasonletMemory
     /// <item><term>ParentId set and the graph different</term><description>A new version, as a child with lineage. Kind <see cref="ReasonletCaptureKind.NewVersion"/>.</description></item>
     /// </list>
     /// Two concurrent captures with the same parent but different graphs create sibling versions.
+    /// When <c>MnemosyneOptions.RequireReview</c> is on, a new Reasonlet or a new version is stored as <see cref="ReasonletStatus.PendingReview"/>, and
+    /// recall does not return it until <see cref="ApproveAsync"/> approves it.
     /// Error codes: <see cref="MnemosyneErrorCode.Validation"/> when the capture breaks an invariant,
     /// <see cref="MnemosyneErrorCode.NotFound"/> when the parent does not exist in the capture's scope (including a parent that exists only in another scope),
     /// <see cref="MnemosyneErrorCode.Conflict"/> when the write loses a race the store detects, such as the parent being erased between lookup and insert,
@@ -91,4 +93,55 @@ public interface IReasonletMemory
     /// <param name="ct">The cancellation token.</param>
     /// <returns>The numbers of Reasonlets and executions removed.</returns>
     ValueTask<Result<ReasonletErasureResult, MnemosyneError>> EraseAsync(ReasonletErasure erasure, CancellationToken ct);
+
+    /// <summary>Approves a Reasonlet that waits for review, so that search returns it from the next query on.</summary>
+    /// <remarks>
+    /// Sets the status to <see cref="ReasonletStatus.Active"/>. Approving an Active Reasonlet succeeds and changes nothing,
+    /// so a retried approve is harmless. A Reasonlet that a concurrent reject deletes while the approve waits is not found.
+    /// Error codes: <see cref="MnemosyneErrorCode.Validation"/> when an argument breaks an invariant, such as a <c>default</c> scope or ID,
+    /// <see cref="MnemosyneErrorCode.NotFound"/> when the Reasonlet does not exist in the scope (including one that exists only in another scope),
+    /// <see cref="MnemosyneErrorCode.Unavailable"/> when the backing store fails.
+    /// </remarks>
+    /// <param name="scope">The scope of the Reasonlet.</param>
+    /// <param name="id">The Reasonlet to approve.</param>
+    /// <param name="ct">The cancellation token.</param>
+    /// <returns>Success, or the error.</returns>
+    ValueTask<UnitResult<MnemosyneError>> ApproveAsync(ReasonletScope scope, ReasonletId id, CancellationToken ct);
+
+    /// <summary>Rejects a Reasonlet that waits for review, deleting it with its executions.</summary>
+    /// <remarks>
+    /// Only a <see cref="ReasonletStatus.PendingReview"/> Reasonlet with no child in its scope is deleted. An Active Reasonlet is
+    /// never rejected, because removing a live procedure is an erase's job; and a Reasonlet with versions below it is not rejected
+    /// either, because the delete would cut those versions loose. Reject or approve the versions first. The store serializes a
+    /// reject with a remember that adds a version below the Reasonlet and with an approve, so the one that runs second sees the
+    /// other's result.
+    /// Error codes: <see cref="MnemosyneErrorCode.Validation"/> when an argument breaks an invariant, such as a <c>default</c> scope or ID,
+    /// <see cref="MnemosyneErrorCode.NotFound"/> when the Reasonlet does not exist in the scope (including one that exists only in another scope),
+    /// <see cref="MnemosyneErrorCode.Conflict"/> when the Reasonlet is Active, has versions below it, or the write loses a race the store detects,
+    /// <see cref="MnemosyneErrorCode.Unavailable"/> when the backing store fails.
+    /// </remarks>
+    /// <param name="scope">The scope of the Reasonlet.</param>
+    /// <param name="id">The Reasonlet to reject.</param>
+    /// <param name="ct">The cancellation token.</param>
+    /// <returns>Success, or the error.</returns>
+    ValueTask<UnitResult<MnemosyneError>> RejectAsync(ReasonletScope scope, ReasonletId id, CancellationToken ct);
+
+    /// <summary>Lists the Reasonlets that wait for review, oldest id first, each with its own execution metrics.</summary>
+    /// <remarks>
+    /// Returns up to <paramref name="limit"/> pending Reasonlets of the scope with an id above <paramref name="after"/>, ordered by
+    /// id. Reasonlet ids are version 7 GUIDs, so this is creation order. Pass the last id of a page as the next
+    /// <paramref name="after"/>, and <see langword="null"/> to start. The list is a work queue, not a feed: ids are made by clients,
+    /// so a Reasonlet stored while a reviewer pages can land behind the cursor, and a review screen starts again from
+    /// <see langword="null"/> to see it. A Reasonlet without a metrics row reads as no runs. An empty list is a success. The
+    /// embedding is not returned.
+    /// Error codes: <see cref="MnemosyneErrorCode.Validation"/> when the limit is not from 1 to 100, <paramref name="after"/> is a
+    /// <c>default</c> ID, or an argument breaks another invariant, such as a <c>default</c> scope,
+    /// <see cref="MnemosyneErrorCode.Unavailable"/> when the backing store fails.
+    /// </remarks>
+    /// <param name="scope">The scope to list.</param>
+    /// <param name="limit">The most Reasonlets to return, from 1 to 100.</param>
+    /// <param name="after">The last id of the previous page, or null for the first page.</param>
+    /// <param name="ct">The cancellation token.</param>
+    /// <returns>The page, or the error.</returns>
+    ValueTask<Result<IReadOnlyList<ReasonletReview>, MnemosyneError>> ListPendingAsync(ReasonletScope scope, int limit, ReasonletId? after, CancellationToken ct);
 }

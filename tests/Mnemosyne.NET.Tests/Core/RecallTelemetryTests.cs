@@ -547,5 +547,15 @@ public sealed class RecallTelemetryTests
 
         public ValueTask<Result<ReasonletPruneResult, MnemosyneError>> PruneAsync(ReasonletRetention retention, CancellationToken ct) =>
             throw new NotSupportedException();
+
+        public ValueTask<UnitResult<MnemosyneError>> ApproveAsync(ReasonletScope scope, ReasonletId id, CancellationToken ct) =>
+            throw new NotSupportedException();
+
+        public ValueTask<UnitResult<MnemosyneError>> RejectAsync(ReasonletScope scope, ReasonletId id, CancellationToken ct) =>
+            throw new NotSupportedException();
+
+        public ValueTask<Result<IReadOnlyList<ReasonletReview>, MnemosyneError>> ListPendingAsync(
+            ReasonletScope scope, int limit, ReasonletId? after, CancellationToken ct) =>
+            throw new NotSupportedException();
     }
 }

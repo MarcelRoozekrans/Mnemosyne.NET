@@ -925,17 +925,7 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
         return new ReasonletErasureResult { Reasonlets = removed, Executions = erased };
     }
 
-    /// <summary>Approves a Reasonlet that waits for review, so that search returns it from the next query on.</summary>
-    /// <remarks>
-    /// One statement sets the status to <see cref="ReasonletStatus.Active"/>. Approving an Active Reasonlet succeeds
-    /// and changes nothing, so a retried approve is harmless. A Reasonlet that is not in the scope answers
-    /// <see cref="MnemosyneErrorCode.NotFound"/>, and so does one that a concurrent reject deletes while the approve
-    /// waits for its lock.
-    /// </remarks>
-    /// <param name="scope">The scope of the Reasonlet.</param>
-    /// <param name="id">The Reasonlet to approve.</param>
-    /// <param name="ct">The cancellation token.</param>
-    /// <returns>Success, or the error.</returns>
+    /// <inheritdoc />
     public ValueTask<UnitResult<MnemosyneError>> ApproveAsync(ReasonletScope scope, ReasonletId id, CancellationToken ct) =>
         StoreTelemetry.RunAsync("approve", activity => ApproveOperationAsync(scope, id, activity, ct));
 
@@ -960,37 +950,7 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
         return approved is null ? ReasonletNotFound() : true;
     }
 
-    /// <summary>
-    /// Rejects a Reasonlet that waits for review: deletes it with its executions, their feedback and its metrics, the
-    /// way an erase deletes them.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// An Active Reasonlet answers <see cref="MnemosyneErrorCode.Conflict"/>: removing a live procedure is an erase's
-    /// job, and a reject that raced an approve must not delete what the other reviewer just approved. So does a
-    /// Reasonlet that another Reasonlet in the scope has as its parent, because the delete would cut those versions
-    /// loose, and one of them may be approved; reject or approve the versions below first. A Reasonlet that is not in
-    /// the scope answers <see cref="MnemosyneErrorCode.NotFound"/>.
-    /// </para>
-    /// <para>
-    /// One READ COMMITTED transaction locks the Reasonlet <c>FOR UPDATE</c> before it reads the status and looks for
-    /// children. A remember that adds a version below it holds it <c>FOR NO KEY UPDATE</c>, and an approve updates it,
-    /// and both conflict with that lock, so each serializes with the reject: a reject that runs second sees the new
-    /// version or the new status and answers <see cref="MnemosyneErrorCode.Conflict"/>; a remember or an approve that
-    /// runs second finds no Reasonlet and answers <see cref="MnemosyneErrorCode.NotFound"/>, as after an erase.
-    /// </para>
-    /// <para>
-    /// Because a Reasonlet with children is never rejected, a reject only deletes a leaf, and it deletes it in the
-    /// order an erase does: the Reasonlet row's lock first, then its executions in id order, then the row itself, with
-    /// the feedback and metrics rows that cascade. An erase locks deepest first, and a leaf is the deepest row of its
-    /// branch, so taking that one row first keeps the erase's order. A deadlock or a serialization failure that still
-    /// happens answers <see cref="MnemosyneErrorCode.Conflict"/>.
-    /// </para>
-    /// </remarks>
-    /// <param name="scope">The scope of the Reasonlet.</param>
-    /// <param name="id">The Reasonlet to reject.</param>
-    /// <param name="ct">The cancellation token.</param>
-    /// <returns>Success, or the error.</returns>
+    /// <inheritdoc />
     public ValueTask<UnitResult<MnemosyneError>> RejectAsync(ReasonletScope scope, ReasonletId id, CancellationToken ct) =>
         StoreTelemetry.RunAsync("reject", activity => RejectOperationAsync(scope, id, activity, ct));
 
@@ -1040,20 +1000,7 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
         return true;
     }
 
-    /// <summary>Lists the Reasonlets that wait for review, oldest id first, each with its own execution metrics.</summary>
-    /// <remarks>
-    /// Returns up to <paramref name="limit"/> pending Reasonlets of the scope with an id above <paramref name="after"/>,
-    /// ordered by id; the ids are version 7 GUIDs, so this is creation order. Pass the last id of a page as the next
-    /// <paramref name="after"/>, and <see langword="null"/> to start. The list is a work queue, not a feed: ids are made
-    /// by clients, so a Reasonlet stored while a reviewer pages can land behind the cursor, and a review screen starts
-    /// again from <see langword="null"/> to see it. A Reasonlet without a metrics row reads as no runs, with its last
-    /// execution at its creation time. An empty list is a success. The embedding is not returned.
-    /// </remarks>
-    /// <param name="scope">The scope to list.</param>
-    /// <param name="limit">The most Reasonlets to return, from 1 to 100.</param>
-    /// <param name="after">The last id of the previous page, or null for the first page.</param>
-    /// <param name="ct">The cancellation token.</param>
-    /// <returns>The page, or the error.</returns>
+    /// <inheritdoc />
     public ValueTask<Result<IReadOnlyList<ReasonletReview>, MnemosyneError>> ListPendingAsync(
         ReasonletScope scope, int limit, ReasonletId? after, CancellationToken ct) =>
         StoreTelemetry.RunAsync("list_pending", activity => ListPendingOperationAsync(scope, limit, after, activity, ct));
