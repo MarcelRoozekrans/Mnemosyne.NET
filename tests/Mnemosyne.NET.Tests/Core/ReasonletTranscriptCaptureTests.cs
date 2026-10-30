@@ -45,7 +45,7 @@ public sealed class ReasonletTranscriptCaptureTests
     [Fact]
     public void OptionalDetailsStayNull()
     {
-        var details = new TranscriptCaptureDetails { Scope = Details.Scope, Provenance = Details.Provenance, Outcome = Details.Outcome };
+        var details = Details with { ParentId = null, Intent = null, Name = null };
 
         var capture = ReasonletTranscript.ToCapture([User("Q"), Calls(("c1", "A", [])), Results("c1")], details).Value;
 

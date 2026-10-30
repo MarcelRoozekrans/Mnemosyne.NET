@@ -285,8 +285,12 @@ public static class ReasonletTranscript
     }
 
     /// <summary>One step: a tool and its sorted argument names.</summary>
-    private readonly record struct Step(string Tool, string[] Arguments)
+    private readonly struct Step(string tool, string[] arguments)
     {
+        public string Tool { get; } = tool;
+
+        public string[] Arguments { get; } = arguments;
+
         public static Step Of(FunctionCallContent call)
         {
             var names = call.Arguments is { } args ? args.Keys.ToArray() : [];
