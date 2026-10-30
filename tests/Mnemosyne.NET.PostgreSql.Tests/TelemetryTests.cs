@@ -68,6 +68,23 @@ public sealed class TelemetryTests(PgVectorFixture fixture) : IClassFixture<PgVe
     }
 
     [Fact]
+    public async Task RememberTagsTheStatus()
+    {
+        var store = await MigratedStoreAsync();
+        var scope = PgVectorFixture.NewScope();
+        using var capture = new TelemetryCapture();
+
+        var active = (await store.RememberAsync(Entries.Entry(scope), Ct)).Value;
+        var pending = (await store.RememberAsync(Entries.Entry(scope, Entries.Graph("b")) with { ReviewRequired = true }, Ct)).Value;
+
+        var activities = capture.Activities;
+        Assert.Equal("active", activities[0].GetTagItem("mnemosyne.reasonlet.status"));
+        Assert.Equal("pending_review", activities[1].GetTagItem("mnemosyne.reasonlet.status"));
+        Assert.Equal(ReasonletStatus.PendingReview, pending.Status);
+        Assert.Equal(ReasonletStatus.Active, active.Status);
+    }
+
+    [Fact]
     public async Task RememberTagsTheVerdictSourceOfTheRunItRecords()
     {
         var store = await MigratedStoreAsync();
@@ -543,13 +560,14 @@ public sealed class TelemetryTests(PgVectorFixture fixture) : IClassFixture<PgVe
     private static KeyValuePair<string, object?>[] MnemosyneTags(Activity activity) =>
         [.. AllTags(activity).Where(tag => tag.Key.StartsWith("mnemosyne.", StringComparison.Ordinal))];
 
-    private static void AssertRemembered(Activity activity, string kind, ReasonletReceipt receipt, string source = "agent")
+    private static void AssertRemembered(Activity activity, string kind, ReasonletReceipt receipt, string source = "agent", string status = "active")
     {
         Assert.Equal(ActivityStatusCode.Unset, activity.Status);
         Assert.Equal(
             [
                 new("mnemosyne.capture_kind", kind),
                 new("mnemosyne.reasonlet.id", receipt.Id.Value.ToString()),
+                new("mnemosyne.reasonlet.status", status),
                 new("mnemosyne.reasonlet.version", receipt.Version),
                 new("mnemosyne.verdict_source", source),
             ],

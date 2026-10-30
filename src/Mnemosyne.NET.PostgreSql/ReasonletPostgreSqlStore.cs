@@ -29,7 +29,7 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
     private const string MigrationResourcePrefix = "Mnemosyne.NET.PostgreSql.Migrations.";
 
     /// <summary>The schema version this store needs, which the newest migration records in <c>mnemosyne.settings</c>.</summary>
-    private const int SchemaVersion = 3;
+    private const int SchemaVersion = 4;
 
     /// <summary>The most rows one prune transaction deletes, so no batch holds its locks for long.</summary>
     internal const int PruneBatchSize = 1000;
@@ -339,6 +339,7 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
         var capture = entry.Capture;
         var provenance = capture.Provenance;
         var id = ReasonletId.New();
+        var status = entry.ReviewRequired ? ReasonletStatus.PendingReview : ReasonletStatus.Active;
         await reasonlets.InsertAsync(
             id.Value,
             capture.Scope.Value,
@@ -348,7 +349,7 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
             ReasonletGraphJson.Serialize(capture.Graph),
             hash,
             parentId,
-            (short)ReasonletStatus.Active,
+            (short)status,
             provenance.Source,
             provenance.RunId,
             provenance.SubjectId,
@@ -358,7 +359,7 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
             ct).ConfigureAwait(false);
         var execution = await InsertExecutionAsync(executions, id.Value, capture, entry.Evaluation, transaction, ct).ConfigureAwait(false);
         var (source, success) = Verdict(capture.Outcome, entry.Evaluation);
-        return new ReasonletReceipt(id, version, execution, kind, ReasonletStatus.Active, source, success);
+        return new ReasonletReceipt(id, version, execution, kind, status, source, success);
     }
 
     /// <summary>

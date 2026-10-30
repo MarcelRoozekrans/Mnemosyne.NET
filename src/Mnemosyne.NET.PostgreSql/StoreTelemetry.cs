@@ -163,7 +163,7 @@ internal static class StoreTelemetry
     };
 
     /// <summary>
-    /// Tags a successful remember with what it stored, the verdict source of the run it recorded included, and counts it
+    /// Tags a successful remember with what it stored, the status the Reasonlet has afterwards, the verdict source of the run it recorded included, and counts it
     /// by capture kind.
     /// </summary>
     internal static void Remember(Activity? activity, ReasonletReceipt receipt)
@@ -173,6 +173,7 @@ internal static class StoreTelemetry
         VerdictSource(activity, receipt.Source);
         activity?.SetTag("mnemosyne.reasonlet.id", receipt.Id.Value.ToString());
         activity?.SetTag("mnemosyne.reasonlet.version", receipt.Version);
+        activity?.SetTag("mnemosyne.reasonlet.status", receipt.Status == ReasonletStatus.PendingReview ? "pending_review" : "active");
         Remembered.Add(1, new TagList { { "mnemosyne.capture_kind", kind } });
     }
 

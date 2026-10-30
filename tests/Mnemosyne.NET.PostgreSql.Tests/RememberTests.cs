@@ -32,6 +32,68 @@ public sealed class RememberTests(PgVectorFixture fixture) : IClassFixture<PgVec
     }
 
     [Fact]
+    public async Task ReviewRequiredStoresNewReasonletsPending()
+    {
+        var store = await MigratedStoreAsync();
+        var scope = PgVectorFixture.NewScope();
+
+        var receipt = (await store.RememberAsync(Entries.Entry(scope) with { ReviewRequired = true }, Ct)).Value;
+
+        Assert.Equal(ReasonletCaptureKind.NewReasonlet, receipt.Kind);
+        Assert.Equal(ReasonletStatus.PendingReview, receipt.Status);
+        Assert.Equal(ReasonletStatus.PendingReview, (await store.GetAsync(scope, receipt.Id, Ct)).Value.Status);
+        Assert.Empty((await store.SearchAsync(scope, Entries.Entry(scope).Embedding.Span.ToArray(), null, 10, Ct)).Value);
+    }
+
+    [Fact]
+    public async Task ReviewRequiredStoresNewVersionsPending()
+    {
+        var store = await MigratedStoreAsync();
+        var scope = PgVectorFixture.NewScope();
+        var parent = (await store.RememberAsync(Entries.Entry(scope), Ct)).Value;
+
+        var child = (await store.RememberAsync(
+            Entries.Entry(scope, Entries.Graph("b"), parent.Id) with { ReviewRequired = true }, Ct)).Value;
+
+        Assert.Equal(ReasonletCaptureKind.NewVersion, child.Kind);
+        Assert.Equal(ReasonletStatus.PendingReview, child.Status);
+        Assert.Equal(ReasonletStatus.Active, (await store.GetAsync(scope, parent.Id, Ct)).Value.Status);
+        Assert.Equal(ReasonletStatus.PendingReview, (await store.GetAsync(scope, child.Id, Ct)).Value.Status);
+        var found = (await store.SearchAsync(scope, Entries.Entry(scope).Embedding.Span.ToArray(), null, 10, Ct)).Value;
+        Assert.Equal([parent.Id], found.Select(c => c.Reasonlet.Id));
+    }
+
+    [Fact]
+    public async Task AnExecutionOfAnActiveParentKeepsItActiveUnderTheGate()
+    {
+        var store = await MigratedStoreAsync();
+        var scope = PgVectorFixture.NewScope();
+        var parent = (await store.RememberAsync(Entries.Entry(scope), Ct)).Value;
+
+        var receipt = (await store.RememberAsync(Entries.Entry(scope, parentId: parent.Id) with { ReviewRequired = true }, Ct)).Value;
+
+        Assert.Equal(ReasonletCaptureKind.ExecutionOnly, receipt.Kind);
+        Assert.Equal(ReasonletStatus.Active, receipt.Status);
+        Assert.Equal(parent.Id, receipt.Id);
+        var found = (await store.SearchAsync(scope, Entries.Entry(scope).Embedding.Span.ToArray(), null, 10, Ct)).Value;
+        Assert.Equal([parent.Id], found.Select(c => c.Reasonlet.Id));
+    }
+
+    [Fact]
+    public async Task AnExecutionOfAPendingParentKeepsItPending()
+    {
+        var store = await MigratedStoreAsync();
+        var scope = PgVectorFixture.NewScope();
+        var parent = (await store.RememberAsync(Entries.Entry(scope) with { ReviewRequired = true }, Ct)).Value;
+
+        var receipt = (await store.RememberAsync(Entries.Entry(scope, parentId: parent.Id) with { ReviewRequired = true }, Ct)).Value;
+
+        Assert.Equal(ReasonletCaptureKind.ExecutionOnly, receipt.Kind);
+        Assert.Equal(ReasonletStatus.PendingReview, receipt.Status);
+        Assert.Equal(ReasonletStatus.PendingReview, (await store.GetAsync(scope, parent.Id, Ct)).Value.Status);
+    }
+
+    [Fact]
     public async Task TheStoredGraphIsTheExactSerializedTextWithItsHash()
     {
         var store = await MigratedStoreAsync();
