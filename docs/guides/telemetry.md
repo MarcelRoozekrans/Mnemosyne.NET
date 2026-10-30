@@ -51,7 +51,7 @@ Every store method is one operation, and so is each recall, each judge call and 
 | `evaluate` | facade | one call to the registered `IReasonletEvaluator` |
 | `guard` | facade | one call to the registered `ICaptureGuard` |
 
-The facade instruments recall, judge and guard calls only. Remember, recording runs and feedback, and erase are instrumented by the store operations they call, and wrapping them again would count each twice. A judge call happens inside a remember or `RecordExecutionAsync`, before the store records the run, and is not a store operation, so it is counted on its own. A guard call happens inside a remember, after the capture is validated and before anything else touches it, and is counted on its own the same way. A recall's `mnemosyne.recall` activity is the parent of the `mnemosyne.search` activity the store emits for it.
+The facade instruments recall, judge and guard calls only. Remember, recording runs and feedback, erase, approve, reject and list pending are instrumented by the store operations they call, and wrapping them again would count each twice. A judge call happens inside a remember or `RecordExecutionAsync`, before the store records the run, and is not a store operation, so it is counted on its own. A guard call happens inside a remember, after the capture is validated and before anything else touches it, and is counted on its own the same way. A recall's `mnemosyne.recall` activity is the parent of the `mnemosyne.search` activity the store emits for it.
 
 ## Activities
 

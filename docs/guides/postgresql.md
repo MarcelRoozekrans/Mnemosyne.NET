@@ -123,7 +123,7 @@ Recount `runs` and `successes` of those rows up to at least the stored counts, t
 
 `0003` also records `min_binary_schema` in the `mnemosyne.settings` table, set to 3. A store whose schema is lower than that value answers `Unavailable`, with a message that says the binary is too old for the database, from `MigrateAsync` and from every other store method. The check exists only in releases from `0003` on, so a release built before `0003` is not refused: it still accepts schema 3. That is why the upgrade needs every old instance stopped first. From here on, a later migration can raise the setting to lock out the releases before it. A missing setting counts as 0.
 
-Migration `0004_review` supports the [review gate](data-lifecycle.md#the-review-gate). It adds a partial index, `reasonlets_pending` on `(scope, id) WHERE status = 2`, which keeps the pending list cheap however many active Reasonlets a scope holds. It sets `schema_version` to 4. It leaves `min_binary_schema` at 3, because a release from `0003` works against the extra index: it never reads it and never sets `PendingReview`. So `0004` does not need a full stop of old instances, though you should still migrate before you turn `RequireReview` on.
+Migration `0004_review` supports the [review gate](data-lifecycle.md#the-review-gate). It adds a partial index, `reasonlets_pending` on `(scope, id) WHERE status = 2`, which keeps the pending list cheap however many active Reasonlets a scope holds. It sets `schema_version` to 4. It leaves `min_binary_schema` at 3, because a release from `0003` works against the extra index: it never reads it and never sets `PendingReview`. So `0004` does not need a full stop of old instances, though you should still migrate before you turn `RequireReview` on. The index build reads the whole `reasonlets` table and holds a lock that makes remembers, approves, erases and prunes wait until it ends, so on a large table run it in a quiet period; appending executions and recording feedback carry on.
 
 ## Connections and privileges
 
@@ -167,6 +167,8 @@ Like the rest of Mnemosyne, the store answers expected failures with a result an
 | `Unavailable` | `08` connection errors, `53` insufficient resources, `57P` operator intervention, `57014` query cancelled or statement timeout, `25006` read-only transaction such as on a standby, or no SQLSTATE at all | The server can't serve now. Retry later. |
 
 Feedback on a run that a concurrent erase or prune removes while the feedback waits for it answers `NotFound`, not `Conflict`, the same as feedback on a run that never existed. The run is gone, so a retry can't succeed.
+
+A reject answers `Conflict` for a Reasonlet that is Active and for one that has versions below it. These two come from the Reasonlet's state, not from a database error: they carry no `Detail`, and a retry gives the same answer.
 
 Any other database error is a bug, and the exception propagates.
 

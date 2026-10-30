@@ -24,6 +24,8 @@ By default a capture is stored as `Active` and can be recalled at once. Set `Mne
 
 A pending Reasonlet is never returned by recall. Everything else works on it as on an active one: `GetAsync`, `RecordExecutionAsync` and `RecordFeedbackAsync`. Its runs count towards its own metrics, which the reviewer sees. Turning the gate on leaves existing `Active` Reasonlets active. Turning it off leaves pending ones pending until they are approved or rejected, and new captures are stored as `Active`.
 
+The gate keeps a new Reasonlet from being recalled before approval only while every instance that writes to the scope runs this release with `RequireReview` on. An instance that has the option off, such as an old one during a rolling upgrade, stores its captures as `Active`, and they are recalled at once.
+
 Three calls, identical on `IReasonletMemory` and on the store, make the review:
 
 ```csharp

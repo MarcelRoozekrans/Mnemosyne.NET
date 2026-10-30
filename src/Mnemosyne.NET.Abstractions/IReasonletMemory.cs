@@ -100,6 +100,7 @@ public interface IReasonletMemory
     /// so a retried approve is harmless. A Reasonlet that a concurrent reject deletes while the approve waits is not found.
     /// Error codes: <see cref="MnemosyneErrorCode.Validation"/> when an argument breaks an invariant, such as a <c>default</c> scope or ID,
     /// <see cref="MnemosyneErrorCode.NotFound"/> when the Reasonlet does not exist in the scope (including one that exists only in another scope),
+    /// <see cref="MnemosyneErrorCode.Conflict"/> when the write loses a race the store detects,
     /// <see cref="MnemosyneErrorCode.Unavailable"/> when the backing store fails.
     /// </remarks>
     /// <param name="scope">The scope of the Reasonlet.</param>
