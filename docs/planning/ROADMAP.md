@@ -134,12 +134,13 @@ Design: [roadmap design](../superpowers/specs/2026-10-21-roadmap-design.md), bui
 **Plan:** `docs/superpowers/plans/2026-10-30-phase-3.2-redaction-hook.md`
 **Completed:** 2026-10-30
 
-### Phase 3.3: Human review gate [status: active]
+### Phase 3.3: Human review gate [status: complete]
 **Goal:** Opt-in pending-review state for new Reasonlets and new versions, kept out of recall, with approve and reject.
 **Surface:** Backend
 **HelpWanted:** no
 **Design:** `docs/superpowers/specs/2026-10-30-phase-3.3-human-review-gate-design.md`
 **Plan:** `docs/superpowers/plans/2026-10-30-phase-3.3-human-review-gate.md`
+**Completed:** 2026-10-30
 
 ### Phase 3.4: AI.Sentinel adapter [status: pending]
 **Goal:** `Mnemosyne.NET.Sentinel`: AI.Sentinel's detectors as the default redaction hook.
