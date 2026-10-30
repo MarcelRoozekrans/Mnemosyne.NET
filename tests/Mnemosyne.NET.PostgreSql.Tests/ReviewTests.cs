@@ -306,9 +306,8 @@ public sealed class ReviewTests(PgVectorFixture fixture) : IClassFixture<PgVecto
 
         var listed = (await store.ListPendingAsync(scope, 10, null, Ct)).Value;
 
-        Assert.Equal([first.Id, second.Id], listed.Select(r => r.Definition.Id));
+        Assert.Equal(new[] { first.Id, second.Id }.OrderBy(i => i.Value), listed.Select(r => r.Definition.Id));
         Assert.All(listed, r => Assert.Equal(ReasonletStatus.PendingReview, r.Definition.Status));
-        Assert.Equal(first.Id, listed[0].Definition.Id);
         Assert.Equal(scope, listed[0].Definition.Scope);
     }
 

@@ -1040,7 +1040,6 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
         return true;
     }
 
-    /// <summary>Checks that the store is migrated and that an approve's or a reject's arguments are valid.</summary>
     /// <summary>Lists the Reasonlets that wait for review, oldest id first, each with its own execution metrics.</summary>
     /// <remarks>
     /// Returns up to <paramref name="limit"/> pending Reasonlets of the scope with an id above <paramref name="after"/>,
@@ -1115,6 +1114,7 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
         return reviews;
     }
 
+    /// <summary>Checks that the store is migrated and that an approve's or a reject's arguments are valid.</summary>
     private async ValueTask<MnemosyneError?> ValidateReviewAsync(ReasonletScope scope, ReasonletId id, CancellationToken ct)
     {
         var migrated = await EnsureMigratedAsync(ct).ConfigureAwait(false);
