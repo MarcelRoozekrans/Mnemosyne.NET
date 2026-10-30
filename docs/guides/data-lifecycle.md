@@ -176,7 +176,7 @@ The result counts the Reasonlets deleted, and every run deleted: the runs older 
 - **Used means executed or remembered, not recalled.** Recall is the hot path, and recording it would add a write to every search.
 - **Use is judged per lineage.** A Reasonlet is used when it, or any version below it, was remembered or last ran inside the window. A superseded version stays while a later version is in use, and a lineage goes only once its whole subtree is idle.
 - **Ancestors stay.** A Reasonlet with another branch below it that is in use is kept. Pruning never cuts a parent link: no kept version loses its parent.
-- **`PendingReview` Reasonlets** are judged like `Active` ones. A pending Reasonlet that nobody has run or reviewed for the window is idle, so retention deletes it, and an unreviewed backlog can quietly disappear. That is intended: unreviewed and unused is idle. Review the queue more often than the `ReasonletsUnusedFor` window.
+- **`PendingReview` Reasonlets** are judged like `Active` ones. A pending Reasonlet that nobody has run for the window is idle, so retention deletes it, and an unreviewed backlog can quietly disappear. That is intended: unreviewed and unused is idle. Approving does not count as use, because it updates the status and no timestamp, so an approved Reasonlet that nobody runs goes idle on the same clock. Review the queue more often than the `ReasonletsUnusedFor` window.
 - **A deleted Reasonlet takes its runs, feedback and metrics with it.** Its runs are counted in the result.
 
 ### How a prune runs
