@@ -109,7 +109,7 @@ if (migrated.IsFailure)
 
 The host runs the migrations; the store never runs them on its own. Call `MigrateAsync` once at startup. It is safe to call again, because applied migrations are skipped. It creates a `mnemosyne` schema, and on a fresh database it also creates the `vector` extension, which needs a superuser. The `postgres` user above is one.
 
-Mnemosyne reports expected failures as results rather than exceptions. Check a result's `IsSuccess` or `IsFailure`, then read its `Value` or its `Error`. An error has a `Code`, one of `Validation`, `NotFound`, `Conflict` and `Unavailable`, and a `Message`.
+Mnemosyne reports expected failures as results rather than exceptions. Check a result's `IsSuccess` or `IsFailure`, then read its `Value` or its `Error`. An error has a `Code`, one of `Validation`, `NotFound`, `Conflict`, `Unavailable` and `Blocked`, and a `Message`.
 
 ## 5. Remember a procedure
 

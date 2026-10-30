@@ -43,6 +43,20 @@ public sealed class MnemosyneOptions
     /// </remarks>
     public TimeSpan EvaluationTimeout { get; init; } = TimeSpan.FromSeconds(30);
 
+    /// <summary>
+    /// Gets how long the facade waits for an <see cref="ICaptureGuard"/> before it treats the guard as down.
+    /// Must be positive and at most 4,294,967,294 milliseconds, about 49.7 days, the longest delay a
+    /// <see cref="CancellationTokenSource"/> accepts, or <see cref="Timeout.InfiniteTimeSpan"/> to wait as long as the
+    /// caller's token allows. Defaults to 30 seconds.
+    /// </summary>
+    /// <remarks>
+    /// When the time is up, the facade cancels the token it passes the guard and stops waiting, even for a guard that
+    /// ignores the token. That call is abandoned: it may run on, but its outcome is discarded.
+    /// A guard that times out is down: the capture answers <c>Unavailable</c> and stores nothing, and the guard call's telemetry shows
+    /// outcome <c>Unavailable</c>. The caller's own cancellation still propagates.
+    /// </remarks>
+    public TimeSpan GuardTimeout { get; init; } = TimeSpan.FromSeconds(30);
+
     /// <summary>Gets the settings of the default selector. Must not be null and must be valid.</summary>
     public ReasonletRankingOptions Ranking { get; init; } = new();
 
@@ -51,9 +65,13 @@ public sealed class MnemosyneOptions
     public UnitResult<MnemosyneError> Validate() => Check.All(
         () => Check.Range(CandidatePool, 1, MaxCandidatePool, nameof(CandidatePool)),
         () => Check.UnitInterval(MinIntentConfidence, nameof(MinIntentConfidence)),
-        () => (EvaluationTimeout > TimeSpan.Zero && EvaluationTimeout <= MaxEvaluationTimeout) || EvaluationTimeout == Timeout.InfiniteTimeSpan
-            ? UnitResult<MnemosyneError>.Success()
-            : Check.Fail(nameof(EvaluationTimeout), "must be positive and at most 4294967294 milliseconds, or Timeout.InfiniteTimeSpan"),
+        () => CheckTimeout(EvaluationTimeout, nameof(EvaluationTimeout)),
+        () => CheckTimeout(GuardTimeout, nameof(GuardTimeout)),
         () => Check.NotNull(Ranking, nameof(Ranking)),
         () => Check.Nested(Ranking.Validate(), nameof(Ranking)));
+
+    private static UnitResult<MnemosyneError> CheckTimeout(TimeSpan timeout, string path) =>
+        (timeout > TimeSpan.Zero && timeout <= MaxEvaluationTimeout) || timeout == Timeout.InfiniteTimeSpan
+            ? UnitResult<MnemosyneError>.Success()
+            : Check.Fail(path, "must be positive and at most 4294967294 milliseconds, or Timeout.InfiniteTimeSpan");
 }

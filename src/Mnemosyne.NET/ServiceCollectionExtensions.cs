@@ -16,11 +16,13 @@ public static class ServiceCollectionExtensions
     /// <remarks>
     /// The host registers an <see cref="IReasonletStore"/>, for example with <c>AddMnemosynePostgreSql</c>, and an
     /// <see cref="IEmbeddingGenerator{TInput, TEmbedding}"/> of <see cref="string"/> to <see cref="Embedding{T}"/> of
-    /// <see cref="float"/>. An <see cref="IIntentExtractor"/> and an <see cref="IReasonletEvaluator"/> are
-    /// optional and used when registered. Without an evaluator, the agent's own outcome counts for every run.
-    /// The facade times <see cref="MnemosyneOptions.EvaluationTimeout"/> on the registered <see cref="TimeProvider"/>.
-    /// The facade is a singleton that captures what it resolves, so register the store, the generator, the extractor and
-    /// the evaluator as singletons. A scoped registration fails scope validation when the facade is resolved.
+    /// <see cref="float"/>. An <see cref="IIntentExtractor"/>, an <see cref="IReasonletEvaluator"/> and an
+    /// <see cref="ICaptureGuard"/> are optional and used when registered. Without an evaluator, the agent's own outcome
+    /// counts for every run. Without a guard, every capture is remembered unchecked.
+    /// The facade times <see cref="MnemosyneOptions.EvaluationTimeout"/> and <see cref="MnemosyneOptions.GuardTimeout"/>
+    /// on the registered <see cref="TimeProvider"/>.
+    /// The facade is a singleton that captures what it resolves, so register the store, the generator, the extractor, the
+    /// evaluator and the guard as singletons. A scoped registration fails scope validation when the facade is resolved.
     /// </remarks>
     /// <param name="services">The service collection.</param>
     /// <param name="options">
@@ -53,7 +55,8 @@ public static class ServiceCollectionExtensions
             provider.GetService<IIntentExtractor>(),
             provider.GetService<IReasonletEvaluator>(),
             provider.GetRequiredService<MnemosyneOptions>(),
-            provider.GetRequiredService<TimeProvider>()));
+            provider.GetRequiredService<TimeProvider>(),
+            provider.GetService<ICaptureGuard>()));
         return services;
     }
 

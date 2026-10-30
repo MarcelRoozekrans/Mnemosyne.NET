@@ -13,7 +13,8 @@ public class EnumNumberingTests
         Assert.Equal(2, (int)MnemosyneErrorCode.NotFound);
         Assert.Equal(3, (int)MnemosyneErrorCode.Conflict);
         Assert.Equal(4, (int)MnemosyneErrorCode.Unavailable);
-        Assert.Equal(4, Enum.GetValues<MnemosyneErrorCode>().Length);
+        Assert.Equal(5, (int)MnemosyneErrorCode.Blocked);
+        Assert.Equal(5, Enum.GetValues<MnemosyneErrorCode>().Length);
     }
 
     [Fact]

@@ -67,6 +67,14 @@ if (empty.IsSuccess || empty.Error != TranscriptSkipReason.NoToolCalls)
     return 5;
 }
 
+// A capture guard as a host wires it: registered in the container ahead of AddMnemosyne, resolved under native AOT. The
+// store here fails the smoke on any call, so a Blocked answer also proves the guard ran before anything was stored.
+var guarded = await GuardSmoke(read.Value);
+if (guarded != 0)
+{
+    return guarded;
+}
+
 // The PostgreSQL half needs PostgreSQL 15 or later with pgvector 0.8.0 or later; CI starts one and sets
 // MNEMOSYNE_AOT_PG. A slim data source has no reflection-based type mapping, so EnableArrays() is what lets the
 // float[] embedding and the Guid[] parameters and columns work under native AOT. Each run works in a scope of its own
@@ -415,6 +423,70 @@ static async Task<int> FacadeSmoke(NpgsqlDataSource dataSource, ReasonletGraph g
         return 26;
     }
 
+    // A second facade over the same store with a guard that blocks the question: Blocked, and no row in the scope.
+    var guardedServices = new ServiceCollection();
+    guardedServices.AddSingleton(dataSource);
+    guardedServices.AddSingleton<IEmbeddingGenerator<string, Embedding<float>>>(new FixedEmbeddingGenerator());
+    guardedServices.AddSingleton<ICaptureGuard>(new BlockingGuard());
+    guardedServices.AddMnemosynePostgreSql(new MnemosynePostgreSqlOptions { Dimensions = 3 });
+    guardedServices.AddMnemosyne();
+    await using var guardedProvider = guardedServices.BuildServiceProvider();
+    var guardedMemory = guardedProvider.GetRequiredService<IReasonletMemory>();
+    var guardedScope = new ReasonletScope($"aot-guard-{Guid.NewGuid():N}");
+    var blocked = await guardedMemory.RememberAsync(
+        new ReasonletCapture
+        {
+            Scope = guardedScope,
+            Question = question,
+            Graph = graph,
+            Outcome = new ReasonletOutcome(true, TimeSpan.FromMilliseconds(5), null),
+            Provenance = new ReasonletProvenance { Source = "aot-smoke" },
+        },
+        ct);
+    if (blocked.IsSuccess || blocked.Error.Code != MnemosyneErrorCode.Blocked)
+    {
+        Console.Error.WriteLine($"A guarded remember was not blocked: {(blocked.IsFailure ? blocked.Error.Code.ToString() : blocked.Value.ToString())}");
+        return 40;
+    }
+
+    var left = await guardedMemory.EraseAsync(new ReasonletErasure(guardedScope, null), ct);
+    if (left.IsFailure || left.Value.Reasonlets != 0 || left.Value.Executions != 0)
+    {
+        Console.Error.WriteLine($"A blocked capture left rows behind: {(left.IsFailure ? left.Error.Message : $"{left.Value.Reasonlets} Reasonlets, {left.Value.Executions} executions")}");
+        return 41;
+    }
+
+    return 0;
+}
+
+// The guard without a database: AddMnemosyne resolves the registered guard, and a capture it blocks answers Blocked
+// before the embedding generator or the store is touched. Both stubs throw, so reaching either one fails the smoke.
+static async Task<int> GuardSmoke(ReasonletGraph graph)
+{
+    var services = new ServiceCollection();
+    services.AddSingleton<IReasonletStore>(new UnreachableStore());
+    services.AddSingleton<IEmbeddingGenerator<string, Embedding<float>>>(new UnreachableEmbeddingGenerator());
+    services.AddSingleton<ICaptureGuard>(new BlockingGuard());
+    services.AddMnemosyne();
+    await using var provider = services.BuildServiceProvider();
+
+    var memory = provider.GetRequiredService<IReasonletMemory>();
+    var blocked = await memory.RememberAsync(
+        new ReasonletCapture
+        {
+            Scope = new ReasonletScope("aot-guard"),
+            Question = "How do I search past the guard?",
+            Graph = graph,
+            Outcome = new ReasonletOutcome(true, TimeSpan.FromMilliseconds(5), null),
+            Provenance = new ReasonletProvenance { Source = "aot-smoke" },
+        },
+        CancellationToken.None);
+    if (blocked.IsSuccess || blocked.Error.Code != MnemosyneErrorCode.Blocked || blocked.Error.Detail != "aot-guard/blocks-all")
+    {
+        Console.Error.WriteLine($"The capture guard did not block: {(blocked.IsFailure ? $"{blocked.Error.Code} {blocked.Error.Detail}" : blocked.Value.ToString())}");
+        return 6;
+    }
+
     return 0;
 }
 
@@ -568,6 +640,47 @@ static async Task<(bool Agent, bool? Evaluated, string? Evaluator, double? Score
         reader.IsDBNull(3) ? null : reader.GetDouble(3),
         reader.IsDBNull(4) ? null : reader.GetBoolean(4),
         reader.GetBoolean(5));
+}
+
+/// <summary>A capture guard that blocks every capture.</summary>
+internal sealed class BlockingGuard : ICaptureGuard
+{
+    public ValueTask<Result<CaptureVerdict, MnemosyneError>> InspectAsync(ReasonletCapture capture, CancellationToken ct) =>
+        ValueTask.FromResult<Result<CaptureVerdict, MnemosyneError>>(CaptureVerdict.Block("aot-guard", "blocks-all"));
+}
+
+/// <summary>A store that throws on every call, for a path that must stop before the store.</summary>
+internal sealed class UnreachableStore : IReasonletStore
+{
+    public int Dimensions => 3;
+
+    public ValueTask<Result<ReasonletReceipt, MnemosyneError>> RememberAsync(ReasonletStoreEntry entry, CancellationToken ct) => throw new InvalidOperationException();
+
+    public ValueTask<Result<ReasonletDefinition, MnemosyneError>> GetAsync(ReasonletScope scope, ReasonletId id, CancellationToken ct) => throw new InvalidOperationException();
+
+    public ValueTask<Result<ReasonletRunReceipt, MnemosyneError>> AppendExecutionAsync(ReasonletScope scope, ReasonletId id, ReasonletOutcome outcome, ReasonletProvenance provenance, ReasonletEvaluation? evaluation, CancellationToken ct) => throw new InvalidOperationException();
+
+    public ValueTask<UnitResult<MnemosyneError>> AppendFeedbackAsync(ReasonletScope scope, ExecutionId execution, ReasonletFeedback feedback, CancellationToken ct) => throw new InvalidOperationException();
+
+    public ValueTask<Result<IReadOnlyList<ReasonletCandidate>, MnemosyneError>> SearchAsync(ReasonletScope scope, ReadOnlyMemory<float> embedding, string? intent, int limit, CancellationToken ct) => throw new InvalidOperationException();
+
+    public ValueTask<Result<ReasonletErasureResult, MnemosyneError>> EraseAsync(ReasonletErasure erasure, CancellationToken ct) => throw new InvalidOperationException();
+
+    public ValueTask<Result<ReasonletPruneResult, MnemosyneError>> PruneAsync(ReasonletRetention retention, CancellationToken ct) => throw new InvalidOperationException();
+}
+
+/// <summary>An embedding generator that throws, for a path that must stop before the embedding.</summary>
+internal sealed class UnreachableEmbeddingGenerator : IEmbeddingGenerator<string, Embedding<float>>
+{
+    public Task<GeneratedEmbeddings<Embedding<float>>> GenerateAsync(
+        IEnumerable<string> values, EmbeddingGenerationOptions? options = null, CancellationToken cancellationToken = default) =>
+        throw new InvalidOperationException();
+
+    public object? GetService(Type serviceType, object? serviceKey = null) => null;
+
+    public void Dispose()
+    {
+    }
 }
 
 /// <summary>An evaluator that judges every run a success with a score of 0.75.</summary>

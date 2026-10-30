@@ -1221,6 +1221,21 @@ public sealed class ReasonletMemoryTests
         Assert.Contains(TimeSpan.FromSeconds(30), clock.DueTimes);
     }
 
+    [Theory]
+    [MemberData(nameof(Paths))]
+    public async Task APreCancelledTokenThrowsEvenForAJudgeThatAnswersAtOnce(string path)
+    {
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
+        var evaluator = new FakeEvaluator();
+        var memory = Memory(evaluator: evaluator, clock: new ManualTimeProvider());
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await SourceThroughAsync(memory, path, cts.Token));
+
+        Assert.False(Stored(path));
+        Assert.Empty(evaluator.Requests);
+    }
+
     /// <summary>Records a run, or remembers a capture, with the answer sentinel, and returns the receipt's verdict source.</summary>
     private static async Task<ReasonletVerdictSource> SourceThroughAsync(ReasonletMemory memory, string path, CancellationToken ct) =>
         path == "record"

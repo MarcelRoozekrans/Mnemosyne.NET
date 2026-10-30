@@ -3,22 +3,25 @@
 **Date:** 2026-10-30
 
 ## Current Position
-- **Milestone:** 3 — Off-the-shelf integrations, active since 2026-10-30. Design: `docs/superpowers/specs/2026-10-30-milestone-3-design.md`. Milestone 2 is archived in `docs/planning/milestones/milestone-2.md`.
-- **Phase:** 3.1 — Capture, complete on branch `feat/phase-3.1-capture`. The branch's PR has not merged yet. Phase 3.2 — Redaction hook is the next pending phase.
-- **Last completed task:** phase 3.1. It added `ReasonletTranscript.ToGraph` and `ToCapture`, `TranscriptCaptureDetails` and `TranscriptSkipReason`, with unit tests, a PostgreSQL round trip through the facade and an AOT smoke check with a pinned hash.
-- **Next task:** merge the phase 3.1 PR, then start phase 3.2.
+- **Milestone:** 3 — Off-the-shelf integrations, active since 2026-10-30. Design: `docs/superpowers/specs/2026-10-30-milestone-3-design.md`.
+- **Phase:** 3.2 — Redaction hook, complete on branch `feat/phase-3.2-redaction-hook`. Its PR is #27. CI is green, and both codecov checks pass. The PR is waiting for Marcel's merge. Phase 3.3 — Human review gate is the next pending phase.
+- **Last completed task:** phase 3.2. It added:
+  - `ICaptureGuard` and `CaptureVerdict`;
+  - `MnemosyneErrorCode.Blocked = 5`;
+  - `MnemosyneOptions.GuardTimeout`;
+  - the guard call first in `RememberAsync`, which fails closed as `Unavailable`;
+  - `GuardTelemetry`, the `AddMnemosyne` registration, the docs, a PostgreSQL round trip and an AOT smoke.
+
+  The judge and the guard now share `ReasonletMemory.CallTimedAsync<T>`. The pre-push review report is `docs/superpowers/reviews/2026-10-30-phase-3.2-pre-push-review.md`, with verdict PASS.
+- **Next task:** merge PR #27, then start phase 3.3.
 
 ## Open Decisions
-- None. Phase 3.1 settled the captured shape:
-  - tool steps under `mnemosyne.arguments`;
-  - call/result pairing by position;
-  - a retry takes the failed call's place;
-  - parallel calls are sorted, and consecutive repeats collapse.
-
-  The pinned hash in `tests/Mnemosyne.NET.AotSmoke/Program.cs` is now a contract.
+- None blocking. Rulings from the phase 3.2 run that Marcel may want to revisit:
+  - A pre-cancelled remember emits the `mnemosyne.guard` activity with outcome `exception`, the same as an in-flight cancellation. Moving the token check ahead of `GuardTelemetry.Start()` would silence it.
+  - `ReasonletMemory.Abandon` takes `Task?` rather than a generic task, so the existing `Abandon(null)` test still compiles.
 
 ## Blockers
-- Merge the `feat/phase-3.1-capture` PR first, so phase 3.2 starts from a `main` that has the builder.
+- Merge PR #27 first, so phase 3.3 starts from a `main` that has the guard.
 
 ## Recommended Next Step
-After the PR merges, cut `feat/phase-3.2-redaction-hook` from `main` and run `start-next-phase`. It routes to brainstorming at phase scope, because phase 3.2 has no design spec. The hook sits between `ReasonletTranscript.ToCapture` and `RememberAsync`, and sees the question, the answer, the intent and the name.
+After PR #27 merges, cut `feat/phase-3.3-human-review-gate` from `main` and run `start-next-phase`. It routes to brainstorming at phase scope, because phase 3.3 has no design spec. The milestone design says the review gate applies to captures the guard allowed.

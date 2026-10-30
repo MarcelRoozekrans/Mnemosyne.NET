@@ -21,6 +21,9 @@ public enum MnemosyneErrorCode
     /// <summary>The write lost a race the store detected, such as the parent being erased between lookup and insert.</summary>
     Conflict = 3,
 
-    /// <summary>A backing dependency (store, embedding generator, intent extractor or selector) failed.</summary>
+    /// <summary>A backing dependency (store, embedding generator, intent extractor, selector or capture guard) failed.</summary>
     Unavailable = 4,
+
+    /// <summary>A capture guard blocked the capture; nothing was stored.</summary>
+    Blocked = 5,
 }
