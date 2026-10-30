@@ -943,13 +943,20 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
         return result.IsSuccess ? UnitResult<MnemosyneError>.Success() : result.Error;
     }
 
-    // One statement sets the status to Active, so an approve needs no transaction. It waits for the row lock of a
-    // concurrent reject, and when that reject deletes the row it finds nothing and answers NotFound.
+    // One statement sets a pending Reasonlet to Active, so an approve needs no transaction. It waits for the row lock of
+    // a concurrent reject, and when that reject deletes the row it finds nothing. It skips a Reasonlet that is already
+    // Active, so a repeated approve writes no new row version; a lookup then tells that case from a missing Reasonlet,
+    // and answers NotFound only for the latter.
     private async Task<Result<bool, MnemosyneError>> ApproveCoreAsync(ReasonletScope scope, ReasonletId id, CancellationToken ct)
     {
         await using var connection = (await _dataSource.OpenConnectionAsync(ct).ConfigureAwait(false)).AsAsync();
-        var approved = await new ReasonletRepository(connection).ApproveAsync(scope.Value, id.Value, ct).ConfigureAwait(false);
-        return approved is null ? ReasonletNotFound() : true;
+        var reasonlets = new ReasonletRepository(connection);
+        if (await reasonlets.ApproveAsync(scope.Value, id.Value, ct).ConfigureAwait(false) is not null)
+        {
+            return true;
+        }
+
+        return await reasonlets.ExistsAsync(scope.Value, id.Value, ct).ConfigureAwait(false) is null ? ReasonletNotFound() : true;
     }
 
     /// <inheritdoc />

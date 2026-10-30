@@ -223,9 +223,16 @@ internal sealed partial class ReasonletRepository(IAsyncDbConnection connection)
         """)]
     public partial Task<List<PendingRow>> ListPendingAsync(string scope, Guid? after, int limit, CancellationToken ct);
 
-    /// <summary>Sets a Reasonlet of the scope to Active, and answers its id, or null when it is not in the scope.</summary>
-    [Query("UPDATE mnemosyne.reasonlets SET status = 1 WHERE scope = @scope AND id = @id RETURNING id")]
+    /// <summary>
+    /// Sets a pending Reasonlet of the scope to Active, and answers its id, or null when no pending Reasonlet of that id is
+    /// in the scope. An Active one is left alone, so an approve that repeats writes no new row version.
+    /// </summary>
+    [Query("UPDATE mnemosyne.reasonlets SET status = 1 WHERE scope = @scope AND id = @id AND status = 2 RETURNING id")]
     public partial Task<Guid?> ApproveAsync(string scope, Guid id, CancellationToken ct);
+
+    /// <summary>Answers 1 when a Reasonlet with the id is in the scope, whatever its status, and null when not.</summary>
+    [Query("SELECT 1 FROM mnemosyne.reasonlets WHERE scope = @scope AND id = @id")]
+    public partial Task<int?> ExistsAsync(string scope, Guid id, CancellationToken ct);
 
     /// <summary>
     /// Locks a Reasonlet in its scope <c>FOR UPDATE</c> until the transaction ends, and answers null when it is not in
