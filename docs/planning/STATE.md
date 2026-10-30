@@ -4,24 +4,34 @@
 
 ## Current Position
 - **Milestone:** 3 — Off-the-shelf integrations, active since 2026-10-30. Design: `docs/superpowers/specs/2026-10-30-milestone-3-design.md`.
-- **Phase:** 3.2 — Redaction hook, complete on branch `feat/phase-3.2-redaction-hook`. Its PR is #27. CI is green, and both codecov checks pass. The PR is waiting for Marcel's merge. Phase 3.3 — Human review gate is the next pending phase.
-- **Last completed task:** phase 3.2. It added:
-  - `ICaptureGuard` and `CaptureVerdict`;
-  - `MnemosyneErrorCode.Blocked = 5`;
-  - `MnemosyneOptions.GuardTimeout`;
-  - the guard call first in `RememberAsync`, which fails closed as `Unavailable`;
-  - `GuardTelemetry`, the `AddMnemosyne` registration, the docs, a PostgreSQL round trip and an AOT smoke.
+- **Phase:** 3.3 — Human review gate, active on branch `feat/phase-3.3-human-review-gate`. PR #27 for phase 3.2 has merged, and 0.3.0 was released in #26.
+- **Design:** `docs/superpowers/specs/2026-10-30-phase-3.3-human-review-gate-design.md`. Marcel approved it.
+- **Plan:** `docs/superpowers/plans/2026-10-30-phase-3.3-human-review-gate.md`, with seven tasks. Marcel reviewed it and chose **subagent-driven** execution. No task is started; all checkboxes are open.
+- **Last completed task:** the design and the plan for phase 3.3.
+- **Next task:** Task 1 of the plan, the review types and the option.
 
-  The judge and the guard now share `ReasonletMemory.CallTimedAsync<T>`. The pre-push review report is `docs/superpowers/reviews/2026-10-30-phase-3.2-pre-push-review.md`, with verdict PASS.
-- **Next task:** merge PR #27, then start phase 3.3.
+## Decisions made in the phase 3.3 brainstorm
+- Reject deletes a pending Reasonlet. There is no `Rejected` status.
+- Reviewers find pending items through a facade list call. There is no telemetry event per pending capture.
+- Approve, reject and list go on the existing `IReasonletStore` and `IReasonletMemory`, not on separate review interfaces.
+- The list returns `ReasonletReview(Definition, Metrics)`, so a reviewer sees a Reasonlet's track record.
+- The design marks my other calls as **my call**. Marcel saw them listed before approving.
 
 ## Open Decisions
 - None blocking. Rulings from the phase 3.2 run that Marcel may want to revisit:
-  - A pre-cancelled remember emits the `mnemosyne.guard` activity with outcome `exception`, the same as an in-flight cancellation. Moving the token check ahead of `GuardTelemetry.Start()` would silence it.
-  - `ReasonletMemory.Abandon` takes `Task?` rather than a generic task, so the existing `Abandon(null)` test still compiles.
+  - A pre-cancelled remember emits the `mnemosyne.guard` activity with outcome `exception`.
+  - `ReasonletMemory.Abandon` takes `Task?` rather than a generic task.
 
 ## Blockers
-- Merge PR #27 first, so phase 3.3 starts from a `main` that has the guard.
+- None.
+
+## Notes
+- The branch is one commit behind `main`, which has the 0.3.0 release commit. Rebase it before opening the PR.
+- Git trap: `push.default` is `upstream`. Create feature branches with `--no-track`, or push with an explicit `branch:branch` refspec. Otherwise a push targets `main`.
 
 ## Recommended Next Step
-After PR #27 merges, cut `feat/phase-3.3-human-review-gate` from `main` and run `start-next-phase`. It routes to brainstorming at phase scope, because phase 3.3 has no design spec. The milestone design says the review gate applies to captures the guard allowed.
+Resume on `feat/phase-3.3-human-review-gate`. Run `start-next-phase`, which routes to `list-phase-assumptions`. The plan is already approved, so present the assumptions briefly and continue, then execute the plan with `superpowers:subagent-driven-development`. Task 3 is marked to run on Opus. After the last task:
+- run `pre-push-review`;
+- open the PR;
+- wait for CI and both codecov checks;
+- run `complete-phase`.
