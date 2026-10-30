@@ -5,12 +5,69 @@ sidebar_position: 2
 
 # Data lifecycle
 
-Stored procedures don't live forever. A tenant leaves, a person asks to have their data erased, or procedures stop being used and only take up space. Mnemosyne has two tools for this:
+Stored procedures don't live forever. A tenant leaves, a person asks to have their data erased, or procedures stop being used and only take up space. Mnemosyne has two tools for this, and a review gate that decides what enters in the first place:
 
 - **Erasure** removes data on request: everything in a scope, or everything about one subject in a scope. It is `EraseAsync`, on `IReasonletMemory` and on the store.
 - **Retention** removes data that is old or unused, on a schedule. It is `PruneAsync`, on the store only.
 
 [Scopes and subjects](../concepts/scopes-and-subjects.md) explains what scopes and subjects are. This page covers what each tool removes, what it keeps, and how it behaves alongside other writes.
+
+## The review gate
+
+By default a capture is stored as `Active` and can be recalled at once. Set `MnemosyneOptions.RequireReview` and a person signs off first. With the gate on:
+
+| Capture | Stored as | Receipt status |
+|---|---|---|
+| No `ParentId` | a new Reasonlet, `PendingReview` | `PendingReview` |
+| `ParentId` and the same graph as the parent | a run on the parent; the parent's status is unchanged | the parent's status |
+| `ParentId` and a different graph | a new version, `PendingReview`, whatever the parent's status | `PendingReview` |
+
+A pending Reasonlet is never returned by recall. Everything else works on it as on an active one: `GetAsync`, `RecordExecutionAsync` and `RecordFeedbackAsync`. Its runs count towards its own metrics, which the reviewer sees. Turning the gate on leaves existing `Active` Reasonlets active. Turning it off leaves pending ones pending until they are approved or rejected, and new captures are stored as `Active`.
+
+Three calls, identical on `IReasonletMemory` and on the store, make the review:
+
+```csharp
+using Mnemosyne.NET.Abstractions;
+
+var pending = await memory.ListPendingAsync(scope, limit: 20, after: null, ct);
+if (pending.IsSuccess)
+{
+    foreach (var review in pending.Value)
+    {
+        // review.Definition holds the name, intent, version, graph, provenance, parent and creation time.
+        // review.Metrics holds runs, successes, judged runs, judged successes and the last run.
+        Console.WriteLine($"{review.Definition.Name} {review.Definition.Version}: {review.Metrics.Runs} runs");
+    }
+}
+
+var approved = await memory.ApproveAsync(scope, id, ct);
+var rejected = await memory.RejectAsync(scope, otherId, ct);
+```
+
+### Listing what is pending
+
+`ListPendingAsync` returns up to `limit` pending Reasonlets in the scope, ordered by id, each as a `ReasonletReview`: the definition and the Reasonlet's own metrics. A Reasonlet without a metrics row gets zero counts. The embedding is not returned. An empty list is a success.
+
+- **`limit` is from 1 to 100.** Anything else answers `Validation`.
+- **`after` is the last id of the previous page.** Null starts at the beginning. A `default` id answers `Validation`.
+- **It is a work queue, not a feed.** Ids are version 7 GUIDs, made by the client, so they follow creation order but are not strictly monotonic across nodes or within one millisecond. A Reasonlet stored while a reviewer pages can land behind the cursor, and that pass misses it. A review screen polls from `null` again to see new items.
+
+### Approving
+
+`ApproveAsync` makes a pending Reasonlet `Active`, so it is recallable from the next query. Approving an `Active` Reasonlet succeeds and changes nothing, so a retried approve is harmless. A version can be approved while its parent is still pending. A `default` scope or id answers `Validation`, an id that is not in the scope answers `NotFound`, and a store that fails answers `Unavailable`.
+
+### Rejecting
+
+`RejectAsync` deletes a pending Reasonlet, with its runs, their feedback and its metrics, the way an erase deletes a leaf. Nothing is kept: a rejected procedure is gone, not hidden. It answers `Conflict` in two cases, and the message says which, without quoting content:
+
+- **The Reasonlet is `Active`.** Removing a live procedure is erase's job, and a reject that races an approve must not delete what the other reviewer just approved.
+- **The Reasonlet has versions below it.** Deleting it would orphan them silently, and one of them may be approved. Approve or reject the versions first.
+
+`NotFound`, `Validation` and `Unavailable` are as for approve. A reject takes the Reasonlet's row lock before it checks. A remember that adds a version below it at the same moment is serialized with it: whichever runs second sees the other, so the reject answers `Conflict` or the remember answers `NotFound`, never an orphan. A deadlock answers `Conflict` too; retry it.
+
+Rejecting the highest version of a lineage frees its version label, so the next new version can reuse it, as after an erase. Ids are never reused.
+
+No reviewer identity or comment is stored or emitted. Keep that in your own audit trail.
 
 ## Erasure
 
@@ -119,7 +176,7 @@ The result counts the Reasonlets deleted, and every run deleted: the runs older 
 - **Used means executed or remembered, not recalled.** Recall is the hot path, and recording it would add a write to every search.
 - **Use is judged per lineage.** A Reasonlet is used when it, or any version below it, was remembered or last ran inside the window. A superseded version stays while a later version is in use, and a lineage goes only once its whole subtree is idle.
 - **Ancestors stay.** A Reasonlet with another branch below it that is in use is kept. Pruning never cuts a parent link: no kept version loses its parent.
-- **`PendingReview` Reasonlets** are judged like `Active` ones.
+- **`PendingReview` Reasonlets** are judged like `Active` ones. A pending Reasonlet that nobody has run or reviewed for the window is idle, so retention deletes it, and an unreviewed backlog can quietly disappear. That is intended: unreviewed and unused is idle. Review the queue more often than the `ReasonletsUnusedFor` window.
 - **A deleted Reasonlet takes its runs, feedback and metrics with it.** Its runs are counted in the result.
 
 ### How a prune runs

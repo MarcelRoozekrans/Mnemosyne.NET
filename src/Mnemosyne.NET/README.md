@@ -123,6 +123,34 @@ A blocked capture is not stored. The remember fails with the error code `Blocked
 
 An AI.Sentinel adapter for the guard arrives in a later package.
 
+## Human review gate
+
+Set `MnemosyneOptions.RequireReview` and a new Reasonlet, or a new version of one, is stored as `PendingReview` instead of `Active`. A pending Reasonlet is never recalled, and the receipt of the remember says `PendingReview`. A capture that records only a run, with the same graph as its parent, changes nothing about the parent's status. The option is off by default, and with it off nothing changes.
+
+A reviewer works through three calls on `IReasonletMemory`, so a review screen needs no access to the store:
+
+```csharp
+services.AddMnemosyne(new MnemosyneOptions { RequireReview = true });
+
+// A review screen starts from the beginning each time: ids are creation order, and a Reasonlet stored while
+// a reviewer pages can land behind the cursor.
+var pending = await memory.ListPendingAsync(scope, limit: 20, after: null, ct);
+if (pending.IsSuccess)
+{
+    foreach (var review in pending.Value)
+    {
+        // The definition to judge, and the Reasonlet's own track record.
+        Console.WriteLine($"{review.Definition.Name}: {review.Metrics.Runs} runs, {review.Metrics.Successes} successes");
+    }
+}
+
+// Approve makes it recallable from the next query. Reject deletes it, with its runs and feedback.
+var approved = await memory.ApproveAsync(scope, id, ct);
+var rejected = await memory.RejectAsync(scope, otherId, ct);
+```
+
+`limit` is from 1 to 100, and `after` is the last id of the previous page. Approving an `Active` Reasonlet succeeds and changes nothing. Rejecting an `Active` Reasonlet, or one that has versions below it, answers `Conflict`; approve or reject those versions first. A Reasonlet that is not in the scope answers `NotFound`. See [Data lifecycle](https://marcelroozekrans.github.io/Mnemosyne.NET/guides/data-lifecycle#the-review-gate) for the details.
+
 ## Documentation
 
 - [Getting started](https://marcelroozekrans.github.io/Mnemosyne.NET/getting-started): a complete console app, and what `AddMnemosyne` registers.
@@ -131,6 +159,7 @@ An AI.Sentinel adapter for the guard arrives in a later package.
 - [Versions and lineage](https://marcelroozekrans.github.io/Mnemosyne.NET/concepts/versions): how a capture becomes a new Reasonlet, a new version or a run.
 - [Judging runs with Minos](https://marcelroozekrans.github.io/Mnemosyne.NET/guides/minos-evaluator): a ready-made evaluator, its threshold, failures and privacy.
 - [Judging runs with a chat model](https://marcelroozekrans.github.io/Mnemosyne.NET/guides/chat-evaluator): an evaluator for any chat client, its criteria, reply format and failures.
+- [Data lifecycle](https://marcelroozekrans.github.io/Mnemosyne.NET/guides/data-lifecycle): the review gate, erasure and retention.
 - [Telemetry](https://marcelroozekrans.github.io/Mnemosyne.NET/guides/telemetry): the recall, evaluate and guard activities and metrics, alongside the store's.
 
 See the [repository README](https://github.com/MarcelRoozekrans/Mnemosyne.NET#readme).

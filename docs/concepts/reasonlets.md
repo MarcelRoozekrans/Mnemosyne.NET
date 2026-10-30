@@ -101,9 +101,9 @@ Mnemosyne keeps a running count of runs and successes for each Reasonlet, and th
 A Reasonlet is either `Active` or `PendingReview`.
 
 - **`Active`** Reasonlets take part in recall.
-- **`PendingReview`** Reasonlets are stored but never returned by recall. The status is there for a review step, where a person approves a captured procedure before agents may use it.
+- **`PendingReview`** Reasonlets are stored but never returned by recall. The status is for a review step, where a person approves a captured procedure before agents may use it.
 
-Nothing sets `PendingReview` today: every capture is stored as `Active`, and the receipt reports the status.
+By default every capture is stored as `Active`, and the receipt reports the status. With `MnemosyneOptions.RequireReview` on, a new Reasonlet and a new version are stored as `PendingReview`, and a reviewer lists, approves or rejects them with `ListPendingAsync`, `ApproveAsync` and `RejectAsync`. A run recorded against a Reasonlet never changes its status. [The review gate](../guides/data-lifecycle.md#the-review-gate) has the details.
 
 ## What recall returns
 
