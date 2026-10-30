@@ -25,7 +25,7 @@ See the [milestone design](../superpowers/specs/2026-10-30-milestone-3-design.md
 - [ ] Docs and samples cover every integration
 
 ## Phases
-1. Phase 3.1 — Capture [pending]
+1. Phase 3.1 — Capture [active]
 2. Phase 3.2 — Redaction hook [pending]
 3. Phase 3.3 — Human review gate [pending]
 4. Phase 3.4 — AI.Sentinel adapter [pending]
