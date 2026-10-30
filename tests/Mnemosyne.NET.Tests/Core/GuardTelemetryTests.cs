@@ -48,7 +48,9 @@ public sealed class GuardTelemetryTests
         var guard = new FakeCaptureGuard { Respond = () => CaptureVerdict.Block("g", "pii.email") };
         using var capture = new TelemetryCapture();
 
-        Assert.True((await Memory(guard).RememberAsync(TestData.Capture(), Ct)).IsFailure);
+        var result = await Memory(guard).RememberAsync(TestData.Capture(), Ct);
+        Assert.True(result.IsFailure);
+        Assert.Equal(MnemosyneErrorCode.Blocked, result.Error.Code);
 
         var activity = Single(capture);
         Assert.Equal(
@@ -111,6 +113,7 @@ public sealed class GuardTelemetryTests
         var activity = Single(capture);
         Assert.Equal(ActivityStatusCode.Error, activity.Status);
         Assert.Equal([new("error.type", "Unavailable")], AllTags(activity));
+        Assert.Empty(activity.Events);
         AssertMeasurements(capture, "Unavailable", "Unavailable", guard: null);
     }
 
