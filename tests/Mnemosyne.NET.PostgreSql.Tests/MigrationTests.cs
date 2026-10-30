@@ -594,6 +594,9 @@ public sealed class MigrationTests(PgVectorFixture fixture) : IClassFixture<PgVe
         AssertTooOld((await store.SearchAsync(scope, new float[] { 1, 0, 0 }, null, 10, Ct)).Error);
         AssertTooOld((await store.EraseAsync(new ReasonletErasure(scope, null), Ct)).Error);
         AssertTooOld((await store.PruneAsync(new ReasonletRetention { Scope = scope, ExecutionsOlderThan = TimeSpan.FromDays(1) }, Ct)).Error);
+        AssertTooOld((await store.ApproveAsync(scope, ReasonletId.New(), Ct)).Error);
+        AssertTooOld((await store.RejectAsync(scope, ReasonletId.New(), Ct)).Error);
+        AssertTooOld((await store.ListPendingAsync(scope, 10, null, Ct)).Error);
 
         // A missing setting counts as 0, so it asks nothing of the binary.
         await Entries.ExecuteAsync(dataSource, "DELETE FROM mnemosyne.settings WHERE key = 'min_binary_schema'");

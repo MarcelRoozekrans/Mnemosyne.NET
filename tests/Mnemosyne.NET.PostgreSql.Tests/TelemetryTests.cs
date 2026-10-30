@@ -416,6 +416,51 @@ public sealed class TelemetryTests(PgVectorFixture fixture) : IClassFixture<PgVe
     }
 
     [Fact]
+    public async Task NoGateSignalCarriesCaptureText()
+    {
+        const string Canary = "canary-7f3a91";
+        var store = await MigratedStoreAsync();
+        var scope = PgVectorFixture.NewScope();
+        var first = Entries.Entry(scope, Entries.Graph(Canary)) with { Intent = $"intent {Canary}", Name = $"name {Canary}", ReviewRequired = true };
+        var second = Entries.Entry(scope, Entries.Graph($"other-{Canary}")) with { Intent = $"intent {Canary}", Name = $"name {Canary}", ReviewRequired = true };
+        using var capture = new TelemetryCapture();
+        var errors = new List<MnemosyneError>();
+
+        var approved = (await store.RememberAsync(first with { Capture = first.Capture with { Question = $"question {Canary}" } }, Ct)).Value;
+        var rejected = (await store.RememberAsync(second, Ct)).Value;
+        Assert.Equal(2, (await store.ListPendingAsync(scope, 10, null, Ct)).Value.Count);
+        Assert.True((await store.ApproveAsync(scope, approved.Id, Ct)).IsSuccess);
+        Assert.True((await store.RejectAsync(scope, rejected.Id, Ct)).IsSuccess);
+        errors.Add((await store.RejectAsync(scope, approved.Id, Ct)).Error);
+        errors.Add((await store.ApproveAsync(scope, rejected.Id, Ct)).Error);
+
+        var texts = new List<string>();
+        Assert.Equal(7, capture.Activities.Count);
+        foreach (var activity in capture.Activities)
+        {
+            texts.AddRange(activity.TagObjects.Select(tag => $"{tag.Key}={tag.Value}"));
+            texts.Add(activity.StatusDescription ?? string.Empty);
+            foreach (var recorded in activity.Events)
+            {
+                texts.Add(recorded.Name);
+                texts.AddRange(recorded.Tags.Select(tag => $"{tag.Key}={tag.Value}"));
+            }
+        }
+
+        Assert.NotEmpty(capture.Measurements);
+        foreach (var measurement in capture.Measurements)
+        {
+            texts.Add(measurement.Instrument);
+            texts.Add(measurement.Value.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            texts.AddRange(measurement.Tags.Select(tag => $"{tag.Key}={tag.Value}"));
+        }
+
+        texts.AddRange(errors.Select(error => error.Message));
+        texts.AddRange(errors.Select(error => error.Detail ?? string.Empty));
+        Assert.All(texts, text => Assert.DoesNotContain(Canary, text, StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task AFailedListPendingTagsOnlyTheLimit()
     {
         var store = await MigratedStoreAsync();

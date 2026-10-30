@@ -47,6 +47,25 @@ public sealed class ReviewTests(PgVectorFixture fixture) : IClassFixture<PgVecto
     }
 
     [Fact]
+    public async Task ApprovingAnActiveReasonletWritesNoNewRowVersion()
+    {
+        var store = await MigratedStoreAsync();
+        var scope = PgVectorFixture.NewScope();
+        var pending = await RememberAsync(store, scope, "a", review: true);
+        const string Xmin = "SELECT xmin::text FROM mnemosyne.reasonlets WHERE id = $1";
+        var beforeApprove = await Entries.ScalarAsync<string>(fixture.DataSource, Xmin, pending.Id.Value);
+
+        Assert.True((await store.ApproveAsync(scope, pending.Id, Ct)).IsSuccess);
+        var afterApprove = await Entries.ScalarAsync<string>(fixture.DataSource, Xmin, pending.Id.Value);
+        Assert.True((await store.ApproveAsync(scope, pending.Id, Ct)).IsSuccess);
+        var afterRepeat = await Entries.ScalarAsync<string>(fixture.DataSource, Xmin, pending.Id.Value);
+
+        Assert.NotEqual(beforeApprove, afterApprove);
+        Assert.Equal(afterApprove, afterRepeat);
+        Assert.Equal(ReasonletStatus.Active, (await store.GetAsync(scope, pending.Id, Ct)).Value.Status);
+    }
+
+    [Fact]
     public async Task RejectDeletesThePendingReasonletAndItsRuns()
     {
         var store = await MigratedStoreAsync();
@@ -152,6 +171,7 @@ public sealed class ReviewTests(PgVectorFixture fixture) : IClassFixture<PgVecto
 
         Assert.Equal(MnemosyneErrorCode.Unavailable, (await store.ApproveAsync(scope, ReasonletId.New(), Ct)).Error.Code);
         Assert.Equal(MnemosyneErrorCode.Unavailable, (await store.RejectAsync(scope, ReasonletId.New(), Ct)).Error.Code);
+        Assert.Equal(MnemosyneErrorCode.Unavailable, (await store.ListPendingAsync(scope, 10, null, Ct)).Error.Code);
     }
 
     [Fact]
@@ -292,6 +312,7 @@ public sealed class ReviewTests(PgVectorFixture fixture) : IClassFixture<PgVecto
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await store.ApproveAsync(scope, ReasonletId.New(), cancelled.Token));
         await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await store.RejectAsync(scope, ReasonletId.New(), cancelled.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await store.ListPendingAsync(scope, 10, null, cancelled.Token));
     }
 
     [Fact]
@@ -303,12 +324,16 @@ public sealed class ReviewTests(PgVectorFixture fixture) : IClassFixture<PgVecto
         var first = await RememberAsync(store, scope, "p1", review: true);
         var second = await RememberAsync(store, scope, "p2", review: true);
         await RememberAsync(store, PgVectorFixture.NewScope(), "other", review: true);
+        var parent = await RememberAsync(store, scope, "parent");
+        var version = await RememberAsync(store, scope, "version", parent.Id, review: true);
 
         var listed = (await store.ListPendingAsync(scope, 10, null, Ct)).Value;
 
-        Assert.Equal(new[] { first.Id, second.Id }.OrderBy(i => i.Value), listed.Select(r => r.Definition.Id));
+        Assert.Equal(new[] { first.Id, second.Id, version.Id }.OrderBy(i => i.Value), listed.Select(r => r.Definition.Id));
         Assert.All(listed, r => Assert.Equal(ReasonletStatus.PendingReview, r.Definition.Status));
         Assert.Equal(scope, listed[0].Definition.Scope);
+        Assert.Equal(parent.Id, listed.Single(r => r.Definition.Id == version.Id).Definition.ParentId);
+        Assert.All(listed.Where(r => r.Definition.Id != version.Id), r => Assert.Null(r.Definition.ParentId));
     }
 
     [Fact]
