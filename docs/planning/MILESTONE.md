@@ -1,7 +1,8 @@
 # Milestone 2: Evaluation
 
-**Status:** active
+**Status:** complete
 **Started:** 2026-10-23
+**Completed:** 2026-10-30
 
 ## Goal
 Answer "did it work?" without the caller filling in feedback by hand, so that the success-rate term in ranking reflects real outcomes (handover phase 3).
@@ -9,7 +10,7 @@ Answer "did it work?" without the caller filling in feedback by hand, so that th
 - Mnemosyne ships two judges: a Minos.NET judge, which is the default, and a judge that asks a chat model.
 - Ranking's success rate comes from evaluated runs.
 
-See the [roadmap](ROADMAP.md#milestone-2-evaluation-status-active). Milestone 1 is archived in [milestones/milestone-1.md](milestones/milestone-1.md).
+See the [roadmap](ROADMAP.md#milestone-2-evaluation-status-complete). Milestone 1 is archived in [milestones/milestone-1.md](milestones/milestone-1.md).
 
 ## Definition of Done
 - [x] Runs are scored by a pluggable evaluator, with explicit feedback overriding it
@@ -27,3 +28,4 @@ See the [roadmap](ROADMAP.md#milestone-2-evaluation-status-active). Milestone 1 
 ## Audit History
 | Date | Verdict | Gaps |
 |---|---|---|
+| 2026-10-30 | PASS | None; warning: no pre-push review reports, reviewed per task and per branch instead ([audit](../superpowers/reviews/2026-10-30-milestone-2-audit.md)) |

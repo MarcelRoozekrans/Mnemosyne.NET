@@ -60,9 +60,10 @@ Design: [roadmap design](../superpowers/specs/2026-10-21-roadmap-design.md), bui
 **HelpWanted:** no
 **Plan:** _to be written_
 
-## Milestone 2: Evaluation [status: active]
+## Milestone 2: Evaluation [status: complete]
 **Goal:** Answer "did it work?" without the caller hand-filling feedback, so the success-rate term in ranking is real (handover phase 3).
 **Started:** 2026-10-23
+**Completed:** 2026-10-30
 **Definition of Done:**
 - [x] Runs are scored by a pluggable evaluator, with explicit feedback overriding it
 - [x] A Minos.NET default evaluator and an LLM-as-judge evaluator are shipped
