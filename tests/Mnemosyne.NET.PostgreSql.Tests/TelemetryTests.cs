@@ -334,6 +334,71 @@ public sealed class TelemetryTests(PgVectorFixture fixture) : IClassFixture<PgVe
     }
 
     [Fact]
+    public async Task ApproveTagsTheReasonletId()
+    {
+        var store = await MigratedStoreAsync();
+        var scope = PgVectorFixture.NewScope();
+        var receipt = (await store.RememberAsync(Entries.Entry(scope) with { ReviewRequired = true }, Ct)).Value;
+        using var capture = new TelemetryCapture();
+
+        Assert.True((await store.ApproveAsync(scope, receipt.Id, Ct)).IsSuccess);
+
+        var activity = Single(capture, "mnemosyne.approve");
+        Assert.Equal(ActivityStatusCode.Unset, activity.Status);
+        Assert.Equal([new("mnemosyne.reasonlet.id", receipt.Id.Value.ToString())], AllTags(activity));
+        AssertOperation(capture, "approve", "ok");
+    }
+
+    [Fact]
+    public async Task RejectTagsTheReasonletId()
+    {
+        var store = await MigratedStoreAsync();
+        var scope = PgVectorFixture.NewScope();
+        var receipt = (await store.RememberAsync(Entries.Entry(scope) with { ReviewRequired = true }, Ct)).Value;
+        using var capture = new TelemetryCapture();
+
+        Assert.True((await store.RejectAsync(scope, receipt.Id, Ct)).IsSuccess);
+
+        var activity = Single(capture, "mnemosyne.reject");
+        Assert.Equal(ActivityStatusCode.Unset, activity.Status);
+        Assert.Equal([new("mnemosyne.reasonlet.id", receipt.Id.Value.ToString())], AllTags(activity));
+        AssertOperation(capture, "reject", "ok");
+    }
+
+    [Fact]
+    public async Task ARejectConflictCarriesTheErrorAndTheId()
+    {
+        var store = await MigratedStoreAsync();
+        var scope = PgVectorFixture.NewScope();
+        var receipt = (await store.RememberAsync(Entries.Entry(scope), Ct)).Value;
+        using var capture = new TelemetryCapture();
+
+        Assert.Equal(MnemosyneErrorCode.Conflict, (await store.RejectAsync(scope, receipt.Id, Ct)).Error.Code);
+
+        var activity = Single(capture, "mnemosyne.reject");
+        Assert.Equal(ActivityStatusCode.Error, activity.Status);
+        Assert.Equal(
+            [new("error.type", "Conflict"), new("mnemosyne.reasonlet.id", receipt.Id.Value.ToString())],
+            AllTags(activity));
+        AssertOperation(capture, "reject", "Conflict");
+    }
+
+    [Fact]
+    public async Task AFailedApproveCarriesTheErrorAndTheId()
+    {
+        var store = await MigratedStoreAsync();
+        var id = ReasonletId.New();
+        using var capture = new TelemetryCapture();
+
+        Assert.Equal(MnemosyneErrorCode.NotFound, (await store.ApproveAsync(PgVectorFixture.NewScope(), id, Ct)).Error.Code);
+
+        var activity = Single(capture, "mnemosyne.approve");
+        Assert.Equal(ActivityStatusCode.Error, activity.Status);
+        Assert.Equal([new("error.type", "NotFound"), new("mnemosyne.reasonlet.id", id.Value.ToString())], AllTags(activity));
+        AssertOperation(capture, "approve", "NotFound");
+    }
+
+    [Fact]
     public async Task AFailedEraseTagsOnlyHowItErases()
     {
         var store = await MigratedStoreAsync();

@@ -6,6 +6,7 @@ using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Text.Json;
 using Mnemosyne.NET.Abstractions;
+using Mnemosyne.NET.Abstractions.Validation;
 using Mnemosyne.NET.PostgreSql.Repositories;
 using Mnemosyne.NET.PostgreSql.Rows;
 using Npgsql;
@@ -923,6 +924,134 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
         return new ReasonletErasureResult { Reasonlets = removed, Executions = erased };
     }
 
+    /// <summary>Approves a Reasonlet that waits for review, so that search returns it from the next query on.</summary>
+    /// <remarks>
+    /// One statement sets the status to <see cref="ReasonletStatus.Active"/>. Approving an Active Reasonlet succeeds
+    /// and changes nothing, so a retried approve is harmless. A Reasonlet that is not in the scope answers
+    /// <see cref="MnemosyneErrorCode.NotFound"/>, and so does one that a concurrent reject deletes while the approve
+    /// waits for its lock.
+    /// </remarks>
+    /// <param name="scope">The scope of the Reasonlet.</param>
+    /// <param name="id">The Reasonlet to approve.</param>
+    /// <param name="ct">The cancellation token.</param>
+    /// <returns>Success, or the error.</returns>
+    public ValueTask<UnitResult<MnemosyneError>> ApproveAsync(ReasonletScope scope, ReasonletId id, CancellationToken ct) =>
+        StoreTelemetry.RunAsync("approve", activity => ApproveOperationAsync(scope, id, activity, ct));
+
+    private async ValueTask<UnitResult<MnemosyneError>> ApproveOperationAsync(
+        ReasonletScope scope, ReasonletId id, Activity? activity, CancellationToken ct)
+    {
+        StoreTelemetry.ReasonletId(activity, id);
+        var invalid = await ValidateReviewAsync(scope, id, ct).ConfigureAwait(false);
+        if (invalid is { } error)
+        {
+            return error;
+        }
+
+        var result = await GuardAsync(ApproveCoreAsync(scope, id, ct)).ConfigureAwait(false);
+        return result.IsSuccess ? UnitResult<MnemosyneError>.Success() : result.Error;
+    }
+
+    private async Task<Result<bool, MnemosyneError>> ApproveCoreAsync(ReasonletScope scope, ReasonletId id, CancellationToken ct)
+    {
+        await using var connection = (await _dataSource.OpenConnectionAsync(ct).ConfigureAwait(false)).AsAsync();
+        var approved = await new ReasonletRepository(connection).ApproveAsync(scope.Value, id.Value, ct).ConfigureAwait(false);
+        return approved is null ? ReasonletNotFound() : true;
+    }
+
+    /// <summary>
+    /// Rejects a Reasonlet that waits for review: deletes it with its executions, their feedback and its metrics, the
+    /// way an erase deletes them.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// An Active Reasonlet answers <see cref="MnemosyneErrorCode.Conflict"/>: removing a live procedure is an erase's
+    /// job, and a reject that raced an approve must not delete what the other reviewer just approved. So does a
+    /// Reasonlet that another Reasonlet in the scope has as its parent, because the delete would cut those versions
+    /// loose, and one of them may be approved; reject or approve the versions below first. A Reasonlet that is not in
+    /// the scope answers <see cref="MnemosyneErrorCode.NotFound"/>.
+    /// </para>
+    /// <para>
+    /// One READ COMMITTED transaction locks the Reasonlet <c>FOR UPDATE</c> before it reads the status and looks for
+    /// children. A remember that adds a version below it holds it <c>FOR NO KEY UPDATE</c>, and an approve updates it,
+    /// and both conflict with that lock, so each serializes with the reject: a reject that runs second sees the new
+    /// version or the new status and answers <see cref="MnemosyneErrorCode.Conflict"/>; a remember or an approve that
+    /// runs second finds no Reasonlet and answers <see cref="MnemosyneErrorCode.NotFound"/>, as after an erase.
+    /// </para>
+    /// <para>
+    /// Because a Reasonlet with children is never rejected, a reject only deletes a leaf, and it deletes it in the
+    /// order an erase does: the Reasonlet row's lock first, then its executions in id order, then the row itself, with
+    /// the feedback and metrics rows that cascade. An erase locks deepest first, and a leaf is the deepest row of its
+    /// branch, so taking that one row first keeps the erase's order. A deadlock or a serialization failure that still
+    /// happens answers <see cref="MnemosyneErrorCode.Conflict"/>.
+    /// </para>
+    /// </remarks>
+    /// <param name="scope">The scope of the Reasonlet.</param>
+    /// <param name="id">The Reasonlet to reject.</param>
+    /// <param name="ct">The cancellation token.</param>
+    /// <returns>Success, or the error.</returns>
+    public ValueTask<UnitResult<MnemosyneError>> RejectAsync(ReasonletScope scope, ReasonletId id, CancellationToken ct) =>
+        StoreTelemetry.RunAsync("reject", activity => RejectOperationAsync(scope, id, activity, ct));
+
+    private async ValueTask<UnitResult<MnemosyneError>> RejectOperationAsync(
+        ReasonletScope scope, ReasonletId id, Activity? activity, CancellationToken ct)
+    {
+        StoreTelemetry.ReasonletId(activity, id);
+        var invalid = await ValidateReviewAsync(scope, id, ct).ConfigureAwait(false);
+        if (invalid is { } error)
+        {
+            return error;
+        }
+
+        var result = await GuardAsync(RejectCoreAsync(scope, id, ct)).ConfigureAwait(false);
+        return result.IsSuccess ? UnitResult<MnemosyneError>.Success() : result.Error;
+    }
+
+    private async Task<Result<bool, MnemosyneError>> RejectCoreAsync(ReasonletScope scope, ReasonletId id, CancellationToken ct)
+    {
+        await using var connection = (await _dataSource.OpenConnectionAsync(ct).ConfigureAwait(false)).AsAsync();
+        await using var transaction = await connection.BeginTransactionAsync(IsolationLevel.ReadCommitted, ct).ConfigureAwait(false);
+        var reasonlets = new ReasonletRepository(connection);
+        Guid[] doomed = [id.Value];
+
+        // Lock, then read in a second statement: its fresh snapshot sees a version or an approve that committed while
+        // the lock waited, which a subquery of the locking statement would miss. The lock holds both answers until commit.
+        if (await reasonlets.LockForRejectAsync(scope.Value, id.Value, transaction, ct).ConfigureAwait(false) is null)
+        {
+            return ReasonletNotFound();
+        }
+
+        var target = (await reasonlets.GetRejectTargetAsync(scope.Value, id.Value, transaction, ct).ConfigureAwait(false))!;
+
+        if (target.Status != (short)ReasonletStatus.PendingReview)
+        {
+            return new MnemosyneError(MnemosyneErrorCode.Conflict, "Only a Reasonlet pending review can be rejected.");
+        }
+
+        if (target.HasChildren)
+        {
+            return new MnemosyneError(MnemosyneErrorCode.Conflict, "The Reasonlet has versions below it; approve or reject them first.");
+        }
+
+        await new ExecutionRepository(connection).DeleteScopeExecutionsAsync(scope.Value, doomed, transaction, ct).ConfigureAwait(false);
+        await reasonlets.DeleteAsync(scope.Value, doomed, transaction, ct).ConfigureAwait(false);
+        await transaction.CommitAsync(ct).ConfigureAwait(false);
+        return true;
+    }
+
+    /// <summary>Checks that the store is migrated and that an approve's or a reject's arguments are valid.</summary>
+    private async ValueTask<MnemosyneError?> ValidateReviewAsync(ReasonletScope scope, ReasonletId id, CancellationToken ct)
+    {
+        var migrated = await EnsureMigratedAsync(ct).ConfigureAwait(false);
+        if (migrated.IsFailure)
+        {
+            return migrated.Error;
+        }
+
+        var validId = Check.NotDefault(id, nameof(id));
+        return ValidateScope(scope) ?? (validId.IsFailure ? validId.Error : null);
+    }
+
     /// <inheritdoc />
     /// <remarks>
     /// <para>
@@ -1427,6 +1556,9 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
         MemoryMarshal.TryGetArray(embedding, out var segment) && segment.Offset == 0 && segment.Count == segment.Array!.Length
             ? segment.Array
             : embedding.ToArray();
+
+    private static MnemosyneError ReasonletNotFound() =>
+        new(MnemosyneErrorCode.NotFound, "The Reasonlet does not exist in the scope.");
 
     private static MnemosyneError LineageConflict() =>
         new(MnemosyneErrorCode.Conflict, "The lineage changed under a concurrent erase.");

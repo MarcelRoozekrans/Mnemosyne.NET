@@ -186,6 +186,10 @@ internal static class StoreTelemetry
     internal static void VerdictSource(Activity? activity, ReasonletVerdictSource source) =>
         activity?.SetTag(VerdictSourceTag, VerdictSourceName(source));
 
+    /// <summary>Tags an operation on one Reasonlet with its id, before it runs, so a failed call has it too.</summary>
+    internal static void ReasonletId(Activity? activity, ReasonletId id) =>
+        activity?.SetTag("mnemosyne.reasonlet.id", id.Value.ToString());
+
     /// <summary>Tags a search with its limit, before it runs, so a failed search has it too.</summary>
     internal static void SearchLimit(Activity? activity, int limit) => activity?.SetTag("mnemosyne.search.limit", limit);
 
