@@ -126,11 +126,12 @@ Design: [roadmap design](../superpowers/specs/2026-10-21-roadmap-design.md), bui
 **Plan:** `docs/superpowers/plans/2026-10-30-phase-3.1-capture.md`
 **Completed:** 2026-10-30
 
-### Phase 3.2: Redaction hook [status: pending]
+### Phase 3.2: Redaction hook [status: active]
 **Goal:** A hook that runs on captured content before it is stored and can block a capture; a blocked capture is dropped and leaves a telemetry event without the content.
 **Surface:** Backend
 **HelpWanted:** no
-**Plan:** _to be written_
+**Design:** `docs/superpowers/specs/2026-10-30-phase-3.2-redaction-hook-design.md`
+**Plan:** `docs/superpowers/plans/2026-10-30-phase-3.2-redaction-hook.md`
 
 ### Phase 3.3: Human review gate [status: pending]
 **Goal:** Opt-in pending-review state for new Reasonlets and new versions, kept out of recall, with approve and reject.
