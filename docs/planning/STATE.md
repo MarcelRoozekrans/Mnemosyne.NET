@@ -4,34 +4,32 @@
 
 ## Current Position
 - **Milestone:** 3 — Off-the-shelf integrations, active since 2026-10-30. Design: `docs/superpowers/specs/2026-10-30-milestone-3-design.md`.
-- **Phase:** 3.3 — Human review gate, active on branch `feat/phase-3.3-human-review-gate`. PR #27 for phase 3.2 has merged, and 0.3.0 was released in #26.
-- **Design:** `docs/superpowers/specs/2026-10-30-phase-3.3-human-review-gate-design.md`. Marcel approved it.
-- **Plan:** `docs/superpowers/plans/2026-10-30-phase-3.3-human-review-gate.md`, with seven tasks. Marcel reviewed it and chose **subagent-driven** execution. No task is started; all checkboxes are open.
-- **Last completed task:** the design and the plan for phase 3.3.
-- **Next task:** Task 1 of the plan, the review types and the option.
+- **Phase:** 3.3 — Human review gate, implemented on branch `feat/phase-3.3-human-review-gate`, rebased on `main` after the 0.3.0 release. All seven plan tasks are checked off. The PR waits for CI, both codecov checks and Marcel's merge.
+- **Design:** `docs/superpowers/specs/2026-10-30-phase-3.3-human-review-gate-design.md`.
+- **Plan:** `docs/superpowers/plans/2026-10-30-phase-3.3-human-review-gate.md`. It was executed subagent-driven, with a review after each task and a whole-branch review at the end.
+- **Pre-push review:** `docs/superpowers/reviews/2026-10-30-phase-3.3-pre-push-review.md`, verdict PASS.
+- **Last completed task:** the pre-push review and the PR for phase 3.3.
+- **Next task:** after the merge, run `complete-phase` for 3.3, then `start-next-phase` for phase 3.4.
 
-## Decisions made in the phase 3.3 brainstorm
-- Reject deletes a pending Reasonlet. There is no `Rejected` status.
-- Reviewers find pending items through a facade list call. There is no telemetry event per pending capture.
-- Approve, reject and list go on the existing `IReasonletStore` and `IReasonletMemory`, not on separate review interfaces.
-- The list returns `ReasonletReview(Definition, Metrics)`, so a reviewer sees a Reasonlet's track record.
-- The design marks my other calls as **my call**. Marcel saw them listed before approving.
+## Rulings from the phase 3.3 run that Marcel may want to revisit
+- **Reject runs as two statements.** It locks the row in one statement, then reads status and children in a second. A single statement missed a child committed while it waited, and the race test proved it.
+- **Approve updates only a pending row,** using `AND status = 2`. When it updates nothing, an existence check decides between already Active, which is success, and `NotFound`.
+- **The facade checks the list limit against its own private constant.** It is 100, with the same pinned text as the store. No public constant was added.
+- **The breaking change is marked.** The port commit is `feat!:` with a `BREAKING CHANGE:` footer. Keep `feat!:` in the squash title, and check that the release-please PR lists it.
+- **Dropped:**
+  - `CREATE INDEX IF NOT EXISTS`, for operators with large tables. It would change the pinned DDL. The docs say instead that the index build reads the whole table.
+- **Earlier rulings still open, from phase 3.2:**
+  - A pre-cancelled remember emits `mnemosyne.guard` with outcome `exception`.
+  - `Abandon` takes `Task?`.
 
 ## Open Decisions
-- None blocking. Rulings from the phase 3.2 run that Marcel may want to revisit:
-  - A pre-cancelled remember emits the `mnemosyne.guard` activity with outcome `exception`.
-  - `ReasonletMemory.Abandon` takes `Task?` rather than a generic task.
+- None blocking.
 
 ## Blockers
-- None.
+- None. Waiting on the merge.
 
 ## Notes
-- The branch is one commit behind `main`, which has the 0.3.0 release commit. Rebase it before opening the PR.
-- Git trap: `push.default` is `upstream`. Create feature branches with `--no-track`, or push with an explicit `branch:branch` refspec. Otherwise a push targets `main`.
+- Git trap: `push.default` is `upstream`. Create feature branches with `--no-track`, or push with an explicit `branch:branch` refspec.
 
 ## Recommended Next Step
-Resume on `feat/phase-3.3-human-review-gate`. Run `start-next-phase`, which routes to `list-phase-assumptions`. The plan is already approved, so present the assumptions briefly and continue, then execute the plan with `superpowers:subagent-driven-development`. Task 3 is marked to run on Opus. After the last task:
-- run `pre-push-review`;
-- open the PR;
-- wait for CI and both codecov checks;
-- run `complete-phase`.
+After the phase 3.3 PR merges, run `complete-phase` for 3.3 on a fresh branch from `main`, then `start-next-phase`. Phase 3.4 has no design spec, so `start-next-phase` routes to brainstorming.
