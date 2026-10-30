@@ -1,5 +1,5 @@
 using Microsoft.Extensions.AI;
-using Mnemosyne.Samples.StoreAndRecall;
+using Mnemosyne.Samples;
 using Xunit;
 
 namespace Mnemosyne.NET.Tests.Samples;

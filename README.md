@@ -11,9 +11,9 @@ procedures that worked, as **Reasonlets**.
 
 Documentation: <https://marcelroozekrans.github.io/Mnemosyne.NET/>
 
-- [Getting started](https://marcelroozekrans.github.io/Mnemosyne.NET/getting-started) and the [store-and-recall sample](https://marcelroozekrans.github.io/Mnemosyne.NET/samples)
-- [Concepts](https://marcelroozekrans.github.io/Mnemosyne.NET/category/concepts): Reasonlets, versions, scopes and subjects, ranking
-- [Guides](https://marcelroozekrans.github.io/Mnemosyne.NET/category/guides): the PostgreSQL store, data lifecycle, judging runs with Minos, telemetry
+- [Getting started](https://marcelroozekrans.github.io/Mnemosyne.NET/getting-started) and the [samples](https://marcelroozekrans.github.io/Mnemosyne.NET/samples): store and recall, and evaluation
+- [Concepts](https://marcelroozekrans.github.io/Mnemosyne.NET/category/concepts): Reasonlets, versions, scopes and subjects, ranking, evaluation
+- [Guides](https://marcelroozekrans.github.io/Mnemosyne.NET/category/guides): the PostgreSQL store, data lifecycle, judging runs with Minos, writing your own evaluator, telemetry
 
 | Package | What it holds |
 |---|---|

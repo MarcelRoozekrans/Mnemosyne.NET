@@ -47,7 +47,7 @@ The success rate is the share of runs that succeeded, smoothed so that a handful
 Every remember records one run, and every `RecordExecutionAsync` records another. Whether a run counts as a success depends on its effective verdict, the first of these that exists:
 
 1. **A human's verdict**, `ReasonletFeedback.Worked`, recorded with `RecordFeedbackAsync`.
-2. **An evaluator's verdict**, when an `IReasonletEvaluator` is registered and the run was recorded with its answer. [Judging runs with Minos](../guides/minos-evaluator.md) and [a chat model](../guides/chat-evaluator.md) are ready-made ones.
+2. **An evaluator's verdict**, when an `IReasonletEvaluator` is registered and the run was recorded with its answer. [Judging runs with Minos](../guides/minos-evaluator.md) and [a chat model](../guides/chat-evaluator.md) are ready-made ones, and [Evaluation](evaluation.md) explains the loop and how to [write your own](../guides/custom-evaluator.md).
 3. **The agent's own verdict**, `ReasonletOutcome.Success`.
 
 Feedback that changes a run's verdict moves the success count with it. Feedback with `Worked` null keeps an earlier verdict, so a verdict can be changed but not withdrawn. Feedback's three scores are stored, but ranking doesn't use them.
@@ -68,7 +68,7 @@ success rate = (weighted successes + 5 × prior) / (weighted runs + 5)
 - **The 5** is the prior weight: the prior counts as five extra runs. For a procedure with no parent, the prior is a neutral 0.5. A brand-new procedure with one agent-only success scores (0.5 + 2.5) / 5.5 = 0.545. With one judged success it scores (1 + 2.5) / 6 = 0.583. After 20 agent-only successes out of 20 it scores (10 + 2.5) / 15 = 0.833, and the prior matters less and less as runs accumulate.
 - **`AgentVerdictWeight = 1`** counts every run in full and restores the plain rate, `(successes + 5 × prior) / (runs + 5)`. At 0 the rate rests on judged runs alone, and a procedure nobody judged keeps its prior.
 
-A human's feedback on an agent-only run makes it judged even when the verdict agrees with the agent's: the run then counts in full.
+A human's feedback with `Worked` set on an agent-only run makes it judged even when the verdict agrees with the agent's: the run then counts in full.
 
 Runs that retention pruned still count in `Runs` and `Successes`, but their verdicts went with them. The upgrade to phase 2.4 builds the judged counters from the executions still stored, so a Reasonlet's pruned history counts as agent-only. That understates how much of its history was judged, and in the safe direction: its rate leans on its prior a little more.
 
