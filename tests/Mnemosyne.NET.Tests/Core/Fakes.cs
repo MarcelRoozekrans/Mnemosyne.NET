@@ -276,3 +276,32 @@ internal sealed class IgnoringEvaluator(Action? onCall = null) : IReasonletEvalu
         return new(Completion.Task);
     }
 }
+
+/// <summary>
+/// A capture guard that records the captures it inspects and answers with a configurable response, after running an
+/// optional step. With <see cref="Hang"/> set it ignores its token and never answers.
+/// </summary>
+internal sealed class FakeCaptureGuard : ICaptureGuard
+{
+    public List<ReasonletCapture> Seen { get; } = [];
+
+    public int Calls { get; private set; }
+
+    public Func<Result<CaptureVerdict, MnemosyneError>> Respond { get; set; } = () => CaptureVerdict.Allow("fake-guard");
+
+    /// <summary>Gets or sets whether the guard ignores its token and never answers.</summary>
+    public bool Hang { get; init; }
+
+    /// <summary>Gets or sets a step run on each call, before the guard answers or hangs.</summary>
+    public Action? OnCall { get; init; }
+
+    public ValueTask<Result<CaptureVerdict, MnemosyneError>> InspectAsync(ReasonletCapture capture, CancellationToken ct)
+    {
+        Calls++;
+        Seen.Add(capture);
+        OnCall?.Invoke();
+        return Hang
+            ? new(new TaskCompletionSource<Result<CaptureVerdict, MnemosyneError>>(TaskCreationOptions.RunContinuationsAsynchronously).Task)
+            : ValueTask.FromResult(Respond());
+    }
+}

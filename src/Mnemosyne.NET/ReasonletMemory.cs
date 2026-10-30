@@ -10,7 +10,8 @@ namespace Mnemosyne.NET;
 
 /// <summary>
 /// The default <see cref="IReasonletMemory"/>. It resolves intents and names, embeds questions with the host's
-/// embedding generator, judges runs with an optional <see cref="IReasonletEvaluator"/>, and delegates storage to an
+/// embedding generator, judges runs with an optional <see cref="IReasonletEvaluator"/>, lets an optional
+/// <see cref="ICaptureGuard"/> refuse a capture before it is remembered, and delegates storage to an
 /// <see cref="IReasonletStore"/> and ranking to an <see cref="IReasonletSelector"/>.
 /// </summary>
 /// <remarks>
@@ -47,6 +48,15 @@ namespace Mnemosyne.NET;
 /// judged because it is unusable starts no activity; with an evaluator registered it counts once on
 /// <c>mnemosyne.evaluations</c> with outcome <c>skipped</c>, and nothing else.
 /// </para>
+/// <para>
+/// The capture guard follows the judge's rules on exceptions, cancellation and its own timeout,
+/// <see cref="MnemosyneOptions.GuardTimeout"/>, with one difference: a guard that is down fails the remember with
+/// Unavailable, because a capture that was not inspected must not be stored. A blocked capture answers
+/// <see cref="MnemosyneErrorCode.Blocked"/>, whose detail names only the guard and the detector. Each guard call emits a
+/// <c>mnemosyne.guard</c> activity, adds a <c>mnemosyne.capture.blocked</c> event when it blocks, and counts and times
+/// itself on <c>mnemosyne.guard.inspections</c> and <c>mnemosyne.guard.duration</c> and under operation <c>guard</c>. No
+/// guard signal or error carries the capture's text or the guard's own error text.
+/// </para>
 /// </remarks>
 public sealed class ReasonletMemory : IReasonletMemory
 {
@@ -59,6 +69,10 @@ public sealed class ReasonletMemory : IReasonletMemory
     private const string ExtractorFailed = "The intent extractor failed.";
 
     private const string EvaluatorFailed = "The evaluator failed.";
+
+    private const string GuardFailed = "The capture guard failed.";
+
+    private const string GuardBlocked = "A capture guard blocked the capture.";
 
     /// <summary>The most code points an answer may hold to be judged, the cap of <see cref="ReasonletEvaluationRequest.Answer"/>.</summary>
     internal const int MaxAnswerLength = 32_000;
@@ -77,6 +91,7 @@ public sealed class ReasonletMemory : IReasonletMemory
     private readonly IReasonletEvaluator? _evaluator;
     private readonly MnemosyneOptions _options;
     private readonly TimeProvider _time;
+    private readonly ICaptureGuard? _guard;
 
     /// <summary>Initializes the facade.</summary>
     /// <param name="store">The store that holds the Reasonlets.</param>
@@ -89,11 +104,16 @@ public sealed class ReasonletMemory : IReasonletMemory
     /// </param>
     /// <param name="options">The facade settings. Must be valid.</param>
     /// <param name="timeProvider">
-    /// The clock that times <see cref="MnemosyneOptions.EvaluationTimeout"/>, or null for <see cref="TimeProvider.System"/>.
+    /// The clock that times <see cref="MnemosyneOptions.EvaluationTimeout"/> and <see cref="MnemosyneOptions.GuardTimeout"/>,
+    /// or null for <see cref="TimeProvider.System"/>.
+    /// </param>
+    /// <param name="guard">
+    /// The optional capture guard. With one, each valid capture is inspected before remember does anything else with it, and a
+    /// blocked capture is never stored.
     /// </param>
     /// <remarks>
     /// The facade keeps every dependency for its whole life, and <c>AddMnemosyne</c> registers it as a singleton, so the
-    /// extractor and the evaluator, like the store and the generator, must be singletons too. A scoped registration fails
+    /// extractor, the evaluator and the guard, like the store and the generator, must be singletons too. A scoped registration fails
     /// scope validation when the facade is resolved.
     /// </remarks>
     /// <exception cref="ArgumentNullException">A required argument is null.</exception>
@@ -105,7 +125,8 @@ public sealed class ReasonletMemory : IReasonletMemory
         IIntentExtractor? extractor,
         IReasonletEvaluator? evaluator,
         MnemosyneOptions options,
-        TimeProvider? timeProvider = null)
+        TimeProvider? timeProvider = null,
+        ICaptureGuard? guard = null)
     {
         ArgumentNullException.ThrowIfNull(store);
         ArgumentNullException.ThrowIfNull(selector);
@@ -124,10 +145,16 @@ public sealed class ReasonletMemory : IReasonletMemory
         _evaluator = evaluator;
         _options = options;
         _time = timeProvider ?? TimeProvider.System;
+        _guard = guard;
     }
 
     /// <inheritdoc />
     /// <remarks>
+    /// With a capture guard registered, a valid capture goes to the guard first, exactly as given, before the intent is
+    /// resolved, the question embedded or the run judged. A blocked capture answers <see cref="MnemosyneErrorCode.Blocked"/>
+    /// and nothing reaches the extractor, the generator, the evaluator or the store, so a blocked capture with a
+    /// <see cref="ReasonletCapture.ParentId"/> records no execution either. A guard that is down, by throwing, answering
+    /// Unavailable or outlasting <see cref="MnemosyneOptions.GuardTimeout"/>, answers Unavailable and stores nothing.
     /// The intent is the capture's, else the extractor's answer at any confidence, else <c>unspecified</c>. The name is the
     /// capture's, else the first non-blank line of the question, trimmed and cut to 200 code points. The stored capture
     /// carries the same resolved intent and name. An extractor that is down answers <see cref="MnemosyneErrorCode.Unavailable"/>
@@ -141,7 +168,8 @@ public sealed class ReasonletMemory : IReasonletMemory
     /// <exception cref="ArgumentNullException"><paramref name="capture"/> is null.</exception>
     /// <exception cref="InvalidOperationException">
     /// The intent extractor answered with an invalid intent or an error code other than Unavailable, or the evaluator
-    /// answered with an invalid evaluation or an error code other than Unavailable.
+    /// answered with an invalid evaluation or an error code other than Unavailable, or the capture guard answered with an
+    /// invalid verdict or an error code other than Unavailable.
     /// </exception>
     public async ValueTask<Result<ReasonletReceipt, MnemosyneError>> RememberAsync(ReasonletCapture capture, CancellationToken ct)
     {
@@ -150,6 +178,11 @@ public sealed class ReasonletMemory : IReasonletMemory
         if (valid.IsFailure)
         {
             return valid.Error;
+        }
+
+        if (_guard is not null && await InspectAsync(_guard, capture, _options.GuardTimeout, _time, ct).ConfigureAwait(false) is { IsFailure: true } refused)
+        {
+            return refused.Error;
         }
 
         var intent = await ResolveRememberIntentAsync(capture, ct).ConfigureAwait(false);
@@ -561,13 +594,98 @@ public sealed class ReasonletMemory : IReasonletMemory
     }
 
     /// <summary>
-    /// Lets a judge call the facade stopped waiting for run on unobserved: when it ends, a continuation reads its
+    /// Calls the capture guard inside its <c>mnemosyne.guard</c> activity. It succeeds for an allowed capture, fails with
+    /// <see cref="MnemosyneErrorCode.Blocked"/> for a blocked one, with the detail naming the guard and the detector, and
+    /// fails with Unavailable when the guard is down, with the detail naming an exception's type. An error code other than
+    /// Unavailable or an invalid verdict is an adapter bug and throws, and the caller's own cancellation propagates. The
+    /// guard gets the caller's token linked with one that <paramref name="timeProvider"/> cancels after
+    /// <paramref name="timeout"/>, unless that is <see cref="Timeout.InfiniteTimeSpan"/>, and the facade stops waiting once
+    /// that token is cancelled, whether or not the guard honours it; a cancellation that is not the caller's is a timeout.
+    /// Unlike a judge, a guard that is down fails the remember: a capture that was not inspected is never stored. A caller's
+    /// token that is already cancelled throws before the guard is called, so no guard signal is emitted for it.
+    /// </summary>
+    private static async ValueTask<UnitResult<MnemosyneError>> InspectAsync(
+        ICaptureGuard guard, ReasonletCapture capture, TimeSpan timeout, TimeProvider timeProvider, CancellationToken ct)
+    {
+        // A guard that answers synchronously would otherwise let a cancelled call through, since waiting on a completed
+        // task never looks at the token.
+        ct.ThrowIfCancellationRequested();
+        using var telemetry = GuardTelemetry.Start();
+        using var timer = timeout == Timeout.InfiniteTimeSpan ? null : new CancellationTokenSource(timeout, timeProvider);
+        using var linked = timer is null ? null : CancellationTokenSource.CreateLinkedTokenSource(ct, timer.Token);
+        var token = linked?.Token ?? ct;
+        Task<Result<CaptureVerdict, MnemosyneError>>? pending = null;
+        Result<CaptureVerdict, MnemosyneError> inspected;
+        try
+        {
+            if (token.CanBeCanceled)
+            {
+                // A hard stop: the wait ends when the token is cancelled, by the timeout or by the caller, even when
+                // the guard ignores the token it was given. A guard that honours it stops early too.
+                pending = guard.InspectAsync(capture, token).AsTask();
+                inspected = await pending.WaitAsync(token).ConfigureAwait(false);
+            }
+            else
+            {
+                inspected = await guard.InspectAsync(capture, token).ConfigureAwait(false);
+            }
+        }
+        catch (Exception ex) when (IsCallerCancellation(ex, ct))
+        {
+            Abandon(pending);
+            telemetry.Threw(ex);
+            throw;
+        }
+        catch (OperationCanceledException ex)
+        {
+            // Not the caller's cancellation, so a timeout, which counts as the guard being down.
+            Abandon(pending);
+            telemetry.Failed(MnemosyneErrorCode.Unavailable);
+            return DependencyFailed(GuardFailed, ex);
+        }
+        catch (Exception ex)
+        {
+            telemetry.Threw(ex);
+            return DependencyFailed(GuardFailed, ex);
+        }
+
+        if (inspected.IsFailure)
+        {
+            telemetry.Failed(inspected.Error.Code);
+
+            // The guard's own text can quote the capture, so only its code is kept. The capture is valid, so any code
+            // but Unavailable is an adapter bug.
+            if (inspected.Error.Code != MnemosyneErrorCode.Unavailable)
+            {
+                throw new InvalidOperationException(
+                    $"The capture guard failed with {inspected.Error.Code}; a guard given a valid capture may only fail with {nameof(MnemosyneErrorCode.Unavailable)}.");
+            }
+
+            return new MnemosyneError(MnemosyneErrorCode.Unavailable, GuardFailed);
+        }
+
+        var verdict = inspected.Value;
+        if (verdict.Validate() is { IsFailure: true } invalid)
+        {
+            var bug = new InvalidOperationException($"The capture guard returned an invalid verdict: {invalid.Error.Message}");
+            telemetry.Threw(bug);
+            throw bug;
+        }
+
+        telemetry.Inspected(verdict);
+        return verdict.IsBlocked
+            ? new MnemosyneError(MnemosyneErrorCode.Blocked, GuardBlocked, $"{verdict.Guard}/{verdict.Detector}")
+            : UnitResult<MnemosyneError>.Success();
+    }
+
+    /// <summary>
+    /// Lets a judge or guard call the facade stopped waiting for run on unobserved: when it ends, a continuation reads its
     /// exception, so a later failure is never an unobserved task exception, and does nothing else. It never touches the
     /// store, the telemetry or the caller, whose call has already returned. It is attached whatever the task's state: a
     /// task that faulted between the cancelled wait and this call runs the continuation at once, so no completion can
-    /// slip past unobserved.
+    /// slip past unobserved. It takes any task, whatever its result type, so the judge and the guard share it.
     /// </summary>
-    internal static void Abandon(Task<Result<ReasonletEvaluation, MnemosyneError>>? pending)
+    internal static void Abandon(Task? pending)
     {
         if (pending is not null)
         {

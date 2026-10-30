@@ -18,9 +18,11 @@ public interface IReasonletMemory
     /// Error codes: <see cref="MnemosyneErrorCode.Validation"/> when the capture breaks an invariant,
     /// <see cref="MnemosyneErrorCode.NotFound"/> when the parent does not exist in the capture's scope (including a parent that exists only in another scope),
     /// <see cref="MnemosyneErrorCode.Conflict"/> when the write loses a race the store detects, such as the parent being erased between lookup and insert,
-    /// <see cref="MnemosyneErrorCode.Unavailable"/> when the backing store, the embedding generator or the intent extractor fails, or the generator
-    /// returns an embedding the store cannot use: empty, not of the store's <see cref="IReasonletStore.Dimensions"/>, non-finite or of zero norm. An extractor that fails is never
-    /// replaced by a guessed intent, so a wrong intent is never stored.
+    /// <see cref="MnemosyneErrorCode.Unavailable"/> when the backing store, the embedding generator, the intent extractor or the capture guard fails, or the generator
+    /// returns an embedding the store cannot use: empty, not of the store's <see cref="IReasonletStore.Dimensions"/>, non-finite or of zero norm,
+    /// <see cref="MnemosyneErrorCode.Blocked"/> when a registered <see cref="ICaptureGuard"/> blocks the capture. An extractor that fails is never
+    /// replaced by a guessed intent, so a wrong intent is never stored. A capture guard, when one is registered, inspects each valid capture before
+    /// anything else happens to it; a capture it blocks, or could not inspect, is not stored, and no execution is recorded for it.
     /// </remarks>
     /// <param name="capture">The capture to store.</param>
     /// <param name="ct">The cancellation token.</param>
