@@ -294,6 +294,91 @@ public sealed class ReviewTests(PgVectorFixture fixture) : IClassFixture<PgVecto
         await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await store.RejectAsync(scope, ReasonletId.New(), cancelled.Token));
     }
 
+    [Fact]
+    public async Task ListReturnsOnlyPendingInIdOrder()
+    {
+        var store = await MigratedStoreAsync();
+        var scope = PgVectorFixture.NewScope();
+        await RememberAsync(store, scope, "active");
+        var first = await RememberAsync(store, scope, "p1", review: true);
+        var second = await RememberAsync(store, scope, "p2", review: true);
+        await RememberAsync(store, PgVectorFixture.NewScope(), "other", review: true);
+
+        var listed = (await store.ListPendingAsync(scope, 10, null, Ct)).Value;
+
+        Assert.Equal([first.Id, second.Id], listed.Select(r => r.Definition.Id));
+        Assert.All(listed, r => Assert.Equal(ReasonletStatus.PendingReview, r.Definition.Status));
+        Assert.Equal(first.Id, listed[0].Definition.Id);
+        Assert.Equal(scope, listed[0].Definition.Scope);
+    }
+
+    [Fact]
+    public async Task ListPagesWithAfter()
+    {
+        var store = await MigratedStoreAsync();
+        var scope = PgVectorFixture.NewScope();
+        var ids = new List<ReasonletId>();
+        for (var i = 0; i < 5; i++)
+        {
+            ids.Add((await RememberAsync(store, scope, $"p{i}", review: true)).Id);
+        }
+
+        var sorted = ids.OrderBy(i => i.Value).ToList();
+        var page1 = (await store.ListPendingAsync(scope, 2, null, Ct)).Value;
+        var page2 = (await store.ListPendingAsync(scope, 2, page1[^1].Definition.Id, Ct)).Value;
+        var page3 = (await store.ListPendingAsync(scope, 2, page2[^1].Definition.Id, Ct)).Value;
+        var page4 = (await store.ListPendingAsync(scope, 2, page3[^1].Definition.Id, Ct)).Value;
+
+        Assert.Equal(sorted.Take(2), page1.Select(r => r.Definition.Id));
+        Assert.Equal(sorted.Skip(2).Take(2), page2.Select(r => r.Definition.Id));
+        Assert.Equal(sorted.Skip(4), page3.Select(r => r.Definition.Id));
+        Assert.Empty(page4);
+    }
+
+    [Fact]
+    public async Task ListValidatesLimitAndAfter()
+    {
+        var store = await MigratedStoreAsync();
+        var scope = PgVectorFixture.NewScope();
+
+        foreach (var limit in new[] { 0, 101 })
+        {
+            var result = await store.ListPendingAsync(scope, limit, null, Ct);
+            Assert.Equal((MnemosyneErrorCode.Validation, "limit: must be from 1 to 100"), (result.Error.Code, result.Error.Message));
+        }
+
+        var after = await store.ListPendingAsync(scope, 10, default(ReasonletId), Ct);
+        Assert.Equal(MnemosyneErrorCode.Validation, after.Error.Code);
+        Assert.StartsWith("after:", after.Error.Message, StringComparison.Ordinal);
+        Assert.Equal(MnemosyneErrorCode.Validation, (await store.ListPendingAsync(default, 10, null, Ct)).Error.Code);
+        Assert.True((await store.ListPendingAsync(scope, 100, null, Ct)).IsSuccess);
+    }
+
+    [Fact]
+    public async Task ListedMetricsCountRunsOnThePendingReasonlet()
+    {
+        var store = await MigratedStoreAsync();
+        var scope = PgVectorFixture.NewScope();
+        var busy = await RememberAsync(store, scope, "busy", review: true);
+        var fresh = await RememberAsync(store, scope, "fresh", review: true);
+        var bare = await RememberAsync(store, scope, "bare", review: true);
+        var outcome = new ReasonletOutcome(true, TimeSpan.FromMilliseconds(5), null);
+        Assert.True((await store.AppendExecutionAsync(scope, busy.Id, outcome, Entries.Provenance(), new ReasonletEvaluation(true, 0.9, "judge"), Ct)).IsSuccess);
+        Assert.True((await store.AppendExecutionAsync(scope, busy.Id, outcome, Entries.Provenance(), null, Ct)).IsSuccess);
+        await Entries.ExecuteAsync(fixture.DataSource, "DELETE FROM mnemosyne.reasonlet_metrics WHERE reasonlet_id = $1", bare.Id.Value);
+
+        var listed = (await store.ListPendingAsync(scope, 10, null, Ct)).Value.ToDictionary(r => r.Definition.Id);
+
+        var busyMetrics = listed[busy.Id].Metrics;
+        Assert.Equal((3, 3, 1, 1), (busyMetrics.Runs, busyMetrics.Successes, busyMetrics.JudgedRuns, busyMetrics.JudgedSuccesses));
+        Assert.NotNull(busyMetrics.LastSuccessAt);
+        Assert.Equal(1, listed[fresh.Id].Metrics.Runs);
+        var none = listed[bare.Id];
+        Assert.Equal((0, 0, 0, 0), (none.Metrics.Runs, none.Metrics.Successes, none.Metrics.JudgedRuns, none.Metrics.JudgedSuccesses));
+        Assert.Null(none.Metrics.LastSuccessAt);
+        Assert.Equal(none.Definition.CreatedAt, none.Metrics.LastExecutedAt);
+    }
+
     private async Task<ReasonletPostgreSqlStore> MigratedStoreAsync()
     {
         var store = fixture.CreateStore();

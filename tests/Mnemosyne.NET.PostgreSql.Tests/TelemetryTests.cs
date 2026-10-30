@@ -399,6 +399,37 @@ public sealed class TelemetryTests(PgVectorFixture fixture) : IClassFixture<PgVe
     }
 
     [Fact]
+    public async Task ListPendingTagsLimitAndReturned()
+    {
+        var store = await MigratedStoreAsync();
+        var scope = PgVectorFixture.NewScope();
+        await store.RememberAsync(Entries.Entry(scope) with { ReviewRequired = true }, Ct);
+        await store.RememberAsync(Entries.Entry(scope, Entries.Graph("b")) with { ReviewRequired = true }, Ct);
+        using var capture = new TelemetryCapture();
+
+        Assert.Equal(2, (await store.ListPendingAsync(scope, 5, null, Ct)).Value.Count);
+
+        var activity = Single(capture, "mnemosyne.list_pending");
+        Assert.Equal(ActivityStatusCode.Unset, activity.Status);
+        Assert.Equal([new("mnemosyne.list.limit", 5), new("mnemosyne.list.returned", 2)], AllTags(activity));
+        AssertOperation(capture, "list_pending", "ok");
+    }
+
+    [Fact]
+    public async Task AFailedListPendingTagsOnlyTheLimit()
+    {
+        var store = await MigratedStoreAsync();
+        using var capture = new TelemetryCapture();
+
+        Assert.Equal(MnemosyneErrorCode.Validation, (await store.ListPendingAsync(PgVectorFixture.NewScope(), 0, null, Ct)).Error.Code);
+
+        Assert.Equal(
+            [new("error.type", "Validation"), new("mnemosyne.list.limit", 0)],
+            AllTags(Single(capture, "mnemosyne.list_pending")));
+        AssertOperation(capture, "list_pending", "Validation");
+    }
+
+    [Fact]
     public async Task AFailedEraseTagsOnlyHowItErases()
     {
         var store = await MigratedStoreAsync();

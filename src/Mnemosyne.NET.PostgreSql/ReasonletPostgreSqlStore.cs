@@ -26,6 +26,7 @@ namespace Mnemosyne.NET.PostgreSql;
 public sealed class ReasonletPostgreSqlStore : IReasonletStore
 {
     private const int MaxSearchLimit = 200;
+    private const int MaxPendingLimit = 100;
     private const int DefaultEfSearch = 40;
     private const string MigrationResourcePrefix = "Mnemosyne.NET.PostgreSql.Migrations.";
 
@@ -1040,6 +1041,80 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
     }
 
     /// <summary>Checks that the store is migrated and that an approve's or a reject's arguments are valid.</summary>
+    /// <summary>Lists the Reasonlets that wait for review, oldest id first, each with its own execution metrics.</summary>
+    /// <remarks>
+    /// Returns up to <paramref name="limit"/> pending Reasonlets of the scope with an id above <paramref name="after"/>,
+    /// ordered by id; the ids are version 7 GUIDs, so this is creation order. Pass the last id of a page as the next
+    /// <paramref name="after"/>, and <see langword="null"/> to start. The list is a work queue, not a feed: ids are made
+    /// by clients, so a Reasonlet stored while a reviewer pages can land behind the cursor, and a review screen starts
+    /// again from <see langword="null"/> to see it. A Reasonlet without a metrics row reads as no runs, with its last
+    /// execution at its creation time. An empty list is a success. The embedding is not returned.
+    /// </remarks>
+    /// <param name="scope">The scope to list.</param>
+    /// <param name="limit">The most Reasonlets to return, from 1 to 100.</param>
+    /// <param name="after">The last id of the previous page, or null for the first page.</param>
+    /// <param name="ct">The cancellation token.</param>
+    /// <returns>The page, or the error.</returns>
+    public ValueTask<Result<IReadOnlyList<ReasonletReview>, MnemosyneError>> ListPendingAsync(
+        ReasonletScope scope, int limit, ReasonletId? after, CancellationToken ct) =>
+        StoreTelemetry.RunAsync("list_pending", activity => ListPendingOperationAsync(scope, limit, after, activity, ct));
+
+    private async ValueTask<Result<IReadOnlyList<ReasonletReview>, MnemosyneError>> ListPendingOperationAsync(
+        ReasonletScope scope, int limit, ReasonletId? after, Activity? activity, CancellationToken ct)
+    {
+        StoreTelemetry.ListLimit(activity, limit);
+        var migrated = await EnsureMigratedAsync(ct).ConfigureAwait(false);
+        if (migrated.IsFailure)
+        {
+            return migrated.Error;
+        }
+
+        var invalid = ValidateScope(scope) ?? ValidateListPending(limit, after);
+        if (invalid is not null)
+        {
+            return invalid.Value;
+        }
+
+        var result = await GuardAsync(ListPendingCoreAsync(scope, limit, after, ct)).ConfigureAwait(false);
+        if (result.IsSuccess)
+        {
+            StoreTelemetry.ListReturned(activity, result.Value.Count);
+        }
+
+        return result;
+    }
+
+    private static MnemosyneError? ValidateListPending(int limit, ReasonletId? after)
+    {
+        if (limit is < 1 or > MaxPendingLimit)
+        {
+            return new MnemosyneError(MnemosyneErrorCode.Validation, $"limit: must be from 1 to {MaxPendingLimit}");
+        }
+
+        if (after is { } cursor && Check.NotDefault(cursor, nameof(after)) is { IsFailure: true } bad)
+        {
+            return bad.Error;
+        }
+
+        return null;
+    }
+
+    private async Task<Result<IReadOnlyList<ReasonletReview>, MnemosyneError>> ListPendingCoreAsync(
+        ReasonletScope scope, int limit, ReasonletId? after, CancellationToken ct)
+    {
+        await using var connection = (await _dataSource.OpenConnectionAsync(ct).ConfigureAwait(false)).AsAsync();
+        var rows = await new ReasonletRepository(connection).ListPendingAsync(scope.Value, after?.Value, limit, ct).ConfigureAwait(false);
+        var reviews = new List<ReasonletReview>(rows.Count);
+        foreach (var row in rows)
+        {
+            reviews.Add(new ReasonletReview(
+                ToDefinition(row.ToReasonletRow()),
+                new ReasonletMetrics(row.Runs, row.Successes, row.LastSuccessAt, row.LastExecutedAt, row.JudgedRuns, row.JudgedSuccesses)));
+        }
+
+        return reviews;
+    }
+
     private async ValueTask<MnemosyneError?> ValidateReviewAsync(ReasonletScope scope, ReasonletId id, CancellationToken ct)
     {
         var migrated = await EnsureMigratedAsync(ct).ConfigureAwait(false);

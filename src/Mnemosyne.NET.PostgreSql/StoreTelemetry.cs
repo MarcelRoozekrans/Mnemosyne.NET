@@ -190,6 +190,12 @@ internal static class StoreTelemetry
     internal static void ReasonletId(Activity? activity, ReasonletId id) =>
         activity?.SetTag("mnemosyne.reasonlet.id", id.Value.ToString());
 
+    /// <summary>Tags a pending-review list with its limit, before it runs, so a failed list has it too.</summary>
+    internal static void ListLimit(Activity? activity, int limit) => activity?.SetTag("mnemosyne.list.limit", limit);
+
+    /// <summary>Tags a successful pending-review list with how many Reasonlets it returned.</summary>
+    internal static void ListReturned(Activity? activity, int returned) => activity?.SetTag("mnemosyne.list.returned", returned);
+
     /// <summary>Tags a search with its limit, before it runs, so a failed search has it too.</summary>
     internal static void SearchLimit(Activity? activity, int limit) => activity?.SetTag("mnemosyne.search.limit", limit);
 

@@ -204,6 +204,25 @@ internal sealed partial class ReasonletRepository(IAsyncDbConnection connection)
         """)]
     public partial Task<Guid[]> LockForErasureAsync(string scope, string? subjectId, IAsyncDbTransaction transaction, CancellationToken ct);
 
+    /// <summary>
+    /// One page of the scope's Reasonlets that wait for review, ordered by id, each with its own execution metrics. A
+    /// null <c>after</c> starts at the beginning. A Reasonlet without a counter row, which the store never leaves,
+    /// reads as no runs and its last execution as its creation time. The partial index on pending rows serves it.
+    /// </summary>
+    [Query("""
+        SELECT r.id, r.scope, r.name, r.intent, r.version, r.graph, r.parent_id, r.status,
+               r.source, r.run_id, r.subject_id, r.tags, r.created_at,
+               coalesce(m.runs, 0), coalesce(m.successes, 0), m.last_success_at,
+               coalesce(m.last_executed_at, r.created_at),
+               coalesce(m.judged_runs, 0), coalesce(m.judged_successes, 0)
+        FROM mnemosyne.reasonlets r
+        LEFT JOIN mnemosyne.reasonlet_metrics m ON m.reasonlet_id = r.id AND m.scope = r.scope
+        WHERE r.scope = @scope AND r.status = 2 AND (@after::uuid IS NULL OR r.id > @after)
+        ORDER BY r.id
+        LIMIT @limit
+        """)]
+    public partial Task<List<PendingRow>> ListPendingAsync(string scope, Guid? after, int limit, CancellationToken ct);
+
     /// <summary>Sets a Reasonlet of the scope to Active, and answers its id, or null when it is not in the scope.</summary>
     [Query("UPDATE mnemosyne.reasonlets SET status = 1 WHERE scope = @scope AND id = @id RETURNING id")]
     public partial Task<Guid?> ApproveAsync(string scope, Guid id, CancellationToken ct);
