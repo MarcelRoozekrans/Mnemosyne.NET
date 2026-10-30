@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.4.0](https://github.com/MarcelRoozekrans/Mnemosyne.NET/compare/v0.3.0...v0.4.0) (2026-10-30)
+
+
+### ⚠ BREAKING CHANGES
+
+* IReasonletStore and IReasonletMemory gain ApproveAsync, RejectAsync and ListPendingAsync, and ReasonletStoreEntry gains a last positional member, ReviewRequired, defaulting to false. A custom store or memory implementation must add the three members.
+
+### Features
+
+* phase 3.3 — human review gate ([#28](https://github.com/MarcelRoozekrans/Mnemosyne.NET/issues/28)) ([fd2eed8](https://github.com/MarcelRoozekrans/Mnemosyne.NET/commit/fd2eed8b73ef8118c8cb3d35133f95235694d53f))
+
 ## [0.3.0](https://github.com/MarcelRoozekrans/Mnemosyne.NET/compare/v0.2.0...v0.3.0) (2026-10-30)
 
 
