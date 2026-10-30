@@ -105,57 +105,56 @@ Design: [roadmap design](../superpowers/specs/2026-10-21-roadmap-design.md), bui
 **Plan:** `docs/superpowers/plans/2026-10-28-phase-2.5-evaluation-docs.md`
 **Completed:** 2026-10-28
 
-## Milestone 3: Off-the-shelf integrations [status: pending]
+## Milestone 3: Off-the-shelf integrations [status: active]
 **Goal:** Any `IChatClient` app or Agent Framework agent gets recall, capture and learning without writing Mnemosyne-specific code.
+**Started:** 2026-10-30
+**Design:** [milestone 3 design](../superpowers/specs/2026-10-30-milestone-3-design.md)
 **Definition of Done:**
-- [ ] `UseReasonlets()` recalls, captures and learns in an `IChatClient` pipeline
-- [ ] The `find_procedure` tool and the `AIContextProvider` are shipped
-- [ ] Captured content passes a redaction hook, AI.Sentinel by default, and an opt-in review gate
+- [ ] A tool-calling chat transcript becomes a tool-shape graph, stored as a new Reasonlet, a new version or an execution of the recalled one
+- [ ] Captured content passes a redaction hook; a flagged capture is dropped and leaves a telemetry event without the content
+- [ ] With the review gate on, captured procedures stay out of recall until approved, and can be approved or rejected
+- [ ] `Mnemosyne.NET.Sentinel` runs AI.Sentinel's detectors as the redaction hook
+- [ ] `UseReasonlets()` recalls, injects the best match, and captures and judges in the background in an `IChatClient` pipeline; the `find_procedure` tool is shipped
+- [ ] An Agent Framework `AIContextProvider` gives an agent the same recall and capture over its thread
 - [ ] Docs and samples cover every integration
 
 ### Phase 3.1: Capture [status: pending]
-**Goal:** Turn a tool-call trace into graph JSON, stored as a new Reasonlet or a new version of the recalled one.
+**Goal:** Turn a chat transcript's tool calls into a tool-shape graph: the tools called, in order, with argument names but not values. Capture it as a new Reasonlet, a new version or an execution of the recalled one.
 **Surface:** Backend
 **HelpWanted:** no
 **Plan:** _to be written_
 
 ### Phase 3.2: Redaction hook [status: pending]
-**Goal:** A hook that runs on captured content before it is stored.
+**Goal:** A hook that runs on captured content before it is stored and can block a capture; a blocked capture is dropped and leaves a telemetry event without the content.
 **Surface:** Backend
 **HelpWanted:** no
 **Plan:** _to be written_
 
 ### Phase 3.3: Human review gate [status: pending]
-**Goal:** Opt-in pending-review state for captured procedures, with approve and reject.
+**Goal:** Opt-in pending-review state for new Reasonlets and new versions, kept out of recall, with approve and reject.
 **Surface:** Backend
 **HelpWanted:** no
 **Plan:** _to be written_
 
 ### Phase 3.4: AI.Sentinel adapter [status: pending]
-**Goal:** `Mnemosyne.NET.Sentinel`: Sentinel detectors as the default redaction hook.
+**Goal:** `Mnemosyne.NET.Sentinel`: AI.Sentinel's detectors as the default redaction hook.
 **Surface:** Backend
 **HelpWanted:** no
 **Plan:** _to be written_
 
-### Phase 3.5: UseReasonlets middleware [status: pending]
-**Goal:** `IChatClient` middleware for recall before the call and background capture after it.
+### Phase 3.5: UseReasonlets middleware and find_procedure tool [status: pending]
+**Goal:** `IChatClient` middleware in the core package that recalls and injects the best match on a new question and captures in the background after the call, plus an `AIFunction` the model calls to look up a procedure.
 **Surface:** Backend
 **HelpWanted:** no
 **Plan:** _to be written_
 
-### Phase 3.6: find_procedure recall tool [status: pending]
-**Goal:** An `AIFunction` the model calls to look up a procedure when it wants one.
+### Phase 3.6: Agent Framework AIContextProvider [status: pending]
+**Goal:** A thread-aware `AIContextProvider` in its own package for Microsoft Agent Framework, usable by Thalos.NET and Daedalus.NET.
 **Surface:** Backend
 **HelpWanted:** no
 **Plan:** _to be written_
 
-### Phase 3.7: Agent Framework AIContextProvider [status: pending]
-**Goal:** A thread-aware `AIContextProvider` for Microsoft Agent Framework, usable by Thalos.NET and Daedalus.NET.
-**Surface:** Backend
-**HelpWanted:** no
-**Plan:** _to be written_
-
-### Phase 3.8: Integration docs and samples [status: pending]
+### Phase 3.7: Integration docs and samples [status: pending]
 **Goal:** Docsite pages and samples for each integration.
 **Surface:** Docs
 **HelpWanted:** no
