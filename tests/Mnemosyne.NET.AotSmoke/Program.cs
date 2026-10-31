@@ -1,3 +1,4 @@
+using AI.Sentinel;
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
 using Microsoft.Extensions.AI;
@@ -7,6 +8,7 @@ using Mnemosyne.NET;
 using Mnemosyne.NET.Abstractions;
 using Mnemosyne.NET.Minos;
 using Mnemosyne.NET.PostgreSql;
+using Mnemosyne.NET.Sentinel;
 using Npgsql;
 using ZeroAlloc.Results;
 
@@ -73,6 +75,13 @@ var guarded = await GuardSmoke(read.Value);
 if (guarded != 0)
 {
     return guarded;
+}
+
+// The AI.Sentinel adapter as a host wires it: AddAISentinel, AddMnemosyneSentinel and the facade, run under native AOT.
+var sentinel = await SentinelSmoke(read.Value);
+if (sentinel != 0)
+{
+    return sentinel;
 }
 
 // The PostgreSQL half needs PostgreSQL 15 or later with pgvector 0.8.0 or later; CI starts one and sets
@@ -590,6 +599,39 @@ static async Task<int> GuardSmoke(ReasonletGraph graph)
     {
         Console.Error.WriteLine($"The capture guard did not block: {(blocked.IsFailure ? $"{blocked.Error.Code} {blocked.Error.Detail}" : blocked.Value.ToString())}");
         return 6;
+    }
+
+    return 0;
+}
+
+// The real AI.Sentinel pipeline without a database: a credential in the question trips SEC-02, a regex detector that
+// needs no embedding generator or escalation client. The store and the generator throw, so a Blocked answer also
+// proves the guard ran before anything was embedded or stored.
+static async Task<int> SentinelSmoke(ReasonletGraph graph)
+{
+    var services = new ServiceCollection();
+    services.AddSingleton<IReasonletStore>(new UnreachableStore());
+    services.AddSingleton<IEmbeddingGenerator<string, Embedding<float>>>(new UnreachableEmbeddingGenerator());
+    services.AddAISentinel();
+    services.AddMnemosyneSentinel();
+    services.AddMnemosyne();
+    await using var provider = services.BuildServiceProvider();
+
+    var memory = provider.GetRequiredService<IReasonletMemory>();
+    var blocked = await memory.RememberAsync(
+        new ReasonletCapture
+        {
+            Scope = new ReasonletScope("aot-sentinel"),
+            Question = "Why does api_key=abc123def456ghi789 fail?",
+            Graph = graph,
+            Outcome = new ReasonletOutcome(true, TimeSpan.FromMilliseconds(5), null),
+            Provenance = new ReasonletProvenance { Source = "aot-smoke" },
+        },
+        CancellationToken.None);
+    if (blocked.IsSuccess || blocked.Error.Code != MnemosyneErrorCode.Blocked || blocked.Error.Detail != "ai-sentinel/SEC-02")
+    {
+        Console.Error.WriteLine($"AI.Sentinel did not block the credential: {(blocked.IsFailure ? $"{blocked.Error.Code} {blocked.Error.Detail}" : blocked.Value.ToString())}");
+        return 60;
     }
 
     return 0;
