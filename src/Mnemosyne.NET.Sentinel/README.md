@@ -38,6 +38,8 @@ using AI.Sentinel.Detection;
 services.AddMnemosyneSentinel(new SentinelCaptureGuardOptions { BlockAtSeverity = Severity.Medium });
 ```
 
+The default `High` leaves out what AI.Sentinel rates lower. Its `PiiLeakageDetector` rates a credit card number Critical, and an IBAN, SSN, BSN, passport number and tax ID High, so those block. It rates an email address, a phone number and a date of birth Medium, so a question carrying one is stored at the default. A host that wants contact PII kept out of memory sets `BlockAtSeverity = Severity.Medium`, which blocks with the detail `ai-sentinel/SEC-23`. That also blocks every other Medium detection, so watch for false positives.
+
 ## What is scanned
 
 The pipeline sees the capture's question, its intent and its name, as one user message each, in that order. A blank intent or name is left out. It sees nothing else: not the answer, the graph or the provenance tags.
@@ -52,7 +54,9 @@ The verdict carries the detector id only. The detection's reason is never read a
 
 ## Failures
 
-The guard never returns an error. An exception from the pipeline reaches the facade, which treats the guard as down: the remember fails closed with `Unavailable`, because a capture that was not inspected is not stored. The caller's own cancellation propagates.
+The guard never returns an error. An exception from the pipeline itself reaches the facade, which treats the guard as down: the remember fails closed with `Unavailable`, because a capture that the pipeline did not inspect is not stored. The caller's own cancellation propagates.
+
+Known limitation: this holds for the pipeline as a whole, not for each detector in it. AI.Sentinel 4.1.1 catches an exception from a single detector, skips that detector for the scan, calls `SentinelOptions.OnDetectorFailure` and counts its result as clean. `PipelineResult` carries no failure signal, so the guard cannot tell. A semantic or escalating detector whose endpoint is down is therefore skipped, and the capture can be stored without that control. Set `OnDetectorFailure` in the host's AI.Sentinel options to learn about it. The gap is tracked upstream as [AI.Sentinel#550](https://github.com/MarcelRoozekrans/AI.Sentinel/issues/550).
 
 ## Slow detectors and `GuardTimeout`
 
@@ -66,18 +70,18 @@ AI.Sentinel's own README says to register the default pipeline first, so put tha
 
 ```csharp
 using AI.Sentinel;
-using AI.Sentinel.Detectors.Operational;
+using AI.Sentinel.Detectors.Security;
 using Mnemosyne.NET.Sentinel;
 
 services.AddAISentinel(opts => { /* the host's own settings */ });
 services.AddAISentinel("capture", opts =>
 {
-    opts.Configure<RepetitionLoopDetector>(c => c.Enabled = false);
+    opts.Configure<PromptInjectionDetector>(c => c.Enabled = false);
 });
 services.AddMnemosyneSentinel(new SentinelCaptureGuardOptions { PipelineName = "capture" });
 ```
 
-Every pipeline sees the same detector pool. A named pipeline starts from fresh `SentinelOptions` and tunes the pool with `Configure<T>`, where `c.Enabled = false` switches a detector off for that pipeline only. The guard resolves the keyed pipeline and options of that name. Replace `RepetitionLoopDetector` with the slow detectors of your own setup.
+Every pipeline sees the same detector pool. A named pipeline starts from fresh `SentinelOptions` and tunes the pool with `Configure<T>`, where `c.Enabled = false` switches a detector off for that pipeline only. The guard resolves the keyed pipeline and options of that name. `PromptInjectionDetector` is a semantic detector that embeds the text and can call out to a reviewer. Replace it with the slow detectors of your own setup.
 
 ## The answer is not scanned
 

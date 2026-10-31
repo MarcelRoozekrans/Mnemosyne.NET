@@ -25,6 +25,12 @@ namespace Mnemosyne.NET.Sentinel;
 /// detection's reason is never read, since it can quote the capture. Exceptions from the pipeline and cancellation
 /// propagate; the guard never returns an error.
 /// </para>
+/// <para>
+/// Known limitation: only an exception from the pipeline itself, or a timeout through the facade's guard timeout, fails
+/// closed as <c>Unavailable</c>. AI.Sentinel 4.1.1 catches an exception from a single detector, skips that detector, calls
+/// <see cref="SentinelOptions.OnDetectorFailure"/> and counts its result as clean. The pipeline result carries no failure
+/// signal, so a capture can be stored without that control. This is tracked upstream as AI.Sentinel#550.
+/// </para>
 /// </remarks>
 public sealed class SentinelCaptureGuard : ICaptureGuard
 {
