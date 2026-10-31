@@ -6,7 +6,8 @@
     <!-- AI.Sentinel pulls in ZeroAlloc.Authorization, whose bundled generator flows in transitively despite AI.Sentinel's
          exclude="Analyzers". It would emit a public, undocumented registration type into this assembly, which would collide
          with a host app's own. The guard declares no policies, so it uses the package's own switch to drop that generator.
-         The switch can go away once ZeroAlloc-Net/ZeroAlloc.Authorization#181 is fixed. -->
+         Remove the switch only if the fix for ZeroAlloc-Net/ZeroAlloc.Authorization#181 stops the generator emitting the
+         registration type into libraries that declare no policies; documenting the type would still emit it. -->
     <ZeroAllocAuthorizationDisableBundledAnalyzer>true</ZeroAllocAuthorizationDisableBundledAnalyzer>
     <Description>A capture guard that runs AI.Sentinel's detectors before a Reasonlet is stored.</Description>
   </PropertyGroup>
