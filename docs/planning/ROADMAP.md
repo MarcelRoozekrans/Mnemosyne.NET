@@ -142,11 +142,12 @@ Design: [roadmap design](../superpowers/specs/2026-10-21-roadmap-design.md), bui
 **Plan:** `docs/superpowers/plans/2026-10-30-phase-3.3-human-review-gate.md`
 **Completed:** 2026-10-30
 
-### Phase 3.4: AI.Sentinel adapter [status: active]
+### Phase 3.4: AI.Sentinel adapter [status: complete]
 **Goal:** `Mnemosyne.NET.Sentinel`: AI.Sentinel's detectors as the default redaction hook.
 **Surface:** Backend
 **HelpWanted:** no
 **Plan:** `docs/superpowers/plans/2026-10-30-phase-3.4-ai-sentinel-adapter.md`
+**Completed:** 2026-10-31
 
 ### Phase 3.5: UseReasonlets middleware and find_procedure tool [status: pending]
 **Goal:** `IChatClient` middleware in the core package that recalls and injects the best match on a new question and captures in the background after the call, plus an `AIFunction` the model calls to look up a procedure.
