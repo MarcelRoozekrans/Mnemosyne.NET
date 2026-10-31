@@ -97,10 +97,13 @@ public sealed class SentinelCaptureGuard : ICaptureGuard
         }
     }
 
-    /// <summary>Fits a detector id to the verdict: cut to the code point limit, or replaced when it is not valid UTF-16.</summary>
+    /// <summary>
+    /// Fits a detector id to the verdict: cut to the code point limit, or replaced when it is not valid UTF-16 or is blank
+    /// once cut.
+    /// </summary>
     private static string DetectorName(string id)
     {
-        if (string.IsNullOrWhiteSpace(id) || Check.ValidUtf16(id, nameof(id)).IsFailure)
+        if (Check.ValidUtf16(id, nameof(id)).IsFailure)
         {
             return InvalidDetectorId;
         }
@@ -111,13 +114,14 @@ public sealed class SentinelCaptureGuard : ICaptureGuard
         {
             if (count == EvaluationLimits.MaxEvaluatorLength)
             {
-                return id[..end];
+                break;
             }
 
             end += rune.Utf16SequenceLength;
             count++;
         }
 
-        return id;
+        var name = id[..end];
+        return string.IsNullOrWhiteSpace(name) ? InvalidDetectorId : name;
     }
 }

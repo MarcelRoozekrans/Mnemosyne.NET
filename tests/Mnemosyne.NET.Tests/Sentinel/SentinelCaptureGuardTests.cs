@@ -201,6 +201,17 @@ public sealed class SentinelCaptureGuardTests
     }
 
     [Fact]
+    public async Task WhitespacePrefixedDetectorIdIsReplaced()
+    {
+        var id = new string(' ', 100) + "x";
+
+        var verdict = await Inspect(new FakeDetectionPipeline { Result = Result(Detection(id, Severity.High)) });
+
+        Assert.Equal(CaptureVerdict.Block("ai-sentinel", "invalid-detector-id"), verdict);
+        Assert.True(verdict.Validate().IsSuccess);
+    }
+
+    [Fact]
     public async Task PipelineExceptionPropagates()
     {
         var guard = new SentinelCaptureGuard(
