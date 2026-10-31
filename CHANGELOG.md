@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.0](https://github.com/MarcelRoozekrans/Mnemosyne.NET/compare/v0.4.0...v0.5.0) (2026-10-31)
+
+
+### Features
+
+* phase 3.4 — AI.Sentinel adapter ([#30](https://github.com/MarcelRoozekrans/Mnemosyne.NET/issues/30)) ([04a2599](https://github.com/MarcelRoozekrans/Mnemosyne.NET/commit/04a2599698db68a1cfc593c50331f2e070176c50))
+
 ## [0.4.0](https://github.com/MarcelRoozekrans/Mnemosyne.NET/compare/v0.3.0...v0.4.0) (2026-10-30)
 
 
