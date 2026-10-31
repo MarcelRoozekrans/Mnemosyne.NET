@@ -5,10 +5,11 @@
   <ItemGroup>
     <PackageVersion Include="AdoNet.Async" Version="1.4.0" />
     <PackageVersion Include="AdoNet.Async.Adapters" Version="1.4.0" />
+    <PackageVersion Include="AI.Sentinel" Version="4.1.1" />
     <PackageVersion Include="JsonSchema.Net" Version="9.4.1" />
-    <PackageVersion Include="Microsoft.Extensions.AI.Abstractions" Version="10.10.1" />
-    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.13" />
-    <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.13" />
+    <PackageVersion Include="Microsoft.Extensions.AI.Abstractions" Version="10.11.0" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.14" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.14" />
     <!-- 18.0.x is the last line on Microsoft.Testing.Platform v1, which xunit.v3 3.x runs on. 18.1 and
          later need platform v2, so this moves together with the xunit.v3 4.x bump. -->
     <PackageVersion Include="Microsoft.Testing.Extensions.CodeCoverage" Version="18.0.6" />

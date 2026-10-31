@@ -103,6 +103,8 @@ An answer that is blank or longer than 32,000 code points is not judged, so no `
 
 ### The guard activity
 
+`Mnemosyne.NET.Sentinel` is the ready-made `ICaptureGuard`, built on AI.Sentinel.
+
 | Tag | Set when |
 |---|---|
 | `mnemosyne.guard` | the guard answered with a valid verdict: the guard's name, from `CaptureVerdict.Guard` |

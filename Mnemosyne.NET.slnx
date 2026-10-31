@@ -3,6 +3,7 @@
     <Project Path="src/Mnemosyne.NET.Abstractions/Mnemosyne.NET.Abstractions.csproj" />
     <Project Path="src/Mnemosyne.NET/Mnemosyne.NET.csproj" />
     <Project Path="src/Mnemosyne.NET.Minos/Mnemosyne.NET.Minos.csproj" />
+    <Project Path="src/Mnemosyne.NET.Sentinel/Mnemosyne.NET.Sentinel.csproj" />
     <Project Path="src/Mnemosyne.NET.PostgreSql/Mnemosyne.NET.PostgreSql.csproj" />
   </Folder>
   <Folder Name="/tests/">
