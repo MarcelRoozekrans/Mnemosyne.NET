@@ -1,35 +1,36 @@
-# Session State — 2026-10-30
+# Session State — 2026-10-31
 
-**Date:** 2026-10-30
+**Date:** 2026-10-31
 
 ## Current Position
-- **Milestone:** 3 — Off-the-shelf integrations, active since 2026-10-30. Design: `docs/superpowers/specs/2026-10-30-milestone-3-design.md`.
-- **Phase:** 3.3 — Human review gate, implemented on branch `feat/phase-3.3-human-review-gate`, rebased on `main` after the 0.3.0 release. All seven plan tasks are checked off. PR #28 is green, including both codecov checks, and waits for Marcel's merge.
-- **Design:** `docs/superpowers/specs/2026-10-30-phase-3.3-human-review-gate-design.md`.
-- **Plan:** `docs/superpowers/plans/2026-10-30-phase-3.3-human-review-gate.md`. It was executed subagent-driven, with a review after each task and a whole-branch review at the end.
-- **Pre-push review:** `docs/superpowers/reviews/2026-10-30-phase-3.3-pre-push-review.md`, verdict PASS.
-- **Last completed task:** the pre-push review and the PR for phase 3.3.
-- **Next task:** after Marcel merges PR #28, run `start-next-phase` for phase 3.4. Phase 3.3 is already marked complete on this branch.
+- **Milestone:** 3 — Off-the-shelf integrations. It has been active since 2026-10-30, and its design is `docs/superpowers/specs/2026-10-30-milestone-3-design.md`.
+- **Phase:** 3.4 — AI.Sentinel adapter, active on branch `feat/phase-3.4-ai-sentinel-adapter`, which is cut from `main` at fd2eed8 and pushed.
+- **Design:** `docs/superpowers/specs/2026-10-30-phase-3.4-ai-sentinel-adapter-design.md`. Marcel approved it, and it passed a builder check.
+- **Plan:** `docs/superpowers/plans/2026-10-30-phase-3.4-ai-sentinel-adapter.md`. It has six tasks, none started. Marcel approved the plan and chose **subagent-driven** execution.
+- **Last completed task:** the design, the plan, and marking 3.4 active in ROADMAP.md and MILESTONE.md.
+- **Next task:** Task 1 of the plan, the dependency bumps.
 
-## Rulings from the phase 3.3 run that Marcel may want to revisit
-- **Reject runs as two statements.** It locks the row in one statement, then reads status and children in a second. A single statement missed a child committed while it waited, and the race test proved it.
-- **Approve updates only a pending row,** using `AND status = 2`. When it updates nothing, an existence check decides between already Active, which is success, and `NotFound`.
-- **The facade checks the list limit against its own private constant.** It is 100, with the same pinned text as the store. No public constant was added.
-- **The breaking change is marked.** The port commit is `feat!:` with a `BREAKING CHANGE:` footer. Keep `feat!:` in the squash title, and check that the release-please PR lists it.
-- **Dropped:**
-  - `CREATE INDEX IF NOT EXISTS`, for operators with large tables. It would change the pinned DDL. The docs say instead that the index build reads the whole table.
-- **Earlier rulings still open, from phase 3.2:**
-  - A pre-cancelled remember emits `mnemosyne.guard` with outcome `exception`.
-  - `Abandon` takes `Task?`.
+## Decisions from the 3.4 brainstorm
+- **Version:** AI.Sentinel 4.1.1, not 2.x (Marcel). It forces `Microsoft.Extensions.AI.Abstractions` 10.11.0 and DI 10.0.14.
+- **Threshold:** a Mnemosyne-side `BlockAtSeverity`, default High (Marcel). It is stricter than Sentinel's chat default, which quarantines only Critical.
+- **What is scanned:** the question, the intent and the name only (Marcel). The answer, the graph and the provenance tags are never sent. Leaving out the graph and the tags was my call.
+- **Pipeline:** the host's default `IDetectionPipeline`, or a keyed one through `PipelineName` (Marcel). Mnemosyne never configures Sentinel.
+- **Thalos:** Thalos.NET.Sentinel still pins AI.Sentinel 2.3.1. Its move to 4.x is tracked as MarcelRoozekrans/Thalos.NET#457, and it is needed before Daedalus wires both adapters.
 
 ## Open Decisions
 - None blocking.
+- Earlier rulings still open from phase 3.2:
+  - a pre-cancelled remember emits `mnemosyne.guard` with outcome `exception`;
+  - `Abandon` takes `Task?`.
 
 ## Blockers
-- None. Waiting on the merge.
+- None.
+- **Watch:** plan Task 2 probes AI.Sentinel under Native AOT. If AI.Sentinel's own code fails `-warnaserror`, stop and report to Marcel. The fix belongs upstream in AI.Sentinel; do not suppress the warnings.
 
 ## Notes
-- Git trap: `push.default` is `upstream`. Create feature branches with `--no-track`, or push with an explicit `branch:branch` refspec.
+- **Release:** release-please PR #29 (0.4.0) lists phase 3.3 under BREAKING CHANGES.
+- **Git trap:** `push.default` is `upstream`. Push with an explicit `branch:branch` refspec.
+- **Tests:** the repo refuses `dotnet test --filter`. Build first, then run the test exe with `-class <FQN>`.
 
 ## Recommended Next Step
-After PR #28 merges, cut a branch from `main` and run `start-next-phase`. Phase 3.4 has no design spec, so `start-next-phase` routes to brainstorming.
+Check out `feat/phase-3.4-ai-sentinel-adapter` and run the plan subagent-driven, starting at Task 1. After the last task, run the whole-branch review and pre-push review, mark 3.4 complete, and open the PR. Do not merge it.
