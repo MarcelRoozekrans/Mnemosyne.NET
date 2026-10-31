@@ -48,7 +48,7 @@ The session is the run id of the capture's provenance, or `mnemosyne-capture` wh
 
 The guard allows the capture when no detection reaches `BlockAtSeverity`. Otherwise it blocks, and the verdict names the blocking detection with the highest severity. On a tie, the first one wins. The facade then fails the remember with `Blocked`.
 
-The verdict carries the detector id only. The detection's reason is never read and never kept, because it can quote the capture. An id longer than the limit is cut, and an id that is not valid UTF-16 or is blank once cut is replaced by `invalid-detector-id`.
+The verdict carries the detector id only. The detection's reason is never read and never kept, because it can quote the capture. The guard has no logger, so nothing about the capture or the detection leaves it beyond the verdict. An id longer than the limit is cut, and an id that is not valid UTF-16 or is blank once cut is replaced by `invalid-detector-id`.
 
 ## Failures
 
@@ -61,6 +61,8 @@ Semantic and LLM-escalating detectors can be slow. The facade stops waiting for 
 ## A pipeline for the guard
 
 Set `PipelineName` to give the guard its own pipeline, so it can run fewer detectors than the host's chat client does. AI.Sentinel 4.1.1 needs the host to register the default pipeline as well: the shared detector pool resolves the unnamed `SentinelOptions`, and a host that registers only a named pipeline fails at resolution.
+
+AI.Sentinel's own README says to register the default pipeline first, so put that call before the named one.
 
 ```csharp
 using AI.Sentinel;
