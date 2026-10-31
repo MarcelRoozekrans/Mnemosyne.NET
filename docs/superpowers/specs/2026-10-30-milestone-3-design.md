@@ -64,7 +64,7 @@ until a person approves them.
 
 - Milestone 1: `RememberAsync` already chooses between new Reasonlet, new version and execution by comparing the graph with the parent's, and `ReasonletStatus.PendingReview` already exists. Phase 3.1 adds the transcript-to-graph step, not the storage.
 - Milestone 2: the middleware's learn step needs the evaluator; a captured run's answer reaches it and is never stored.
-- External: `Microsoft.Agents.AI` 1.24 and `AI.Sentinel` 2.x on NuGet, the versions Thalos.NET uses. The Thalos `IAgentContextProviderSource` adapter and the Daedalus wiring are PRs in those repos after the provider is released, not phases here.
+- External: `Microsoft.Agents.AI` 1.24 and `AI.Sentinel` 4.x on NuGet. Thalos.NET.Sentinel's move to 4.x is tracked in MarcelRoozekrans/Thalos.NET#457. The Thalos `IAgentContextProviderSource` adapter and the Daedalus wiring are PRs in those repos after the provider is released, not phases here.
 
 ## External Constraints
 
