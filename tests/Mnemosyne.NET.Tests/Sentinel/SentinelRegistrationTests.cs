@@ -45,9 +45,10 @@ public sealed class SentinelRegistrationTests
     [Fact]
     public async Task NamedPipelineIsResolvedByKey()
     {
-        // AI.Sentinel 4.1.1 only supports named pipelines next to the default one: the shared detector pool is built
-        // from the default pipeline's options. So the default pipeline switches SEC-02 off, and the named one keeps it.
-        // Only the keyed pipeline can then block the credential.
+        // A named pipeline needs the default pipeline's SentinelOptions to be registered: AI.Sentinel 4.1.1 resolves the
+        // unkeyed SentinelOptions for the shared detector pool, so a host with only a named pipeline fails at resolution.
+        // Each pipeline applies its own detector configuration, so the default switches SEC-02 off and the named one keeps
+        // it. Only the keyed pipeline can then block the credential.
         var services = Services();
         services.AddAISentinel(o => o.Configure<CredentialExposureDetector>(c => c.Enabled = false));
         services.AddAISentinel("capture", _ => { });
