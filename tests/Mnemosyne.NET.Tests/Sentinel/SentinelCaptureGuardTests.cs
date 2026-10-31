@@ -30,7 +30,7 @@ public sealed class SentinelCaptureGuardTests
     {
         var guard = new SentinelCaptureGuard(pipeline, sentinelOptions ?? new SentinelOptions(), options);
         var result = await guard.InspectAsync(capture ?? Capture(), ct ?? TestContext.Current.CancellationToken);
-        Assert.True(result.IsSuccess);
+        Assert.True(result.IsSuccess, result.IsFailure ? result.Error.ToString() : "");
         return result.Value;
     }
 
