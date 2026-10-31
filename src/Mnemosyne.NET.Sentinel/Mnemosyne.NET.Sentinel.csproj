@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <IsPackable>true</IsPackable>
+    <IsAotCompatible>true</IsAotCompatible>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <!-- AI.Sentinel pulls in ZeroAlloc.Authorization, whose bundled generator would emit an undocumented public type into this
+         assembly. The guard declares no policies, so it uses the package's own switch to drop that generator. -->
+    <ZeroAllocAuthorizationDisableBundledAnalyzer>true</ZeroAllocAuthorizationDisableBundledAnalyzer>
+    <Description>A capture guard that runs AI.Sentinel's detectors before a Reasonlet is stored.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Mnemosyne.NET.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="AI.Sentinel" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Mnemosyne.NET.Abstractions\Mnemosyne.NET.Abstractions.csproj" />
+  </ItemGroup>
+</Project>

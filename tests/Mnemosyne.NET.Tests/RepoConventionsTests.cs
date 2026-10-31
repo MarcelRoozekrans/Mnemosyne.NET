@@ -155,6 +155,23 @@ public sealed class RepoConventionsTests
         Assert.Equal(new string?[] { "Microsoft.Extensions.DependencyInjection.Abstractions", "Minos.NET" }, packages);
     }
 
+    [Fact]
+    public void TheSentinelGuardDependsOnAbstractionsSentinelAndDiAbstractionsOnly()
+    {
+        // The guard plugs into the facade through the ports, so it must not reference the core package.
+        var project = XDocument.Load(Path.Combine(RepoRoot(), "src", "Mnemosyne.NET.Sentinel", "Mnemosyne.NET.Sentinel.csproj"));
+        var projects = project.Descendants("ProjectReference")
+            .Select(e => Path.GetFileName(e.Attribute("Include")?.Value.Replace('\\', '/')))
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+        var packages = project.Descendants("PackageReference")
+            .Select(e => e.Attribute("Include")?.Value)
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+        Assert.Equal(new string?[] { "Mnemosyne.NET.Abstractions.csproj" }, projects);
+        Assert.Equal(new string?[] { "AI.Sentinel", "Microsoft.Extensions.DependencyInjection.Abstractions" }, packages);
+    }
+
     private static string StripComments(string yaml) =>
         string.Join('\n', yaml.Split('\n').Where(l => !l.TrimStart().StartsWith('#')));
 
