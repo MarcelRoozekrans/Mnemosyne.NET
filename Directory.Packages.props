@@ -5,7 +5,7 @@
   <ItemGroup>
     <PackageVersion Include="AdoNet.Async" Version="1.5.6" />
     <PackageVersion Include="AdoNet.Async.Adapters" Version="1.4.0" />
-    <PackageVersion Include="AI.Sentinel" Version="4.1.1" />
+    <PackageVersion Include="AI.Sentinel" Version="4.2.0" />
     <PackageVersion Include="JsonSchema.Net" Version="9.4.1" />
     <PackageVersion Include="Microsoft.Extensions.AI.Abstractions" Version="10.11.0" />
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.14" />
