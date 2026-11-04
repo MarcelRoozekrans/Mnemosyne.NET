@@ -47,6 +47,7 @@
   "overrides": {
     "qs": "^6.16.0",
     "serialize-javascript": "^7.1.0",
-    "uuid": "^14.0.0"
+    "uuid": "^14.0.0",
+    "tinypool": "^2.1.2"
   }
 }
