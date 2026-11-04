@@ -12,10 +12,11 @@ namespace Mnemosyne.NET;
 /// <remarks>
 /// <para>
 /// Start one with <see cref="Start"/> before an item is processed, report how it ended with exactly one of
-/// <see cref="Remembered"/>, <see cref="Skipped"/>, <see cref="Failed"/>, <see cref="Threw"/> or <see cref="Cancelled"/>, and dispose it, which
+/// <see cref="Remembered"/>, <see cref="Skipped"/>, <see cref="SkippedPendingToolCalls"/>, <see cref="Failed"/>,
+/// <see cref="Threw"/> or <see cref="Cancelled"/>, and dispose it, which
 /// counts, times and stops it. On <c>mnemosyne.capture.runs</c> the outcome is <c>new_reasonlet</c>, <c>new_version</c> or
-/// <c>execution_only</c> for a stored capture, <c>skipped</c> with <c>mnemosyne.skip_reason</c> <c>no_question</c> or
-/// <c>no_tool_calls</c>, the error code's name for an error result, and <c>exception</c> with <c>error.type</c> set to the
+/// <c>execution_only</c> for a stored capture, <c>skipped</c> with <c>mnemosyne.skip_reason</c> <c>no_question</c>,
+/// <c>no_tool_calls</c> or <c>pending_tool_calls</c>, the error code's name for an error result, and <c>exception</c> with <c>error.type</c> set to the
 /// full type name for an exception.
 /// </para>
 /// <para>
@@ -94,22 +95,11 @@ internal sealed class CaptureTelemetry : IDisposable
     }
 
     /// <summary>Reports a transcript with nothing to capture: outcome <c>skipped</c>, tagged with the reason.</summary>
-    internal void Skipped(TranscriptSkipReason reason)
-    {
-        _outcome = SkippedOutcome;
-        _skipReason = reason == TranscriptSkipReason.NoQuestion ? "no_question" : "no_tool_calls";
-        _activity?.SetTag(RecallTelemetry.OutcomeTag, _outcome);
-        _activity?.SetTag(SkipReasonTag, _skipReason);
-    }
+    internal void Skipped(TranscriptSkipReason reason) =>
+        SetSkipped(reason == TranscriptSkipReason.NoQuestion ? "no_question" : "no_tool_calls");
 
-    /// <summary>Reports a run that ends on a function call with no result: outcome <c>skipped</c>, reason <c>pending_tool_calls</c>.</summary>
-    internal void SkippedPendingToolCalls()
-    {
-        _outcome = SkippedOutcome;
-        _skipReason = PendingToolCallsReason;
-        _activity?.SetTag(RecallTelemetry.OutcomeTag, _outcome);
-        _activity?.SetTag(SkipReasonTag, _skipReason);
-    }
+    /// <summary>Reports a run that ends on a call with no answer: outcome <c>skipped</c>, reason <c>pending_tool_calls</c>.</summary>
+    internal void SkippedPendingToolCalls() => SetSkipped(PendingToolCallsReason);
 
     /// <summary>Reports an error result: the outcome and <c>error.type</c> are the code's name.</summary>
     internal void Failed(MnemosyneErrorCode code)
@@ -133,6 +123,14 @@ internal sealed class CaptureTelemetry : IDisposable
     /// is not marked as failed, since the queue counts the item as dropped. The duration is still recorded.
     /// </summary>
     internal void Cancelled() => _cancelled = true;
+
+    private void SetSkipped(string reason)
+    {
+        _outcome = SkippedOutcome;
+        _skipReason = reason;
+        _activity?.SetTag(RecallTelemetry.OutcomeTag, _outcome);
+        _activity?.SetTag(SkipReasonTag, _skipReason);
+    }
 
     /// <summary>Counts and times the item, and stops the activity.</summary>
     public void Dispose()

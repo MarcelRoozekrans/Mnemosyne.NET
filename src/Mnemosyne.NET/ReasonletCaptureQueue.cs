@@ -13,8 +13,9 @@ namespace Mnemosyne.NET;
 /// </para>
 /// <para>
 /// <see cref="DrainAsync"/> closes the queue and waits for the reader to work through what is left. When its token fires
-/// first, the reader's token is cancelled: the item in progress is cancelled and the rest is skipped. Every item that does
-/// not finish is counted once as <c>dropped_shutdown</c>. Stopping the host drains through
+/// first, the reader's token is cancelled: the item in progress is cancelled and the rest is skipped. The drain then still
+/// waits for the reader, so for the memory to honour the cancellation of the item in progress. Every item that does not
+/// finish is counted once as <c>dropped_shutdown</c>. Stopping the host drains through
 /// <see cref="ReasonletCaptureHostedService"/>; disposing, synchronously or not, drains bounded by
 /// <see cref="ReasonletCaptureOptions.DrainTimeout"/>, so a provider disposed either way never throws because of the queue.
 /// There is one drain: a later call waits for it, and its token can cut it short too.
@@ -60,6 +61,8 @@ internal sealed class ReasonletCaptureQueue : IAsyncDisposable, IDisposable
     {
         if (!_channel.Writer.TryWrite(item))
         {
+            // Once a drain has begun, a refusal counts as dropped_shutdown, even when the queue was also full: the item is
+            // lost to the shutdown either way.
             CaptureTelemetry.Queue(_closing ? CaptureTelemetry.DroppedShutdownOutcome : CaptureTelemetry.DroppedFullOutcome);
             return false;
         }
@@ -78,7 +81,10 @@ internal sealed class ReasonletCaptureQueue : IAsyncDisposable, IDisposable
         return drain.IsCompleted ? drain : WaitAsync(drain, ct);
     }
 
-    /// <summary>Drains, giving up on the work that is left after <see cref="ReasonletCaptureOptions.DrainTimeout"/>.</summary>
+    /// <summary>
+    /// Drains, cancelling the work that is left after <see cref="ReasonletCaptureOptions.DrainTimeout"/>, then waiting for the
+    /// memory to honour that cancellation.
+    /// </summary>
     public async ValueTask DisposeAsync()
     {
         using var timeout = new CancellationTokenSource(_drainTimeout);

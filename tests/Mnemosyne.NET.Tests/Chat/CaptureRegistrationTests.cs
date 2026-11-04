@@ -30,6 +30,25 @@ public sealed class CaptureRegistrationTests
         Assert.Same(options, provider.GetRequiredService<ReasonletCaptureOptions>());
         Assert.Same(provider.GetRequiredService<ReasonletCaptureQueue>(), provider.GetRequiredService<ReasonletCaptureQueue>());
         Assert.Same(provider.GetRequiredService<ReasonletCaptureProcessor>(), provider.GetRequiredService<ReasonletCaptureProcessor>());
+        Assert.Single(provider.GetServices<ReasonletCaptureQueue>());
+        Assert.Single(provider.GetServices<ReasonletCaptureProcessor>());
+    }
+
+    [Fact]
+    public async Task ASecondCallsOptionsReachTheProcessor()
+    {
+        var memory = CaptureTestData.Memory();
+        var services = new ServiceCollection();
+        services.AddSingleton<IReasonletMemory>(memory);
+        services.AddReasonletCapture();
+        services.AddReasonletCapture(new ReasonletCaptureOptions { Source = "second" });
+        await using var provider = services.BuildServiceProvider();
+
+        var queue = provider.GetRequiredService<ReasonletCaptureQueue>();
+        Assert.True(queue.TryEnqueue(CaptureTestData.Item()));
+        await queue.DrainAsync(Ct);
+
+        Assert.Equal("second", Assert.Single(memory.Captures).Provenance.Source);
     }
 
     [Fact]

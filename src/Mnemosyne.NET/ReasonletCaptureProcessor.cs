@@ -99,11 +99,13 @@ internal sealed class ReasonletCaptureProcessor(IReasonletMemory memory, Reasonl
     }
 
     /// <summary>
-    /// Whether the run stops on a function call nobody answered: the last message holds a call, and any result for it would
-    /// have to come after it. Such a response is one trip of a tool loop that the caller drives, not a finished run.
+    /// Whether the run stops on a call nobody answered: the last message holds a function call that is not informational
+    /// only, or an input request such as a tool approval request, and any answer to it would have to come after it. Such a
+    /// response is one trip of a tool loop that the caller drives, not a finished run.
     /// </summary>
     private static bool EndsWithPendingCall(List<ChatMessage> messages) =>
-        messages.Count > 0 && messages[^1].Contents.Any(content => content is FunctionCallContent);
+        messages.Count > 0
+        && messages[^1].Contents.Any(content => content is FunctionCallContent { InformationalOnly: false } or InputRequestContent);
 
     private static ReasonletId? Parent(ReasonletCaptureItem item, ReasonletGraph graph)
     {
@@ -126,8 +128,14 @@ internal sealed class ReasonletCaptureProcessor(IReasonletMemory memory, Reasonl
                     hashed = true;
                 }
 
+                // A run graph without a hash equals no match, so only the top matches are left to look at.
+                if (hash is null)
+                {
+                    break;
+                }
+
                 var candidate = match.Reasonlet.Graph.ComputeContentHash();
-                if (hash is not null && candidate.IsSuccess && string.Equals(hash, candidate.Value, StringComparison.Ordinal))
+                if (candidate.IsSuccess && string.Equals(hash, candidate.Value, StringComparison.Ordinal))
                 {
                     return match.Reasonlet.Id;
                 }

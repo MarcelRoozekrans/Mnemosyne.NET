@@ -100,8 +100,10 @@ public static class ServiceCollectionExtensions
     /// <remarks>
     /// The capture remembers through the registered <see cref="IReasonletMemory"/>, for example from
     /// <see cref="AddMnemosyne"/>. The queue's reader starts on the first capture, so a host without the generic host
-    /// still captures. Without a host, disposing the service provider, synchronously or asynchronously, drains the queue,
-    /// bounded by <see cref="ReasonletCaptureOptions.DrainTimeout"/>. A second call adds no second hosted service.
+    /// still captures. Without a host, disposing the service provider, synchronously or asynchronously, drains the queue.
+    /// After <see cref="ReasonletCaptureOptions.DrainTimeout"/> the drain cancels the work that is left, then waits for the
+    /// memory to honour that cancellation. A second call registers no second queue, processor or hosted service, and its
+    /// options replace the first call's, as with <see cref="AddMnemosyne"/>.
     /// </remarks>
     /// <param name="services">The service collection.</param>
     /// <param name="options">The settings, or null for the defaults.</param>
@@ -118,11 +120,12 @@ public static class ServiceCollectionExtensions
             throw new ArgumentException(validation.Error.Message, nameof(options));
         }
 
+        // The last options registered win; both factories resolve them rather than capture them.
         services.AddSingleton(options);
-        services.AddSingleton(provider => new ReasonletCaptureProcessor(
+        services.TryAddSingleton(provider => new ReasonletCaptureProcessor(
             provider.GetRequiredService<IReasonletMemory>(),
             provider.GetRequiredService<ReasonletCaptureOptions>()));
-        services.AddSingleton(provider => new ReasonletCaptureQueue(
+        services.TryAddSingleton(provider => new ReasonletCaptureQueue(
             provider.GetRequiredService<ReasonletCaptureProcessor>(),
             provider.GetRequiredService<ReasonletCaptureOptions>()));
         services.AddHostedService<ReasonletCaptureHostedService>();

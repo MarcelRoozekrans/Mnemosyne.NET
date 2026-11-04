@@ -99,6 +99,27 @@ public sealed class ReasonletCaptureProcessorTests
     }
 
     [Fact]
+    public async Task ARunGraphWithoutAHashTakesTheTopMatch()
+    {
+        // An overlong tool name makes the run graph invalid, so it has no hash; the memory rejects it, not the processor.
+        var memory = CaptureTestData.Memory();
+        var first = CaptureTestData.Match();
+        var second = CaptureTestData.Match();
+        ChatMessage[] messages =
+        [
+            new(ChatRole.User, CaptureTestData.Question),
+            new(ChatRole.Assistant, [new FunctionCallContent("c1", new string('t', ReasonletGraphLimits.MaxIdentifierLength + 1))]),
+            new(ChatRole.Tool, [new FunctionResultContent("c1", "ok")]),
+            new(ChatRole.Assistant, "Done."),
+        ];
+        var item = CaptureTestData.Item(messages) with { Lookups = [[], [first, second]] };
+
+        await Processor(memory).ProcessAsync(item, Ct);
+
+        Assert.Equal(first.Reasonlet.Id, Assert.Single(memory.Captures).ParentId);
+    }
+
+    [Fact]
     public async Task AMatchWithAnInvalidGraphIsNeverHashEqual()
     {
         var memory = CaptureTestData.Memory();
@@ -204,6 +225,32 @@ public sealed class ReasonletCaptureProcessorTests
         var memory = CaptureTestData.Memory();
 
         await Processor(memory).ProcessAsync(CaptureTestData.Item(), Ct);
+
+        Assert.Single(memory.Captures);
+    }
+
+    [Fact]
+    public async Task ATrailingApprovalRequestIsNotCaptured()
+    {
+        var memory = CaptureTestData.Memory();
+        using var runs = new RunCounter();
+        var call = new FunctionCallContent("c3", "payments.refund");
+        ChatMessage[] messages = [.. CaptureTestData.Refund().Take(5), new(ChatRole.Assistant, [new ToolApprovalRequestContent("r1", call)])];
+
+        await Processor(memory).ProcessAsync(CaptureTestData.Item(messages), Ct);
+
+        Assert.Empty(memory.Captures);
+        Assert.Equal(["skipped/pending_tool_calls"], runs.Seen);
+    }
+
+    [Fact]
+    public async Task ATrailingInformationalCallDoesNotCountAsPending()
+    {
+        var memory = CaptureTestData.Memory();
+        var call = new FunctionCallContent("c3", "orders.get") { InformationalOnly = true };
+        ChatMessage[] messages = [.. CaptureTestData.Refund().Take(5), new(ChatRole.Assistant, [call])];
+
+        await Processor(memory).ProcessAsync(CaptureTestData.Item(messages), Ct);
 
         Assert.Single(memory.Captures);
     }
