@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.0](https://github.com/MarcelRoozekrans/Mnemosyne.NET/compare/v0.5.0...v0.6.0) (2026-11-04)
+
+
+### Features
+
+* phase 3.5 — UseReasonlets middleware and find_procedure tool ([#48](https://github.com/MarcelRoozekrans/Mnemosyne.NET/issues/48)) ([4363157](https://github.com/MarcelRoozekrans/Mnemosyne.NET/commit/43631575874a19a22afb575b74703b791470484d))
+
 ## [0.5.0](https://github.com/MarcelRoozekrans/Mnemosyne.NET/compare/v0.4.0...v0.5.0) (2026-10-31)
 
 
