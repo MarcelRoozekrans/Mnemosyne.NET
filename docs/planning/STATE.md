@@ -4,7 +4,7 @@
 
 ## Current Position
 - **Milestone:** 3, Off-the-shelf integrations. Active since 2026-10-30. Design: `docs/superpowers/specs/2026-10-30-milestone-3-design.md`.
-- **Phase:** 3.5, UseReasonlets middleware and the find_procedure tool. **Complete** on branch `feat/phase-3.5-reasonlets-find-procedure`, cut from `main` at 87e89f2. The PR against main is open and waits for Marcel to merge it.
+- **Phase:** 3.5, UseReasonlets middleware and the find_procedure tool. **Complete** on branch `feat/phase-3.5-reasonlets-find-procedure`, cut from `main` at 87e89f2. PR #48 against main is open, with every check green including both codecov checks; it waits for Marcel to merge it.
   - All 9 plan tasks are done, each with a task review. A whole-branch review, one fix wave and a scoped re-review followed, and the pre-push review passed.
   - Unit 1444, integration 301, and the AOT smoke publishes without warnings and exits 0.
 - **Previous phase:** 3.4, the AI.Sentinel adapter, merged as PR #30 on 2026-10-31 and released in 0.5.0 (#31).
@@ -54,5 +54,5 @@
 - **Tests:** the repo refuses `dotnet test --filter`. Build first, then run the test exe with `-class <FQN>`.
 
 ## Recommended Next Step
-1. Marcel merges the phase 3.5 PR. After the merge, check that its `feat:` and `fix:` commits appear in the release-please PR.
+1. Marcel merges PR #48. After the merge, check that its `feat:` and `fix:` commits appear in the release-please PR.
 2. Start phase 3.6, the Agent Framework AIContextProvider: brainstorm its design. It builds on the same recall, capture queue and processor. Decide #45-#47 first or alongside it, since 3.6 inherits all three.
