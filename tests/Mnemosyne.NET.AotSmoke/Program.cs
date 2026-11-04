@@ -84,6 +84,14 @@ if (sentinel != 0)
     return sentinel;
 }
 
+// The chat pipeline as a host wires it: AddReasonletCapture, UseReasonlets outside UseFunctionInvocation, and the
+// find_procedure tool, run under native AOT against an in-memory stub. Needs no database.
+var pipeline = await ReasonletsPipelineSmoke(read.Value);
+if (pipeline != 0)
+{
+    return pipeline;
+}
+
 // The PostgreSQL half needs PostgreSQL 15 or later with pgvector 0.8.0 or later; CI starts one and sets
 // MNEMOSYNE_AOT_PG. A slim data source has no reflection-based type mapping, so EnableArrays() is what lets the
 // float[] embedding and the Guid[] parameters and columns work under native AOT. Each run works in a scope of its own
@@ -767,6 +775,65 @@ static async Task<int> ChatSmoke(NpgsqlDataSource dataSource, ReasonletGraph gra
     return 0;
 }
 
+// The UseReasonlets pipeline under native AOT. The scripted client calls find_procedure and a second tool, then answers.
+// Disposing the provider drains the capture queue, so the stub has seen the remember by then.
+static async Task<int> ReasonletsPipelineSmoke(ReasonletGraph graph)
+{
+    var memory = new RecordingMemory(graph);
+    var services = new ServiceCollection();
+    services.AddSingleton<IReasonletMemory>(memory);
+    services.AddReasonletCapture();
+    var provider = services.BuildServiceProvider();
+    var scripted = new ScriptedToolClient();
+    var client = new ChatClientBuilder(scripted)
+        .UseReasonlets(new ReasonletChatOptions { DefaultScope = new ReasonletScope("aot"), ExposeFindProcedure = true })
+        .UseFunctionInvocation()
+        .Build(provider);
+
+    ChatResponse response;
+    try
+    {
+        response = await client.GetResponseAsync(
+            [new ChatMessage(ChatRole.User, "Refund order 7")],
+            new ChatOptions { Tools = [new EchoTool()] });
+    }
+    catch (Exception ex)
+    {
+        Console.Error.WriteLine($"The UseReasonlets pipeline threw: {ex}");
+        await provider.DisposeAsync();
+        return 40;
+    }
+
+    await provider.DisposeAsync();
+    if (!string.Equals(response.Text, "Done.", StringComparison.Ordinal))
+    {
+        Console.Error.WriteLine($"The pipeline returned the wrong answer: {response.Text}");
+        return 40;
+    }
+
+    // One recall from the middleware for the question, one from the find_procedure call.
+    if (memory.Recalls != 2)
+    {
+        Console.Error.WriteLine($"Expected two recalls for the call, saw {memory.Recalls}.");
+        return 41;
+    }
+
+    if (memory.Remembers != 1 || memory.Captured is not { ParentId: { } parent } captured || parent != memory.MatchId
+        || captured.Graph.Nodes.Count == 0 || !string.Equals(captured.Provenance.Source, "mnemosyne.chat", StringComparison.Ordinal))
+    {
+        Console.Error.WriteLine($"Expected one capture with the recalled parent, saw {memory.Remembers} (parent {memory.Captured?.ParentId}).");
+        return 42;
+    }
+
+    if (!scripted.FindProcedureReturnedArray)
+    {
+        Console.Error.WriteLine("The find_procedure result was not a JSON array.");
+        return 43;
+    }
+
+    return 0;
+}
+
 // Reads a run's verdict inputs and its effective success with a plain reader, which needs no reflection.
 static async Task<(bool Agent, bool? Evaluated, string? Evaluator, double? Score, bool? Feedback, bool Success)?> ReadVerdictAsync(
     NpgsqlDataSource dataSource, ExecutionId execution, CancellationToken ct)
@@ -885,6 +952,123 @@ internal sealed class FixedEmbeddingGenerator : IEmbeddingGenerator<string, Embe
     public Task<GeneratedEmbeddings<Embedding<float>>> GenerateAsync(
         IEnumerable<string> values, EmbeddingGenerationOptions? options = null, CancellationToken cancellationToken = default) =>
         Task.FromResult(new GeneratedEmbeddings<Embedding<float>>(values.Select(_ => new Embedding<float>(new float[] { 1f, 0f, 0f }))));
+
+    public object? GetService(Type serviceType, object? serviceKey = null) => null;
+
+    public void Dispose()
+    {
+    }
+}
+
+/// <summary>An in-memory memory that returns one match for every recall and keeps the last capture it was given.</summary>
+internal sealed class RecordingMemory(ReasonletGraph graph) : IReasonletMemory
+{
+    private int _recalls;
+    private int _remembers;
+
+    public ReasonletId MatchId { get; } = ReasonletId.New();
+
+    public int Recalls => Volatile.Read(ref _recalls);
+
+    public int Remembers => Volatile.Read(ref _remembers);
+
+    public ReasonletCapture? Captured { get; private set; }
+
+    public ValueTask<Result<ReasonletReceipt, MnemosyneError>> RememberAsync(ReasonletCapture capture, CancellationToken ct)
+    {
+        Captured = capture;
+        Interlocked.Increment(ref _remembers);
+        return ValueTask.FromResult<Result<ReasonletReceipt, MnemosyneError>>(new ReasonletReceipt(
+            MatchId,
+            "1.1",
+            ExecutionId.New(),
+            ReasonletCaptureKind.NewVersion,
+            ReasonletStatus.Active,
+            ReasonletVerdictSource.Agent,
+            true));
+    }
+
+    public ValueTask<Result<IReadOnlyList<ReasonletMatch>, MnemosyneError>> RecallAsync(ReasonletQuery query, CancellationToken ct)
+    {
+        Interlocked.Increment(ref _recalls);
+        IReadOnlyList<ReasonletMatch> matches =
+        [
+            new ReasonletMatch(
+                new ReasonletDefinition
+                {
+                    Id = MatchId,
+                    Scope = query.Scope,
+                    Name = "refund-order",
+                    Intent = "refund an order",
+                    Version = "1.0",
+                    Graph = graph,
+                    Provenance = new ReasonletProvenance { Source = "aot-smoke" },
+                    Status = ReasonletStatus.Active,
+                    CreatedAt = DateTimeOffset.UnixEpoch,
+                },
+                new ReasonletScore(0.9, 0.8, 1, 0.9),
+                new ReasonletEvidence(3, 0, false)),
+        ];
+        return ValueTask.FromResult<Result<IReadOnlyList<ReasonletMatch>, MnemosyneError>>(Result<IReadOnlyList<ReasonletMatch>, MnemosyneError>.Success(matches));
+    }
+
+    public ValueTask<Result<ReasonletRunReceipt, MnemosyneError>> RecordExecutionAsync(ReasonletRun run, CancellationToken ct) => throw new NotSupportedException();
+
+    public ValueTask<UnitResult<MnemosyneError>> RecordFeedbackAsync(ReasonletScope scope, ExecutionId execution, ReasonletFeedback feedback, CancellationToken ct) => throw new NotSupportedException();
+
+    public ValueTask<Result<ReasonletErasureResult, MnemosyneError>> EraseAsync(ReasonletErasure erasure, CancellationToken ct) => throw new NotSupportedException();
+
+    public ValueTask<UnitResult<MnemosyneError>> ApproveAsync(ReasonletScope scope, ReasonletId id, CancellationToken ct) => throw new NotSupportedException();
+
+    public ValueTask<UnitResult<MnemosyneError>> RejectAsync(ReasonletScope scope, ReasonletId id, CancellationToken ct) => throw new NotSupportedException();
+
+    public ValueTask<Result<IReadOnlyList<ReasonletReview>, MnemosyneError>> ListPendingAsync(ReasonletScope scope, int limit, ReasonletId? after, CancellationToken ct) => throw new NotSupportedException();
+}
+
+/// <summary>A tool written by hand, so that nothing goes through reflection under native AOT.</summary>
+internal sealed class EchoTool : AIFunction
+{
+    private static readonly System.Text.Json.JsonElement Schema =
+        System.Text.Json.JsonDocument.Parse("""{"type":"object","properties":{},"additionalProperties":false}""").RootElement;
+
+    public override string Name => "echo";
+
+    public override string Description => "Returns a fixed text.";
+
+    public override System.Text.Json.JsonElement JsonSchema => Schema;
+
+    protected override ValueTask<object?> InvokeCoreAsync(AIFunctionArguments arguments, CancellationToken cancellationToken) =>
+        ValueTask.FromResult<object?>("echoed");
+}
+
+/// <summary>
+/// A chat client that first calls find_procedure and echo together, then answers once it sees their results. It records
+/// whether the find_procedure result it was handed is a JSON array.
+/// </summary>
+internal sealed class ScriptedToolClient : IChatClient
+{
+    public bool FindProcedureReturnedArray { get; private set; }
+
+    public Task<ChatResponse> GetResponseAsync(IEnumerable<ChatMessage> messages, ChatOptions? options = null, CancellationToken cancellationToken = default)
+    {
+        var results = messages.SelectMany(message => message.Contents).OfType<FunctionResultContent>().ToArray();
+        if (results.Length == 0)
+        {
+            return Task.FromResult(new ChatResponse(new ChatMessage(
+                ChatRole.Assistant,
+                [
+                    new FunctionCallContent("c1", ReasonletTools.FindProcedureName, new Dictionary<string, object?> { ["question"] = "refund an order" }),
+                    new FunctionCallContent("c2", "echo", new Dictionary<string, object?>()),
+                ])));
+        }
+
+        var lookup = results.FirstOrDefault(result => result.CallId == "c1");
+        FindProcedureReturnedArray = lookup?.Result is System.Text.Json.JsonElement { ValueKind: System.Text.Json.JsonValueKind.Array };
+        return Task.FromResult(new ChatResponse(new ChatMessage(ChatRole.Assistant, "Done.")) { ResponseId = "aot-run" });
+    }
+
+    public IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(IEnumerable<ChatMessage> messages, ChatOptions? options = null, CancellationToken cancellationToken = default) =>
+        throw new NotSupportedException();
 
     public object? GetService(Type serviceType, object? serviceKey = null) => null;
 
