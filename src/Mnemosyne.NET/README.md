@@ -190,7 +190,7 @@ A call is a new question when its last message is a user message with text. A re
 
 The built-in text holds the Reasonlet's name, its similarity, success rate and run count, and its steps with their tool and argument names. It never holds argument values or the text of the question that produced it. Captures from the middleware are named after their tools, such as `orders.get → payments.refund`, so the name carries no question text either. A Reasonlet you remember yourself keeps the name you give it, or the first line of its question when you give none, and that name is what other users of the scope see.
 
-A recall that hits `RecallTimeout` stops waiting, even if the memory ignores the token, and the chat call proceeds. Memory failures never break the chat call: an error, a timeout, an exception or a formatter that throws means no injection, and they show up only in telemetry. Cancelling the call's own token still throws.
+A recall that hits `RecallTimeout` stops waiting, even if the memory ignores the token, and the chat call proceeds. Memory failures never break the chat call: an error, a timeout, an exception or a formatter that throws means no injection, and they show up only in telemetry. A memory whose resolution from the container throws counts once as `exception` on `mnemosyne.chat.recalls`, also with `Recall` off and `find_procedure` on, and the call goes on without recall, injection or tool; a queue that throws the same way counts as `exception` on `mnemosyne.capture.queue`. Neither failure is cached, so the next call tries again. Cancelling the call's own token still throws.
 
 ### find_procedure
 

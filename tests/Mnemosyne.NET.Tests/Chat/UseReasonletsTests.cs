@@ -1,6 +1,7 @@
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
 using Mnemosyne.NET.Abstractions;
+using Mnemosyne.NET.PostgreSql.Tests;
 using Mnemosyne.NET.Tests.Core;
 using Xunit;
 
@@ -149,6 +150,108 @@ public sealed class UseReasonletsTests
         await inner.GetRequiredService<ReasonletCaptureQueue>().DrainAsync(Ct);
 
         Assert.Single(memory.Captures);
+    }
+
+    [Fact]
+    public async Task AThrowingMemoryFactoryWithRecallOnLeavesTheCallUnbroken()
+    {
+        var resolutions = 0;
+        var services = new ServiceCollection();
+        services.AddSingleton<IReasonletMemory>(_ =>
+        {
+            resolutions++;
+            throw new InvalidOperationException("broken");
+        });
+        await using var provider = services.BuildServiceProvider();
+        var inner = FakeChatClient.Replying("done");
+        using var client = new ChatClientBuilder(inner)
+            .UseReasonlets(new ReasonletChatOptions { DefaultScope = Scope, Capture = false })
+            .Build(provider);
+        using var telemetry = new TelemetryCapture();
+
+        var first = await client.GetResponseAsync([new(ChatRole.User, CaptureTestData.Question)], null, Ct);
+        var second = await client.GetResponseAsync([new(ChatRole.User, CaptureTestData.Question)], null, Ct);
+
+        Assert.Equal("done", first.Text);
+        Assert.Equal("done", second.Text);
+        Assert.All(inner.Requests, request => Assert.Equal(ChatRole.User, Assert.Single(request).Role));
+
+        // The failure is not cached: each call tries again, and each failure counts once.
+        Assert.Equal(2, resolutions);
+        AssertResolutionFailures(telemetry, "mnemosyne.chat.recalls", 2);
+    }
+
+    [Fact]
+    public async Task AThrowingMemoryFactoryWithTheToolOnLeavesTheToolOut()
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton<IReasonletMemory>(_ => throw new InvalidOperationException("broken"));
+        await using var provider = services.BuildServiceProvider();
+        var inner = FakeChatClient.Replying("done");
+        using var client = new ChatClientBuilder(inner)
+            .UseReasonlets(new ReasonletChatOptions { DefaultScope = Scope, Recall = false, Capture = false, ExposeFindProcedure = true })
+            .Build(provider);
+        using var telemetry = new TelemetryCapture();
+
+        var response = await client.GetResponseAsync([new(ChatRole.User, CaptureTestData.Question)], null, Ct);
+
+        Assert.Equal("done", response.Text);
+        Assert.Null(Assert.Single(inner.Options));
+        AssertResolutionFailures(telemetry, "mnemosyne.chat.recalls", 1);
+    }
+
+    [Fact]
+    public async Task AThrowingQueueFactoryLeavesTheCallUnbroken()
+    {
+        var resolutions = 0;
+        var services = new ServiceCollection();
+        services.AddSingleton<IReasonletMemory>(new FakeReasonletMemory());
+        services.AddSingleton<ReasonletCaptureQueue>(_ =>
+        {
+            resolutions++;
+            throw new InvalidOperationException("broken");
+        });
+        await using var provider = services.BuildServiceProvider();
+        var inner = FakeChatClient.Replying("done");
+        using var client = new ChatClientBuilder(inner)
+            .UseReasonlets(new ReasonletChatOptions { DefaultScope = Scope })
+            .Build(provider);
+        using var telemetry = new TelemetryCapture();
+
+        var first = await client.GetResponseAsync([new(ChatRole.User, CaptureTestData.Question)], null, Ct);
+        var second = await client.GetResponseAsync([new(ChatRole.User, CaptureTestData.Question)], null, Ct);
+
+        Assert.Equal("done", first.Text);
+        Assert.Equal("done", second.Text);
+        Assert.Equal(2, resolutions);
+        AssertResolutionFailures(telemetry, "mnemosyne.capture.queue", 2);
+    }
+
+    [Fact]
+    public async Task TheCallersCancellationDuringMemoryResolutionPropagates()
+    {
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
+        var services = new ServiceCollection();
+        services.AddSingleton<IReasonletMemory>(_ => throw new OperationCanceledException(cts.Token));
+        await using var provider = services.BuildServiceProvider();
+        using var client = new ChatClientBuilder(FakeChatClient.Replying("done"))
+            .UseReasonlets(new ReasonletChatOptions { DefaultScope = Scope, Capture = false })
+            .Build(provider);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            client.GetResponseAsync([new(ChatRole.User, CaptureTestData.Question)], null, cts.Token));
+    }
+
+    private static void AssertResolutionFailures(TelemetryCapture telemetry, string instrument, int count)
+    {
+        var failures = telemetry.Of(instrument);
+        Assert.Equal(count, failures.Count);
+        Assert.All(failures, failure =>
+        {
+            Assert.Equal("exception", failure.Tag("mnemosyne.outcome"));
+            Assert.Equal(typeof(InvalidOperationException).FullName, failure.Tag("error.type"));
+        });
     }
 
     /// <summary>A container that cannot say whether a service is registered: it offers no <see cref="IServiceProviderIsService"/>.</summary>

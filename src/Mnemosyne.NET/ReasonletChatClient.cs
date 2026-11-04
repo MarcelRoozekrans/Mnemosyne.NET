@@ -21,7 +21,8 @@ namespace Mnemosyne.NET;
 /// </para>
 /// <para>
 /// Memory never breaks the call: a recall that fails, throws, times out or finds nothing, and a formatter that fails, only
-/// leave the suggestion out, and a full queue, or a hand-off that throws, only drops the capture. Each shows up in
+/// leave the suggestion out, a memory that cannot be resolved leaves the suggestion and the tool out, and a full queue,
+/// or a hand-off that throws, only drops the capture. Each shows up in
 /// <see cref="ChatTelemetry"/> or the queue's counter. The caller's own cancellation propagates, from the recall as from the
 /// inner call. A call that throws or is cancelled is not captured.
 /// </para>
@@ -39,7 +40,8 @@ internal sealed class ReasonletChatClient : DelegatingChatClient
     internal const string BypassKey = "mnemosyne.bypass";
 
     // Resolved on first use rather than when the pipeline is built: the memory can depend on a client that has this
-    // middleware, as the chat evaluator does when it judges with the host's unkeyed client.
+    // middleware, as the chat evaluator does when it judges with the host's unkeyed client. A resolution that throws is
+    // not cached, so a later call tries again.
     private readonly Lazy<IReasonletMemory> _memory;
     private readonly Lazy<ReasonletCaptureQueue?> _queue;
     private readonly ReasonletChatOptions _options;
@@ -52,11 +54,15 @@ internal sealed class ReasonletChatClient : DelegatingChatClient
     /// <param name="options">The validated settings.</param>
     /// <param name="time">The clock for the recall timeout and the call's duration.</param>
     public ReasonletChatClient(IChatClient inner, IReasonletMemory memory, ReasonletCaptureQueue? queue, ReasonletChatOptions options, TimeProvider time)
-        : this(inner, new Lazy<IReasonletMemory>(() => memory), new Lazy<ReasonletCaptureQueue?>(() => queue), options, time)
+        : this(inner, new Lazy<IReasonletMemory>(memory), new Lazy<ReasonletCaptureQueue?>(queue), options, time)
     {
     }
 
     /// <summary>Creates the middleware over a memory and a queue that are resolved on first use.</summary>
+    /// <remarks>
+    /// Give lazies that do not cache an exception, such as <see cref="LazyThreadSafetyMode.PublicationOnly"/> ones: a
+    /// resolution that throws is then tried again on the next call. Either one that throws leaves the call unbroken.
+    /// </remarks>
     /// <param name="inner">The client to call.</param>
     /// <param name="memory">Resolves the memory to recall from, and that the tool looks up in.</param>
     /// <param name="queue">Resolves the capture queue, or null when nothing is captured.</param>
@@ -158,23 +164,25 @@ internal sealed class ReasonletChatClient : DelegatingChatClient
         List<ChatMessage> request = [.. messages];
         var sent = request;
         ReasonletId? parent = null;
+        var question = request.Count > 0 && request[^1] is { } last && last.Role == ChatRole.User && !string.IsNullOrWhiteSpace(last.Text)
+            ? last.Text
+            : null;
+        var wantsTool = _options.ExposeFindProcedure && !HasFindProcedure(options);
+        var memory = (_options.Recall && question is not null) || wantsTool ? ResolveMemory(ct) : null;
         if (_options.Recall)
         {
-            if (request.Count > 0 && request[^1] is { } last && last.Role == ChatRole.User && !string.IsNullOrWhiteSpace(last.Text))
-            {
-                if (await RecallAsync(scope.Scope, last.Text, ct).ConfigureAwait(false) is { } suggestion)
-                {
-                    parent = suggestion.Id;
-                    sent = Inject(request, suggestion.Text);
-                }
-            }
-            else
+            if (question is null)
             {
                 ChatTelemetry.Skipped(ChatTelemetry.ContinuationReason);
             }
+            else if (memory is not null && await RecallAsync(memory, scope.Scope, question, ct).ConfigureAwait(false) is { } suggestion)
+            {
+                parent = suggestion.Id;
+                sent = Inject(request, suggestion.Text);
+            }
         }
 
-        var lookup = _options.ExposeFindProcedure && !HasFindProcedure(options) ? new FindProcedureFunction(_memory.Value, scope.Scope) : null;
+        var lookup = wantsTool && memory is not null ? new FindProcedureFunction(memory, scope.Scope) : null;
         return new PreparedCall(scope, request, sent, InnerOptions(options, lookup), parent, lookup);
     }
 
@@ -222,7 +230,7 @@ internal sealed class ReasonletChatClient : DelegatingChatClient
     /// </summary>
     /// <returns>The match's id and text, or null when nothing is to be injected.</returns>
     /// <exception cref="OperationCanceledException"><paramref name="ct"/> is cancelled.</exception>
-    private async ValueTask<(ReasonletId Id, string Text)?> RecallAsync(ReasonletScope scope, string question, CancellationToken ct)
+    private async ValueTask<(ReasonletId Id, string Text)?> RecallAsync(IReasonletMemory memory, ReasonletScope scope, string question, CancellationToken ct)
     {
         using var telemetry = ChatTelemetry.Start();
         var timeout = _options.RecallTimeout;
@@ -237,7 +245,7 @@ internal sealed class ReasonletChatClient : DelegatingChatClient
             ct.ThrowIfCancellationRequested();
 
             // A hard stop: the wait ends when the token is cancelled, even when the memory ignores the token it was given.
-            pending = _memory.Value.RecallAsync(query, token).AsTask();
+            pending = memory.RecallAsync(query, token).AsTask();
             recalled = await pending.WaitAsync(token).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
@@ -306,6 +314,27 @@ internal sealed class ReasonletChatClient : DelegatingChatClient
         sent.AddRange(request);
         sent.Insert(at, new ChatMessage(ChatRole.System, text));
         return sent;
+    }
+
+    /// <summary>
+    /// Resolves the memory for this call. A resolution that throws does not break the call: it is counted once on the
+    /// recall counter as <c>exception</c>, with a failed <c>mnemosyne.chat.recall</c> activity, and the call goes on
+    /// without recall, inject and tool. The caller's own cancellation propagates. A failure is not cached: the next call
+    /// tries again.
+    /// </summary>
+    /// <returns>The memory, or null when resolving it threw.</returns>
+    private IReasonletMemory? ResolveMemory(CancellationToken ct)
+    {
+        try
+        {
+            return _memory.Value;
+        }
+        catch (Exception ex) when (!(ex is OperationCanceledException && ct.IsCancellationRequested))
+        {
+            using var telemetry = ChatTelemetry.Start();
+            telemetry.Threw(ex);
+            return null;
+        }
     }
 
     /// <summary>

@@ -31,6 +31,13 @@ public static class ReasonletChatClientBuilderExtensions
     /// the queue is resolved when the pipeline is built and the memory on first use.
     /// </para>
     /// <para>
+    /// A memory or queue whose resolution throws on a call never breaks that call. A memory that cannot be resolved counts
+    /// once as <c>exception</c> on <c>mnemosyne.chat.recalls</c>, and the call goes on without recall, inject and
+    /// <c>find_procedure</c>; this holds with <see cref="ReasonletChatOptions.Recall"/> off and the tool on too. A queue that
+    /// cannot be resolved counts as <c>exception</c> on <c>mnemosyne.capture.queue</c>. A failed resolution is not cached:
+    /// the next call tries again. The caller's own cancellation still propagates.
+    /// </para>
+    /// <para>
     /// A judge call from <see cref="ChatReasonletEvaluator"/> carries an internal mark, and the middleware passes it straight
     /// through: it is not recalled for, gets no tool, is not captured and is not counted.
     /// </para>
@@ -65,7 +72,7 @@ public static class ReasonletChatClientBuilderExtensions
             }
 
             var time = services.GetService<TimeProvider>() ?? TimeProvider.System;
-            var memory = new Lazy<IReasonletMemory>(services.GetRequiredService<IReasonletMemory>);
+            var memory = new Lazy<IReasonletMemory>(services.GetRequiredService<IReasonletMemory>, LazyThreadSafetyMode.PublicationOnly);
             Lazy<ReasonletCaptureQueue?> queue;
             if (!options.Capture)
             {
@@ -74,7 +81,7 @@ public static class ReasonletChatClientBuilderExtensions
             else if (registry is not null)
             {
                 queue = registry.IsService(typeof(ReasonletCaptureQueue))
-                    ? new Lazy<ReasonletCaptureQueue?>(services.GetRequiredService<ReasonletCaptureQueue>)
+                    ? new Lazy<ReasonletCaptureQueue?>(services.GetRequiredService<ReasonletCaptureQueue>, LazyThreadSafetyMode.PublicationOnly)
                     : throw new InvalidOperationException(MissingQueue);
             }
             else
