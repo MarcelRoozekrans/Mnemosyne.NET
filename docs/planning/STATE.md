@@ -1,10 +1,13 @@
-# Session State — 2026-11-03
+# Session State — 2026-11-04
 
-**Date:** 2026-11-03
+**Date:** 2026-11-04
 
 ## Current Position
 - **Milestone:** 3, Off-the-shelf integrations. Active since 2026-10-30. Design: `docs/superpowers/specs/2026-10-30-milestone-3-design.md`.
-- **Phase:** 3.5, UseReasonlets middleware and the find_procedure tool. It is **in design** on branch `feat/phase-3.5-reasonlets-find-procedure`, cut from `main` at 87e89f2.
+- **Phase:** 3.5, UseReasonlets middleware and the find_procedure tool. It is **active** on branch `feat/phase-3.5-reasonlets-find-procedure`, cut from `main` at 87e89f2.
+  - Design approved by Marcel: `docs/superpowers/specs/2026-11-03-phase-3.5-use-reasonlets-design.md`.
+  - Plan written, 9 tasks, none started: `docs/superpowers/plans/2026-11-04-phase-3.5-use-reasonlets.md`.
+  - Execution method chosen by Marcel: **subagent-driven** (`superpowers:subagent-driven-development`). Tasks 5 and 6 carry `**Model:** opus`.
 - **Previous phase:** 3.4, the AI.Sentinel adapter, merged as PR #30 on 2026-10-31 and released in 0.5.0 (#31).
 
 ## Decisions taken during 3.4 execution
@@ -36,4 +39,5 @@
 - **Tests:** the repo refuses `dotnet test --filter`. Build first, then run the test exe with `-class <FQN>`.
 
 ## Recommended Next Step
-1. Brainstorm the phase 3.5 design (UseReasonlets `IChatClient` middleware plus the `find_procedure` `AIFunction`), then write its plan.
+1. Execute the phase 3.5 plan with `superpowers:subagent-driven-development`, starting at Task 1. Task 1 Step 5 is an AOT stop gate: if `Microsoft.Extensions.AI` breaks the AOT publish, stop and report instead of suppressing.
+2. After the last task: whole-branch review, pre-push review, open the PR. Marcel merges.
