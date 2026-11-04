@@ -92,4 +92,40 @@ public static class ServiceCollectionExtensions
             options));
         return services;
     }
+
+    /// <summary>
+    /// Registers the background capture that <c>UseReasonlets</c> hands finished chat calls to: a bounded queue with one
+    /// reader, and a hosted service that drains it when the host stops.
+    /// </summary>
+    /// <remarks>
+    /// The capture remembers through the registered <see cref="IReasonletMemory"/>, for example from
+    /// <see cref="AddMnemosyne"/>. The queue's reader starts on the first capture, so a host without the generic host
+    /// still captures. Without a host, dispose the service provider asynchronously to drain the queue, bounded by
+    /// <see cref="ReasonletCaptureOptions.DrainTimeout"/>. A second call adds no second hosted service.
+    /// </remarks>
+    /// <param name="services">The service collection.</param>
+    /// <param name="options">The settings, or null for the defaults.</param>
+    /// <returns>The same service collection.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="services"/> is null.</exception>
+    /// <exception cref="ArgumentException">The options are invalid.</exception>
+    public static IServiceCollection AddReasonletCapture(this IServiceCollection services, ReasonletCaptureOptions? options = null)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+        options ??= new ReasonletCaptureOptions();
+        var validation = options.Validate();
+        if (validation.IsFailure)
+        {
+            throw new ArgumentException(validation.Error.Message, nameof(options));
+        }
+
+        services.AddSingleton(options);
+        services.AddSingleton(provider => new ReasonletCaptureProcessor(
+            provider.GetRequiredService<IReasonletMemory>(),
+            provider.GetRequiredService<ReasonletCaptureOptions>()));
+        services.AddSingleton(provider => new ReasonletCaptureQueue(
+            provider.GetRequiredService<ReasonletCaptureProcessor>(),
+            provider.GetRequiredService<ReasonletCaptureOptions>()));
+        services.AddHostedService<ReasonletCaptureHostedService>();
+        return services;
+    }
 }
