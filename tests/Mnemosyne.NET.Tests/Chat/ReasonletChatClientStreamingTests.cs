@@ -141,6 +141,42 @@ public sealed class ReasonletChatClientStreamingTests : IAsyncDisposable
         Assert.Empty(await CapturedAsync());
     }
 
+    [Fact]
+    public async Task ABypassedStreamPassesThroughWithoutTheKey()
+    {
+        _memory.Returns(CaptureTestData.Match());
+        var updates = Updates();
+        var inner = FakeChatClient.Streaming((_, _, _) => Yield(updates));
+        var options = new ChatOptions { AdditionalProperties = new() { [ReasonletChatClient.BypassKey] = true } };
+        List<ChatMessage> messages = [new(ChatRole.User, Question)];
+
+        var seen = await ReadAsync(Client(inner).GetStreamingResponseAsync(messages, options, Ct));
+
+        Assert.Equal(updates.Count, seen.Count);
+        Assert.Same(messages, Assert.Single(inner.Received));
+        Assert.False(Assert.Single(inner.Options)!.AdditionalProperties!.ContainsKey(ReasonletChatClient.BypassKey));
+        Assert.True(options.AdditionalProperties.ContainsKey(ReasonletChatClient.BypassKey));
+        Assert.Empty(_memory.Queries);
+        Assert.Empty(await CapturedAsync());
+    }
+
+    [Fact]
+    public async Task AppendingToTheCallersListMidStreamDoesNotChangeTheCapture()
+    {
+        var inner = FakeChatClient.Streaming((_, _, _) => Yield(Updates()));
+        List<ChatMessage> messages = [new(ChatRole.User, Question)];
+
+        await foreach (var update in Client(inner).GetStreamingResponseAsync(messages, null, Ct))
+        {
+            messages.Add(new ChatMessage(update.Role ?? ChatRole.Assistant, update.Contents));
+        }
+
+        // The capture's question and steps are the request's, followed by the response's, each exactly once.
+        var capture = Assert.Single(await CapturedAsync());
+        var expected = CaptureTestData.GraphOf([new(ChatRole.User, Question), .. Updates().ToChatResponse().Messages]);
+        Assert.Equal(expected.ComputeContentHash().Value, capture.Graph.ComputeContentHash().Value);
+    }
+
     /// <summary>The refund's tool calls and answer, as streamed updates.</summary>
     private static List<ChatResponseUpdate> Updates() =>
     [

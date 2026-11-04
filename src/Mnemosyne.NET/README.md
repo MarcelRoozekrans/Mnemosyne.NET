@@ -163,7 +163,9 @@ services.AddChatClient(inner)
     .UseFunctionInvocation();
 ```
 
-With capture on, building the pipeline without `AddReasonletCapture` throws `InvalidOperationException`, so the mistake shows at startup. Invalid options throw `ArgumentException`. Set `Capture = false` for recall only, or `Recall = false` for capture only.
+Building the pipeline without a registered `IReasonletMemory`, or with capture on and without `AddReasonletCapture`, throws `InvalidOperationException`, so the mistake shows at startup. Invalid options throw `ArgumentException`. Set `Capture = false` for recall only, or `Recall = false` for capture only.
+
+The middleware resolves the memory and the capture queue on its first call, not when the client is built. So `AddMnemosyneChatEvaluator()` can judge with this same unkeyed client: the memory needs the evaluator, the evaluator needs the client, and the client needs the memory only once it is called. The middleware passes the evaluator's judge calls straight through, without recall, tool, capture or count. See [Judging runs with a chat model](https://marcelroozekrans.github.io/Mnemosyne.NET/guides/chat-evaluator#on-a-client-with-usereasonlets).
 
 ### Order
 
@@ -204,6 +206,8 @@ The middleware does not wait for the memory. It puts the exchange in a bounded q
 
 The queue drains when the host stops. Without a host, disposing the service provider does the same, synchronously or asynchronously. The drain is bounded by `ReasonletCaptureOptions.DrainTimeout`, 30 seconds by default. When it runs out, the remaining work is cancelled and the drain waits for the memory to honour that, which the built-in memory does. Items left over are counted as `dropped_shutdown`. The worker starts on the first enqueue, so a console app without a host captures too.
 
+The capture's duration is how long the inner call took. For a streamed call it runs from the first read of the stream to the last, so it includes the time your code spends between reads.
+
 ### Telemetry
 
 On the existing activity source and meter. The `outcome` tag carries the values below.
@@ -212,12 +216,12 @@ On the existing activity source and meter. The `outcome` tag carries the values 
 |---|---|---|
 | `mnemosyne.chat.recall` | activity | as the counter |
 | `mnemosyne.chat.recalls` | counter | `injected`, `no_match`, `timeout`, the error code name, `exception`, `formatter_failed`, `skipped` |
-| `mnemosyne.capture.queue` | counter | `enqueued`, `dropped_full`, `dropped_shutdown` |
+| `mnemosyne.capture.queue` | counter | `enqueued`, `dropped_full`, `dropped_shutdown`, `exception` |
 | `mnemosyne.capture.run` | activity | as the counter |
 | `mnemosyne.capture.runs` | counter | `new_reasonlet`, `new_version`, `execution_only`, `skipped`, the error code name, `exception` |
 | `mnemosyne.capture.duration` | histogram | none |
 
-A skipped recall carries the tag `mnemosyne.skip_reason` with `no_scope` or `continuation`. A skipped capture carries the same tag with `no_question`, `no_tool_calls` or `pending_tool_calls`.
+A skipped recall carries the tag `mnemosyne.skip_reason` with `no_scope` or `continuation`. A call without a scope counts as `no_scope` whenever `Recall` or `Capture` is on. A skipped capture carries the same tag with `no_question`, `no_tool_calls` or `pending_tool_calls`. On `mnemosyne.capture.queue`, `exception` counts a finished call whose capture item could not be built or offered, with `error.type` set to the exception's type name; the chat call still returns its response.
 
 ## Documentation
 

@@ -14,8 +14,9 @@ namespace Mnemosyne.NET;
 /// The request is two messages. The system message holds Mnemosyne's instructions, the host's
 /// <see cref="ChatEvaluatorOptions.Criteria"/> if any, and the reply format. The user message holds only the run as JSON:
 /// the question, the intent, the procedure and the answer, which leave the process for the provider behind the client. It
-/// never holds the agent's own outcome or the Reasonlet's name. The only chat option set is a JSON schema response format;
-/// the model, temperature and token limits come from the host's client pipeline.
+/// never holds the agent's own outcome or the Reasonlet's name. The only chat option set is a JSON schema response format,
+/// plus, when the client's pipeline has a <c>UseReasonlets</c> middleware, an internal mark that the middleware reads and
+/// removes, so the judge call is not recalled for or captured; the model, temperature and token limits come from the host's client pipeline.
 /// </para>
 /// <para>
 /// The reply must be exactly one JSON object with <c>worked</c>, a bool, and <c>confidence</c>, a number in [0, 1]. Other
@@ -56,6 +57,7 @@ public sealed class ChatReasonletEvaluator : IReasonletEvaluator
     private readonly IChatClient _client;
     private readonly ChatEvaluatorOptions _options;
     private readonly string _instructions;
+    private readonly bool _bypass;
 
     /// <summary>Initializes a new instance of the <see cref="ChatReasonletEvaluator"/> class.</summary>
     /// <param name="client">The chat client that asks the model.</param>
@@ -75,6 +77,9 @@ public sealed class ChatReasonletEvaluator : IReasonletEvaluator
         _client = client;
         _options = options;
         _instructions = Instructions(options.Criteria);
+
+        // Only a pipeline with the middleware reads the mark; any other would send it on to the provider.
+        _bypass = client.GetService(typeof(ReasonletChatClient)) is not null;
     }
 
     /// <inheritdoc/>
@@ -91,7 +96,7 @@ public sealed class ChatReasonletEvaluator : IReasonletEvaluator
 
         ChatMessage[] messages = [new(ChatRole.System, _instructions), new(ChatRole.User, run)];
         var response = await _client
-            .GetResponseAsync(messages, new ChatOptions { ResponseFormat = ReplyFormat }, ct)
+            .GetResponseAsync(messages, JudgeOptions(), ct)
             .ConfigureAwait(false);
 
         var text = response.Text;
@@ -192,6 +197,17 @@ public sealed class ChatReasonletEvaluator : IReasonletEvaluator
             For example: {"worked": true, "confidence": 0.8}
             """;
     }
+
+    /// <summary>
+    /// The options of one judge call: the reply format and, when the client's pipeline has a <c>UseReasonlets</c>
+    /// middleware, the internal mark that makes it pass the call straight through, so a judge call is never recalled for or
+    /// captured.
+    /// </summary>
+    private ChatOptions JudgeOptions() => new()
+    {
+        ResponseFormat = ReplyFormat,
+        AdditionalProperties = _bypass ? new AdditionalPropertiesDictionary { [ReasonletChatClient.BypassKey] = true } : null,
+    };
 
     /// <summary>Creates the fixed failure, whose detail names only the reason and never the reply.</summary>
     private static Result<ReasonletEvaluation, MnemosyneError> Failure(string reason) =>

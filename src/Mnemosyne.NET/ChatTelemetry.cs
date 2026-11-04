@@ -17,7 +17,8 @@ namespace Mnemosyne.NET;
 /// <c>no_match</c>, <c>timeout</c>, the error code's name for an error result, <c>exception</c> with <c>error.type</c> set to
 /// the full type name for an exception, or <c>formatter_failed</c>. A call that skips the recall is counted by
 /// <see cref="Skipped"/> as <c>skipped</c> with <c>mnemosyne.skip_reason</c> <c>no_scope</c> or <c>continuation</c>, and
-/// has no activity.
+/// has no activity. A call without a scope counts as <c>no_scope</c> when recall or capture is on, and a request that
+/// does not end in a new question counts as <c>continuation</c> only when recall is on.
 /// </para>
 /// <para>
 /// No signal carries the scope, the subject, the question, the injected text, a tool or argument name, or any error or

@@ -19,6 +19,10 @@ namespace Mnemosyne.NET;
 /// full type name for an exception.
 /// </para>
 /// <para>
+/// On <c>mnemosyne.capture.queue</c> the outcome is <c>enqueued</c>, <c>dropped_full</c>, <c>dropped_shutdown</c>, or
+/// <c>exception</c> with <c>error.type</c> set to the full type name when building or offering the item threw.
+/// </para>
+/// <para>
 /// No signal carries the scope, the subject, the question, the answer, a tool or argument name, the run id, or any error
 /// or exception message.
 /// </para>
@@ -68,6 +72,13 @@ internal sealed class CaptureTelemetry : IDisposable
 
     /// <summary>Counts one item offered to the queue under <paramref name="outcome"/>.</summary>
     internal static void Queue(string outcome) => Queued.Add(1, new TagList { { RecallTelemetry.OutcomeTag, outcome } });
+
+    /// <summary>
+    /// Counts one finished call that could not be handed to the queue because building or offering its item threw:
+    /// outcome <c>exception</c>, with <c>error.type</c> set to the exception's full type name.
+    /// </summary>
+    internal static void QueueFailed(Exception ex) => Queued.Add(
+        1, new TagList { { RecallTelemetry.OutcomeTag, RecallTelemetry.ExceptionOutcome }, { ErrorTypeTag, ex.GetType().FullName! } });
 
     /// <summary>Reports a stored capture: the outcome is the kind in snake case.</summary>
     internal void Remembered(ReasonletCaptureKind kind)

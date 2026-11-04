@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using Microsoft.Extensions.AI;
 using Mnemosyne.NET.Abstractions;
@@ -20,25 +21,49 @@ namespace Mnemosyne.NET;
 /// </para>
 /// <para>
 /// Memory never breaks the call: a recall that fails, throws, times out or finds nothing, and a formatter that fails, only
-/// leave the suggestion out, and a full queue only drops the capture. Each shows up in <see cref="ChatTelemetry"/> or the
-/// queue's counter. The caller's own cancellation propagates, from the recall as from the inner call. A call that throws
-/// or is cancelled is not captured.
+/// leave the suggestion out, and a full queue, or a hand-off that throws, only drops the capture. Each shows up in
+/// <see cref="ChatTelemetry"/> or the queue's counter. The caller's own cancellation propagates, from the recall as from the
+/// inner call. A call that throws or is cancelled is not captured.
+/// </para>
+/// <para>
+/// A call whose options hold <see cref="BypassKey"/>, as every judge call of <see cref="ChatReasonletEvaluator"/> does,
+/// passes straight through with the caller's messages and a clone of its options without the key.
 /// </para>
 /// </remarks>
 internal sealed class ReasonletChatClient : DelegatingChatClient
 {
-    private readonly IReasonletMemory _memory;
-    private readonly ReasonletCaptureQueue? _queue;
+    /// <summary>
+    /// The internal key that marks a call Mnemosyne makes itself, such as a judge call, which the middleware passes straight
+    /// through: no recall, no tool, no capture and no count. The key never reaches the inner client.
+    /// </summary>
+    internal const string BypassKey = "mnemosyne.bypass";
+
+    // Resolved on first use rather than when the pipeline is built: the memory can depend on a client that has this
+    // middleware, as the chat evaluator does when it judges with the host's unkeyed client.
+    private readonly Lazy<IReasonletMemory> _memory;
+    private readonly Lazy<ReasonletCaptureQueue?> _queue;
     private readonly ReasonletChatOptions _options;
     private readonly TimeProvider _time;
 
-    /// <summary>Creates the middleware.</summary>
+    /// <summary>Creates the middleware over a memory and a queue that already exist.</summary>
     /// <param name="inner">The client to call.</param>
     /// <param name="memory">The memory to recall from, and that the tool looks up in.</param>
     /// <param name="queue">The capture queue, or null when nothing is captured.</param>
     /// <param name="options">The validated settings.</param>
     /// <param name="time">The clock for the recall timeout and the call's duration.</param>
     public ReasonletChatClient(IChatClient inner, IReasonletMemory memory, ReasonletCaptureQueue? queue, ReasonletChatOptions options, TimeProvider time)
+        : this(inner, new Lazy<IReasonletMemory>(() => memory), new Lazy<ReasonletCaptureQueue?>(() => queue), options, time)
+    {
+    }
+
+    /// <summary>Creates the middleware over a memory and a queue that are resolved on first use.</summary>
+    /// <param name="inner">The client to call.</param>
+    /// <param name="memory">Resolves the memory to recall from, and that the tool looks up in.</param>
+    /// <param name="queue">Resolves the capture queue, or null when nothing is captured.</param>
+    /// <param name="options">The validated settings.</param>
+    /// <param name="time">The clock for the recall timeout and the call's duration.</param>
+    public ReasonletChatClient(
+        IChatClient inner, Lazy<IReasonletMemory> memory, Lazy<ReasonletCaptureQueue?> queue, ReasonletChatOptions options, TimeProvider time)
         : base(inner)
     {
         _memory = memory;
@@ -51,6 +76,11 @@ internal sealed class ReasonletChatClient : DelegatingChatClient
     public override async Task<ChatResponse> GetResponseAsync(
         IEnumerable<ChatMessage> messages, ChatOptions? options = null, CancellationToken cancellationToken = default)
     {
+        if (WithoutBypass(options) is { } bypassed)
+        {
+            return await base.GetResponseAsync(messages, bypassed, cancellationToken).ConfigureAwait(false);
+        }
+
         var call = await PrepareAsync(messages, options, cancellationToken).ConfigureAwait(false);
         if (call is null)
         {
@@ -59,7 +89,7 @@ internal sealed class ReasonletChatClient : DelegatingChatClient
 
         var started = _time.GetTimestamp();
         var response = await base.GetResponseAsync(call.Messages, call.Options, cancellationToken).ConfigureAwait(false);
-        HandOff(call, response, _time.GetElapsedTime(started));
+        HandOff(call, () => response, _time.GetElapsedTime(started));
         return response;
     }
 
@@ -71,6 +101,16 @@ internal sealed class ReasonletChatClient : DelegatingChatClient
     public override async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
         IEnumerable<ChatMessage> messages, ChatOptions? options = null, [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
+        if (WithoutBypass(options) is { } bypassed)
+        {
+            await foreach (var update in base.GetStreamingResponseAsync(messages, bypassed, cancellationToken).ConfigureAwait(false))
+            {
+                yield return update;
+            }
+
+            yield break;
+        }
+
         var call = await PrepareAsync(messages, options, cancellationToken).ConfigureAwait(false);
         if (call is null)
         {
@@ -90,7 +130,7 @@ internal sealed class ReasonletChatClient : DelegatingChatClient
             yield return update;
         }
 
-        HandOff(call, updates.ToChatResponse(), _time.GetElapsedTime(started));
+        HandOff(call, updates.ToChatResponse, _time.GetElapsedTime(started));
     }
 
     /// <summary>
@@ -104,7 +144,8 @@ internal sealed class ReasonletChatClient : DelegatingChatClient
             ?? (_options.DefaultScope is { } fallback ? new ReasonletCallScope(fallback, null) : null);
         if (scope is null)
         {
-            if (_options.Recall)
+            // Counted whenever the call would have done something: with both switches off it was never going to.
+            if (_options.Recall || _options.Capture)
             {
                 ChatTelemetry.Skipped(ChatTelemetry.NoScopeReason);
             }
@@ -112,7 +153,9 @@ internal sealed class ReasonletChatClient : DelegatingChatClient
             return null;
         }
 
-        IReadOnlyList<ChatMessage> request = messages as IReadOnlyList<ChatMessage> ?? [.. messages];
+        // A copy of the list, not of the messages: a caller that adds to its own list while a stream is read must not
+        // change what is captured.
+        List<ChatMessage> request = [.. messages];
         var sent = request;
         ReasonletId? parent = null;
         if (_options.Recall)
@@ -131,20 +174,33 @@ internal sealed class ReasonletChatClient : DelegatingChatClient
             }
         }
 
-        var lookup = _options.ExposeFindProcedure && !HasFindProcedure(options) ? new FindProcedureFunction(_memory, scope.Scope) : null;
+        var lookup = _options.ExposeFindProcedure && !HasFindProcedure(options) ? new FindProcedureFunction(_memory.Value, scope.Scope) : null;
         return new PreparedCall(scope, request, sent, InnerOptions(options, lookup), parent, lookup);
     }
 
-    /// <summary>Runs the step after an inner call that returned: hands it to the capture queue when capture is on.</summary>
-    private void HandOff(PreparedCall call, ChatResponse response, TimeSpan duration)
+    /// <summary>
+    /// Runs the step after an inner call that returned: hands it to the capture queue when capture is on. Nothing here
+    /// throws into the call: a failure to build or offer the item is counted on the queue's counter as <c>exception</c>.
+    /// </summary>
+    /// <param name="call">The prepared call.</param>
+    /// <param name="response">Builds the call's response; for a stream, from its updates.</param>
+    /// <param name="duration">How long the inner call took.</param>
+    private void HandOff(PreparedCall call, Func<ChatResponse> response, TimeSpan duration)
     {
-        if (!_options.Capture || _queue is null)
+        try
         {
-            return;
-        }
+            if (!_options.Capture || _queue.Value is not { } queue)
+            {
+                return;
+            }
 
-        // A full or closed queue counts the drop itself; the call goes on either way.
-        _queue.TryEnqueue(CaptureItem(call, response, duration));
+            // A full or closed queue counts the drop itself; the call goes on either way.
+            queue.TryEnqueue(CaptureItem(call, response(), duration));
+        }
+        catch (Exception ex)
+        {
+            CaptureTelemetry.QueueFailed(ex);
+        }
     }
 
     /// <summary>
@@ -181,7 +237,7 @@ internal sealed class ReasonletChatClient : DelegatingChatClient
             ct.ThrowIfCancellationRequested();
 
             // A hard stop: the wait ends when the token is cancelled, even when the memory ignores the token it was given.
-            pending = _memory.RecallAsync(query, token).AsTask();
+            pending = _memory.Value.RecallAsync(query, token).AsTask();
             recalled = await pending.WaitAsync(token).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
@@ -239,6 +295,7 @@ internal sealed class ReasonletChatClient : DelegatingChatClient
     private static List<ChatMessage> Inject(IReadOnlyList<ChatMessage> request, string text)
     {
         // The last message is the user's question, so the scan always stops inside the list.
+        Debug.Assert(request[^1].Role == ChatRole.User, "Only a new user question is injected into.");
         var at = 0;
         while (request[at].Role == ChatRole.System)
         {
@@ -249,6 +306,21 @@ internal sealed class ReasonletChatClient : DelegatingChatClient
         sent.AddRange(request);
         sent.Insert(at, new ChatMessage(ChatRole.System, text));
         return sent;
+    }
+
+    /// <summary>
+    /// For a call marked with <see cref="BypassKey"/>, a clone of its options without the key; null for any other call.
+    /// </summary>
+    private static ChatOptions? WithoutBypass(ChatOptions? options)
+    {
+        if (options?.AdditionalProperties is not { } properties || !properties.ContainsKey(BypassKey))
+        {
+            return null;
+        }
+
+        var clone = options.Clone();
+        clone.AdditionalProperties!.Remove(BypassKey);
+        return clone;
     }
 
     private static bool HasFindProcedure(ChatOptions? options)

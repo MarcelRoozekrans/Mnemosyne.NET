@@ -101,6 +101,23 @@ services.AddMnemosyneChatEvaluator(new ChatEvaluatorOptions { ChatClientKey = "j
 services.AddMnemosyne();
 ```
 
+### On a client with UseReasonlets
+
+The evaluator can judge with the same unkeyed client that has the `UseReasonlets` middleware. The memory needs the evaluator, the evaluator needs the client, and the client needs the memory, so the middleware resolves the memory and the capture queue on its first call rather than when the client is built. Resolving the client, and starting and stopping the host, work in this setup.
+
+```csharp
+services.AddMnemosyne();
+services.AddMnemosyneChatEvaluator();    // judges with the unkeyed IChatClient below
+services.AddReasonletCapture();
+services.AddChatClient(providerClient)
+    .UseReasonlets(new ReasonletChatOptions { DefaultScope = new("support") })
+    .UseFunctionInvocation();
+```
+
+When the client's pipeline has `UseReasonlets`, each judge call carries an internal mark, and the middleware passes a marked call straight through: no recall, no `find_procedure` tool, no capture, and no count in telemetry. The middleware removes the mark before the call goes on, so it never reaches the provider. A client without the middleware, such as a keyed client from the section above, gets no mark.
+
+Other judges and guards that call a chat client through their own libraries, such as a Minos.NET decision client built on an `IChatClient`, don't carry the mark. With `UseReasonlets` on that client, their calls are recalled for like any other. Give them a keyed client without the middleware.
+
 ## Criteria
 
 `Criteria` adds your own rules on top of the question. They go into the system message, below Mnemosyne's instructions. The reply format stays fixed, so criteria can't change the shape of the verdict.

@@ -31,22 +31,24 @@ public sealed class ReasonletChatClientTests : IAsyncDisposable
     public ValueTask DisposeAsync() => _queue.DisposeAsync();
 
     [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public async Task NoScopePassesThrough(bool recall)
+    [InlineData(true, true)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(false, false)]
+    public async Task NoScopePassesThrough(bool recall, bool capture)
     {
         var inner = Run();
         var options = new ChatOptions { Temperature = 0.5f };
         List<ChatMessage> messages = [new(ChatRole.User, Question)];
         using var telemetry = new TelemetryCapture();
 
-        await Client(inner, new ReasonletChatOptions { Recall = recall, ExposeFindProcedure = true }).GetResponseAsync(messages, options, Ct);
+        await Client(inner, new ReasonletChatOptions { Recall = recall, Capture = capture, ExposeFindProcedure = true }).GetResponseAsync(messages, options, Ct);
 
         Assert.Same(messages, Assert.Single(inner.Received));
         Assert.Same(options, Assert.Single(inner.Options));
         Assert.Empty(_memory.Queries);
         Assert.Empty(await CapturedAsync());
-        if (recall)
+        if (recall || capture)
         {
             AssertRecall(telemetry, "skipped", "no_scope");
         }
@@ -54,6 +56,34 @@ public sealed class ReasonletChatClientTests : IAsyncDisposable
         {
             Assert.Empty(telemetry.Of(Recalls));
         }
+    }
+
+    [Fact]
+    public async Task ABypassedCallPassesThroughWithoutTheKey()
+    {
+        _memory.Returns(CaptureTestData.Match());
+        var inner = Run();
+        var options = new ChatOptions
+        {
+            Temperature = 0.5f,
+            AdditionalProperties = new() { [ReasonletChatClient.BypassKey] = true, ["kept"] = 1 },
+        }.WithReasonletScope(PerCall);
+        List<ChatMessage> messages = [new(ChatRole.User, Question)];
+        using var telemetry = new TelemetryCapture();
+
+        await Client(inner, new ReasonletChatOptions { DefaultScope = Default, ExposeFindProcedure = true }).GetResponseAsync(messages, options, Ct);
+
+        Assert.Same(messages, Assert.Single(inner.Received));
+        var sent = Assert.Single(inner.Options)!;
+        Assert.NotSame(options, sent);
+        Assert.Equal(0.5f, sent.Temperature);
+        Assert.Null(sent.Tools);
+        Assert.False(sent.AdditionalProperties!.ContainsKey(ReasonletChatClient.BypassKey));
+        Assert.True(options.AdditionalProperties!.ContainsKey(ReasonletChatClient.BypassKey));
+        Assert.Empty(_memory.Queries);
+        Assert.Empty(await CapturedAsync());
+        Assert.Empty(telemetry.Of(Recalls));
+        Assert.Empty(telemetry.Of("mnemosyne.capture.queue"));
     }
 
     [Fact]
@@ -328,6 +358,7 @@ public sealed class ReasonletChatClientTests : IAsyncDisposable
         };
         var inner = Run([new ChatMessage(ChatRole.Assistant, "Refunded.")]);
         using var telemetry = new TelemetryCapture();
+        using var runs = new RunCounter();
 
         await Client(inner, Defaults()).GetResponseAsync(messages, null, Ct);
 
@@ -339,10 +370,12 @@ public sealed class ReasonletChatClientTests : IAsyncDisposable
         {
             // Nothing to capture without a question, but the call still went to the queue and on to the processor.
             Assert.Empty(captured);
+            Assert.Equal(["skipped/no_question"], runs.Seen);
         }
         else
         {
             Assert.Equal(Question, Assert.Single(captured).Question);
+            Assert.Equal(["new_reasonlet"], runs.Seen);
         }
     }
 
@@ -480,6 +513,22 @@ public sealed class ReasonletChatClientTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task AHandOffThatThrowsIsCountedAndTheCallGoesOn()
+    {
+        var response = new ChatResponse { Messages = new ThrowingList() };
+        var inner = Run(response);
+        using var telemetry = new TelemetryCapture();
+
+        var returned = await Client(inner, Defaults()).GetResponseAsync([new(ChatRole.User, Question)], null, Ct);
+
+        Assert.Same(response, returned);
+        Assert.Empty(await CapturedAsync());
+        var count = Assert.Single(telemetry.Of("mnemosyne.capture.queue"));
+        Assert.Equal("exception", count.Tag("mnemosyne.outcome"));
+        Assert.Equal(typeof(InvalidOperationException).FullName, count.Tag("error.type"));
+    }
+
+    [Fact]
     public async Task CaptureOffEnqueuesNothing()
     {
         var inner = Run();
@@ -538,6 +587,40 @@ public sealed class ReasonletChatClientTests : IAsyncDisposable
         await _queue.DrainAsync(Ct);
         return _store.Captures;
     }
+}
+
+/// <summary>A message list whose every member throws, to force a failure where the hand-off reads the response.</summary>
+internal sealed class ThrowingList : IList<ChatMessage>
+{
+    public int Count => throw new InvalidOperationException();
+
+    public bool IsReadOnly => throw new InvalidOperationException();
+
+    public ChatMessage this[int index]
+    {
+        get => throw new InvalidOperationException();
+        set => throw new InvalidOperationException();
+    }
+
+    public int IndexOf(ChatMessage item) => throw new InvalidOperationException();
+
+    public void Insert(int index, ChatMessage item) => throw new InvalidOperationException();
+
+    public void RemoveAt(int index) => throw new InvalidOperationException();
+
+    public void Add(ChatMessage item) => throw new InvalidOperationException();
+
+    public void Clear() => throw new InvalidOperationException();
+
+    public bool Contains(ChatMessage item) => throw new InvalidOperationException();
+
+    public void CopyTo(ChatMessage[] array, int arrayIndex) => throw new InvalidOperationException();
+
+    public bool Remove(ChatMessage item) => throw new InvalidOperationException();
+
+    public IEnumerator<ChatMessage> GetEnumerator() => throw new InvalidOperationException();
+
+    System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
 }
 
 /// <summary>A clock whose every timestamp is one <paramref name="step"/> after the previous, so any elapsed time is one step.</summary>
