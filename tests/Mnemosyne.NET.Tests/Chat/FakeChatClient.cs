@@ -9,6 +9,7 @@ namespace Mnemosyne.NET.Tests.Chat;
 internal sealed class FakeChatClient : IChatClient
 {
     private readonly Func<IReadOnlyList<ChatMessage>, ChatOptions?, CancellationToken, Task<ChatResponse>> _reply;
+    private Func<IReadOnlyList<ChatMessage>, ChatOptions?, CancellationToken, IAsyncEnumerable<ChatResponseUpdate>>? _stream;
     private readonly List<IEnumerable<ChatMessage>> _received = [];
     private readonly List<IReadOnlyList<ChatMessage>> _requests = [];
     private readonly List<ChatOptions?> _options = [];
@@ -38,6 +39,10 @@ internal sealed class FakeChatClient : IChatClient
     public static FakeChatClient Replying(Func<IReadOnlyList<ChatMessage>, ChatOptions?, CancellationToken, Task<ChatResponse>> reply) =>
         new(reply);
 
+    /// <summary>Streams what <paramref name="stream"/> computes from the request's messages, options and token.</summary>
+    public static FakeChatClient Streaming(Func<IReadOnlyList<ChatMessage>, ChatOptions?, CancellationToken, IAsyncEnumerable<ChatResponseUpdate>> stream) =>
+        new((_, _, _) => throw new NotSupportedException()) { _stream = stream };
+
     /// <summary>Throws <paramref name="exception"/> from every call.</summary>
     public static FakeChatClient Throwing(Exception exception) => new((_, _, _) => throw exception);
 
@@ -58,9 +63,21 @@ internal sealed class FakeChatClient : IChatClient
         return _reply(request, options, cancellationToken);
     }
 
-    // The evaluator never streams.
-    public IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(IEnumerable<ChatMessage> messages, ChatOptions? options = null, CancellationToken cancellationToken = default) =>
-        throw new NotSupportedException();
+    // Only a fake made with Streaming streams; the evaluator never does.
+    public IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(IEnumerable<ChatMessage> messages, ChatOptions? options = null, CancellationToken cancellationToken = default)
+    {
+        if (_stream is null)
+        {
+            throw new NotSupportedException();
+        }
+
+        var request = messages.ToList();
+        _received.Add(messages);
+        _requests.Add(request);
+        _options.Add(options);
+        LastToken = cancellationToken;
+        return _stream(request, options, cancellationToken);
+    }
 
     // The fake offers no services.
     public object? GetService(Type serviceType, object? serviceKey = null) => null;

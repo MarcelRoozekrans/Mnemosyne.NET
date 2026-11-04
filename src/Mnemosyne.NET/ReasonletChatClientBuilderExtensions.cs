@@ -15,8 +15,8 @@ public static class ReasonletChatClientBuilderExtensions
     /// <c>find_procedure</c> tool, and hands each finished call to the background capture.
     /// </summary>
     /// <remarks>
-    /// Place it outside <c>UseFunctionInvocation()</c>, so that one call to it spans the whole tool loop; inside, every
-    /// capture is skipped for having no tool calls. When the pipeline is built, it resolves <see cref="IReasonletMemory"/>,
+    /// Place it outside <c>UseFunctionInvocation()</c>, so that one call to it spans the whole tool loop; inside, each trip
+    /// to the model is captured on its own, and the one that only asks for a tool is skipped for having no tool calls. When the pipeline is built, it resolves <see cref="IReasonletMemory"/>,
     /// the registered <see cref="TimeProvider"/> or <see cref="TimeProvider.System"/>, and, when
     /// <see cref="ReasonletChatOptions.Capture"/> is on, the capture queue that <c>AddReasonletCapture</c> registers.
     /// </remarks>

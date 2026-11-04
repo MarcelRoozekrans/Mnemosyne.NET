@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using Microsoft.Extensions.AI;
 using Mnemosyne.NET.Abstractions;
 using ZeroAlloc.Results;
@@ -60,6 +61,36 @@ internal sealed class ReasonletChatClient : DelegatingChatClient
         var response = await base.GetResponseAsync(call.Messages, call.Options, cancellationToken).ConfigureAwait(false);
         HandOff(call, response, _time.GetElapsedTime(started));
         return response;
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// The capture happens only after the inner stream is read to the end. A consumer that stops early, a stream that throws
+    /// and a cancelled call are not captured.
+    /// </remarks>
+    public override async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
+        IEnumerable<ChatMessage> messages, ChatOptions? options = null, [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        var call = await PrepareAsync(messages, options, cancellationToken).ConfigureAwait(false);
+        if (call is null)
+        {
+            await foreach (var update in base.GetStreamingResponseAsync(messages, options, cancellationToken).ConfigureAwait(false))
+            {
+                yield return update;
+            }
+
+            yield break;
+        }
+
+        var updates = new List<ChatResponseUpdate>();
+        var started = _time.GetTimestamp();
+        await foreach (var update in base.GetStreamingResponseAsync(call.Messages, call.Options, cancellationToken).ConfigureAwait(false))
+        {
+            updates.Add(update);
+            yield return update;
+        }
+
+        HandOff(call, updates.ToChatResponse(), _time.GetElapsedTime(started));
     }
 
     /// <summary>
