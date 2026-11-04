@@ -10,12 +10,6 @@ public sealed class MnemosyneOptions
     private const int MaxCandidatePool = 200;
 
     /// <summary>
-    /// The longest finite <see cref="EvaluationTimeout"/>, about 49.7 days: the longest delay a
-    /// <see cref="CancellationTokenSource"/> accepts.
-    /// </summary>
-    internal static readonly TimeSpan MaxEvaluationTimeout = TimeSpan.FromMilliseconds(uint.MaxValue - 1.0);
-
-    /// <summary>
     /// Gets how many candidates recall asks the store for before ranking, from 1 to 200. A query whose
     /// <see cref="ReasonletQuery.Top"/> is larger raises it to <see cref="ReasonletQuery.Top"/>. Defaults to 20.
     /// </summary>
@@ -74,13 +68,8 @@ public sealed class MnemosyneOptions
     public UnitResult<MnemosyneError> Validate() => Check.All(
         () => Check.Range(CandidatePool, 1, MaxCandidatePool, nameof(CandidatePool)),
         () => Check.UnitInterval(MinIntentConfidence, nameof(MinIntentConfidence)),
-        () => CheckTimeout(EvaluationTimeout, nameof(EvaluationTimeout)),
-        () => CheckTimeout(GuardTimeout, nameof(GuardTimeout)),
+        () => TimeoutCheck.Positive(EvaluationTimeout, nameof(EvaluationTimeout)),
+        () => TimeoutCheck.Positive(GuardTimeout, nameof(GuardTimeout)),
         () => Check.NotNull(Ranking, nameof(Ranking)),
         () => Check.Nested(Ranking.Validate(), nameof(Ranking)));
-
-    private static UnitResult<MnemosyneError> CheckTimeout(TimeSpan timeout, string path) =>
-        (timeout > TimeSpan.Zero && timeout <= MaxEvaluationTimeout) || timeout == Timeout.InfiniteTimeSpan
-            ? UnitResult<MnemosyneError>.Success()
-            : Check.Fail(path, "must be positive and at most 4294967294 milliseconds, or Timeout.InfiniteTimeSpan");
 }

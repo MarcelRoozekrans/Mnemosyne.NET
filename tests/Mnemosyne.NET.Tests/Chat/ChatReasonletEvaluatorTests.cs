@@ -243,6 +243,32 @@ public sealed class ChatReasonletEvaluatorTests
         Assert.Null(options.Temperature);
         Assert.Null(options.MaxOutputTokens);
         Assert.Null(options.Tools);
+        Assert.Null(options.AdditionalProperties);
+    }
+
+    [Fact]
+    public async Task AJudgeCallOnAPipelineWithTheMiddlewareCarriesTheBypassMark()
+    {
+        var inner = FakeChatClient.Replying("""{"worked":true,"confidence":0.8}""");
+        using var client = new WithMiddleware(inner);
+
+        await Evaluator(client).EvaluateAsync(Request(), CancellationToken.None);
+
+        var options = Assert.Single(inner.Options)!;
+        Assert.Equal(true, Assert.Single(options.AdditionalProperties!).Value);
+        Assert.Equal(ReasonletChatClient.BypassKey, Assert.Single(options.AdditionalProperties!).Key);
+    }
+
+    [Fact]
+    public async Task EachJudgeCallGetsItsOwnOptions()
+    {
+        var client = FakeChatClient.Replying("""{"worked":true,"confidence":0.8}""");
+        var evaluator = Evaluator(client);
+
+        await evaluator.EvaluateAsync(Request(), CancellationToken.None);
+        await evaluator.EvaluateAsync(Request(), CancellationToken.None);
+
+        Assert.NotSame(client.Options[0], client.Options[1]);
     }
 
     [Fact]
@@ -397,4 +423,14 @@ public sealed class ChatReasonletEvaluatorTests
     public async Task ANullRequestThrows() =>
         Assert.Equal("request", (await Assert.ThrowsAsync<ArgumentNullException>(
             async () => await Evaluator(FakeChatClient.Replying("{}")).EvaluateAsync(null!, CancellationToken.None))).ParamName);
+}
+
+/// <summary>A client whose pipeline reports a <c>UseReasonlets</c> middleware, and passes every call to its inner client unread.</summary>
+internal sealed class WithMiddleware(IChatClient inner) : DelegatingChatClient(inner)
+{
+    private readonly ReasonletChatClient _middleware =
+        new(inner, new FakeReasonletMemory(), null, new ReasonletChatOptions { Capture = false }, TimeProvider.System);
+
+    public override object? GetService(Type serviceType, object? serviceKey = null) =>
+        serviceType == typeof(ReasonletChatClient) ? _middleware : base.GetService(serviceType, serviceKey);
 }

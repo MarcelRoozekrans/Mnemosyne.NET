@@ -75,7 +75,7 @@ if (capture.IsFailure)
 var remembered = await memory.RememberAsync(capture.Value, ct);
 ```
 
-A `UseReasonlets()` chat client middleware that does this for you is planned for a later release.
+The `UseReasonlets()` chat middleware does this for you: see [Chat pipeline](#chat-pipeline).
 
 ## Judging runs
 
@@ -151,6 +151,80 @@ var rejected = await memory.RejectAsync(scope, otherId, ct);
 
 `limit` is from 1 to 100, and `after` is the last id of the previous page. Approving an `Active` Reasonlet succeeds and changes nothing. Rejecting an `Active` Reasonlet, or one that has versions below it, answers `Conflict`; approve or reject those versions first. A Reasonlet that is not in the scope answers `NotFound`. See [Data lifecycle](https://marcelroozekrans.github.io/Mnemosyne.NET/guides/data-lifecycle#the-review-gate) for the details.
 
+## Chat pipeline
+
+`UseReasonlets` is chat middleware for `Microsoft.Extensions.AI`. For each new question it recalls a known procedure and offers it to the model as a system message, and when the call has finished it hands the exchange to a background worker that remembers it.
+
+```csharp
+services.AddMnemosyne();                 // the memory
+services.AddReasonletCapture();          // the capture queue and its worker
+services.AddChatClient(inner)
+    .UseReasonlets(new ReasonletChatOptions { DefaultScope = new("support") })
+    .UseFunctionInvocation();
+```
+
+Building the pipeline without a registered `IReasonletMemory`, or with capture on and without `AddReasonletCapture`, throws `InvalidOperationException`, so the mistake shows at startup. Invalid options throw `ArgumentException`. Set `Capture = false` for recall only, or `Recall = false` for capture only.
+
+The middleware resolves the memory and the capture queue on its first call, not when the client is built. So `AddMnemosyneChatEvaluator()` can judge with this same unkeyed client: the memory needs the evaluator, the evaluator needs the client, and the client needs the memory only once it is called. The middleware passes the evaluator's judge calls straight through, without recall, tool, capture or count. See [Judging runs with a chat model](https://marcelroozekrans.github.io/Mnemosyne.NET/guides/chat-evaluator#on-a-client-with-usereasonlets).
+
+### Order
+
+Put `UseReasonlets` outside `UseFunctionInvocation`, as above, so one call to it spans the whole tool loop. Placed inside, each round trip of the loop is a separate call. The first trip ends in a tool call and is skipped with the skip reason `pending_tool_calls`. Only the final trip is captured, and it is a continuation, so it carries no injected recall. The injected recall's id and the `find_procedure` lookups are lost, and the capture has no parent.
+
+A response that ends in an unanswered tool call is never captured. This holds when the host drives the tool loop itself: only the round trip that ends in a final answer is captured.
+
+### Scope
+
+Every call needs a scope. The middleware takes `ChatOptions.WithReasonletScope(scope, subjectId)` first, then `ReasonletChatOptions.DefaultScope`. A call with neither passes through untouched: no recall, no capture, no tool.
+
+```csharp
+var options = new ChatOptions().WithReasonletScope(new ReasonletScope("tenant-42"), subjectId: "user-7");
+var response = await client.GetResponseAsync(messages, options);
+```
+
+`WithReasonletScope` changes the options you give it and returns them, and creates a new `ChatOptions` when given null. The subject id ends up in the capture's provenance. An invalid scope throws `ArgumentException`.
+
+### Recall and injection
+
+A call is a new question when its last message is a user message with text. A request that ends in tool results or an assistant message is a continuation and gets no recall. The recall asks for the best match, with `MinSimilarity` as the cut-off, or the selector's own when it is null. A match becomes one system message, placed after your leading system messages, in a copy of the message list. Your list is not changed. `Formatter` replaces the text.
+
+The built-in text holds the Reasonlet's name, its similarity, success rate and run count, and its steps with their tool and argument names. It never holds argument values or the text of the question that produced it. Captures from the middleware are named after their tools, such as `orders.get → payments.refund`, so the name carries no question text either. A Reasonlet you remember yourself keeps the name you give it, or the first line of its question when you give none, and that name is what other users of the scope see.
+
+A recall that hits `RecallTimeout` stops waiting, even if the memory ignores the token, and the chat call proceeds. Memory failures never break the chat call: an error, a timeout, an exception or a formatter that throws means no injection, and they show up only in telemetry. A memory whose resolution from the container throws counts once as `exception` on `mnemosyne.chat.recalls`, also with `Recall` off and `find_procedure` on, and the call goes on without recall, injection or tool; a queue that throws the same way counts as `exception` on `mnemosyne.capture.queue`. Neither failure is cached, so the next call tries again. Cancelling the call's own token still throws.
+
+### find_procedure
+
+Set `ExposeFindProcedure` and the model gets a `find_procedure` tool, bound to the call's scope, that looks up procedures that worked before for a question. It returns a JSON array of matches with their steps, and `{"error":"unavailable"}` when the lookup fails. A tool of that name already in `ChatOptions.Tools` is kept. It is off by default because it adds a tool the model sees.
+
+To manage the tool list yourself, create the function with `ReasonletTools.CreateFindProcedure(memory, scope)`. The middleware does not see lookups made through your own instance, so they are removed from captures but do not set a parent.
+
+### Limits
+
+One call to the client is one question and one answer, tool loop included. Conversations that run over several calls are not followed yet; that is planned. A call that threw or was cancelled is not captured, and neither is a stream that is not read to the end.
+
+### Background capture
+
+The middleware does not wait for the memory. It puts the exchange in a bounded queue, `ReasonletCaptureOptions.Capacity` items, 256 by default, and one worker remembers the items one at a time. A full queue drops the new item and counts it as `dropped_full`. The `find_procedure` calls and their results are taken out of the transcript first. The parent is the injected recall, else the lookup match whose graph equals the run, else the top match of the first lookup that found anything.
+
+The queue drains when the host stops. Without a host, disposing the service provider does the same, synchronously or asynchronously. The drain is bounded by `ReasonletCaptureOptions.DrainTimeout`, 30 seconds by default. When it runs out, the remaining work is cancelled and the drain waits for the memory to honour that, which the built-in memory does. Items left over are counted as `dropped_shutdown`. The worker starts on the first enqueue, so a console app without a host captures too.
+
+The capture's duration is how long the inner call took. For a streamed call it runs from the first read of the stream to the last, so it includes the time your code spends between reads.
+
+### Telemetry
+
+On the existing activity source and meter. The `outcome` tag carries the values below.
+
+| Name | Kind | Outcomes |
+|---|---|---|
+| `mnemosyne.chat.recall` | activity | as the counter |
+| `mnemosyne.chat.recalls` | counter | `injected`, `no_match`, `timeout`, the error code name, `exception`, `formatter_failed`, `skipped` |
+| `mnemosyne.capture.queue` | counter | `enqueued`, `dropped_full`, `dropped_shutdown`, `exception` |
+| `mnemosyne.capture.run` | activity | as the counter |
+| `mnemosyne.capture.runs` | counter | `new_reasonlet`, `new_version`, `execution_only`, `skipped`, the error code name, `exception` |
+| `mnemosyne.capture.duration` | histogram | none |
+
+A skipped recall carries the tag `mnemosyne.skip_reason` with `no_scope` or `continuation`. A call without a scope counts as `no_scope` whenever `Recall` or `Capture` is on. A skipped capture carries the same tag with `no_question`, `no_tool_calls` or `pending_tool_calls`. On `mnemosyne.capture.queue`, `exception` counts a finished call whose capture item could not be built or offered, with `error.type` set to the exception's type name; the chat call still returns its response.
+
 ## Documentation
 
 - [Getting started](https://marcelroozekrans.github.io/Mnemosyne.NET/getting-started): a complete console app, and what `AddMnemosyne` registers.
@@ -160,6 +234,6 @@ var rejected = await memory.RejectAsync(scope, otherId, ct);
 - [Judging runs with Minos](https://marcelroozekrans.github.io/Mnemosyne.NET/guides/minos-evaluator): a ready-made evaluator, its threshold, failures and privacy.
 - [Judging runs with a chat model](https://marcelroozekrans.github.io/Mnemosyne.NET/guides/chat-evaluator): an evaluator for any chat client, its criteria, reply format and failures.
 - [Data lifecycle](https://marcelroozekrans.github.io/Mnemosyne.NET/guides/data-lifecycle): the review gate, erasure and retention.
-- [Telemetry](https://marcelroozekrans.github.io/Mnemosyne.NET/guides/telemetry): the recall, evaluate and guard activities and metrics, alongside the store's.
+- [Telemetry](https://marcelroozekrans.github.io/Mnemosyne.NET/guides/telemetry): the recall, evaluate and guard activities and metrics, the chat middleware's and the background capture's signals, alongside the store's.
 
 See the [repository README](https://github.com/MarcelRoozekrans/Mnemosyne.NET#readme).

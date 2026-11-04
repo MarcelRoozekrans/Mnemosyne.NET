@@ -92,4 +92,43 @@ public static class ServiceCollectionExtensions
             options));
         return services;
     }
+
+    /// <summary>
+    /// Registers the background capture that <c>UseReasonlets</c> hands finished chat calls to: a bounded queue with one
+    /// reader, and a hosted service that drains it when the host stops.
+    /// </summary>
+    /// <remarks>
+    /// The capture remembers through the registered <see cref="IReasonletMemory"/>, for example from
+    /// <see cref="AddMnemosyne"/>. The queue's reader starts on the first capture, so a host without the generic host
+    /// still captures. Without a host, disposing the service provider, synchronously or asynchronously, drains the queue.
+    /// After <see cref="ReasonletCaptureOptions.DrainTimeout"/> the drain cancels the work that is left, then waits for the
+    /// memory to honour that cancellation. A second call registers no second queue, processor or hosted service, and its
+    /// options replace the first call's, as with <see cref="AddMnemosyne"/>.
+    /// </remarks>
+    /// <param name="services">The service collection.</param>
+    /// <param name="options">The settings, or null for the defaults.</param>
+    /// <returns>The same service collection.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="services"/> is null.</exception>
+    /// <exception cref="ArgumentException">The options are invalid.</exception>
+    public static IServiceCollection AddReasonletCapture(this IServiceCollection services, ReasonletCaptureOptions? options = null)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+        options ??= new ReasonletCaptureOptions();
+        var validation = options.Validate();
+        if (validation.IsFailure)
+        {
+            throw new ArgumentException(validation.Error.Message, nameof(options));
+        }
+
+        // The last options registered win; both factories resolve them rather than capture them.
+        services.AddSingleton(options);
+        services.TryAddSingleton(provider => new ReasonletCaptureProcessor(
+            provider.GetRequiredService<IReasonletMemory>(),
+            provider.GetRequiredService<ReasonletCaptureOptions>()));
+        services.TryAddSingleton(provider => new ReasonletCaptureQueue(
+            provider.GetRequiredService<ReasonletCaptureProcessor>(),
+            provider.GetRequiredService<ReasonletCaptureOptions>()));
+        services.AddHostedService<ReasonletCaptureHostedService>();
+        return services;
+    }
 }
