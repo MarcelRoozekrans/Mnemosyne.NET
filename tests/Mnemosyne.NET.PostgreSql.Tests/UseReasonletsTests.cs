@@ -1,7 +1,6 @@
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
 using Mnemosyne.NET.Abstractions;
-using Npgsql;
 using Xunit;
 
 namespace Mnemosyne.NET.PostgreSql.Tests;
@@ -27,6 +26,10 @@ public sealed class UseReasonletsTests(PgVectorFixture fixture) : IClassFixture<
 
         Assert.Equal(1L, await CountAsync(scope));
         Assert.DoesNotContain(model.Requests[0], m => m.Text.StartsWith(Injected, StringComparison.Ordinal));
+
+        // Named after the tool shape, never after the user's question.
+        Assert.Equal("orders.get → payments.refund", await Entries.ScalarAsync<string>(
+            fixture.DataSource, "SELECT name FROM mnemosyne.reasonlets WHERE scope = $1", scope.Value));
     }
 
     [Fact]
@@ -41,7 +44,7 @@ public sealed class UseReasonletsTests(PgVectorFixture fixture) : IClassFixture<
         Assert.DoesNotContain(model.Requests[0], m => m.Text.StartsWith(Injected, StringComparison.Ordinal));
         Assert.Contains(model.Requests[3], m => m.Text.StartsWith(Injected, StringComparison.Ordinal));
         Assert.Equal(1L, await CountAsync(scope));
-        Assert.Equal(2L, await Entries.ScalarAsync<int>(
+        Assert.Equal(2, await Entries.ScalarAsync<int>(
             fixture.DataSource,
             "SELECT m.runs FROM mnemosyne.reasonlet_metrics m JOIN mnemosyne.reasonlets r ON r.id = m.reasonlet_id WHERE r.scope = $1",
             scope.Value));
@@ -56,21 +59,12 @@ public sealed class UseReasonletsTests(PgVectorFixture fixture) : IClassFixture<
         await RunAsync(scope, requireReview: false, model, Refund, LookupOnly);
 
         Assert.Equal(2L, await CountAsync(scope));
-        var ids = new List<Guid>();
-        var parents = new List<Guid?>();
-        await using (var command = fixture.DataSource.CreateCommand("SELECT id, parent_id FROM mnemosyne.reasonlets WHERE scope = $1 ORDER BY created_at"))
-        {
-            command.Parameters.Add(new NpgsqlParameter { Value = scope.Value });
-            await using var reader = await command.ExecuteReaderAsync(Ct);
-            while (await reader.ReadAsync(Ct))
-            {
-                ids.Add(reader.GetGuid(0));
-                parents.Add(reader.IsDBNull(1) ? null : reader.GetGuid(1));
-            }
-        }
-
-        Assert.Null(parents[0]);
-        Assert.Equal(ids[0], parents[1]);
+        // The first version is the one without a parent; the second names it as its parent.
+        var first = await Entries.ScalarAsync<Guid>(
+            fixture.DataSource, "SELECT id FROM mnemosyne.reasonlets WHERE scope = $1 AND parent_id IS NULL", scope.Value);
+        var parent = await Entries.ScalarAsync<Guid>(
+            fixture.DataSource, "SELECT parent_id FROM mnemosyne.reasonlets WHERE scope = $1 AND parent_id IS NOT NULL", scope.Value);
+        Assert.Equal(first, parent);
     }
 
     [Fact]
@@ -85,7 +79,10 @@ public sealed class UseReasonletsTests(PgVectorFixture fixture) : IClassFixture<
 
         // Nothing was recalled, so the second run carries no parent and is stored as another pending Reasonlet.
         Assert.Equal(2L, await Entries.ScalarAsync<long>(
-            fixture.DataSource, "SELECT count(*) FROM mnemosyne.reasonlets WHERE scope = $1 AND status = 2", scope.Value));
+            fixture.DataSource,
+            "SELECT count(*) FROM mnemosyne.reasonlets WHERE scope = $1 AND status = $2",
+            scope.Value,
+            (short)ReasonletStatus.PendingReview));
     }
 
     /// <summary>The model calls orders.get, then payments.refund, then answers.</summary>
@@ -112,22 +109,26 @@ public sealed class UseReasonletsTests(PgVectorFixture fixture) : IClassFixture<
             services.AddMnemosyne(new MnemosyneOptions { RequireReview = requireReview });
             services.AddReasonletCapture(new ReasonletCaptureOptions { Source = "use-reasonlets-test" });
             var provider = services.BuildServiceProvider();
-
-            var client = new ChatClientBuilder(model)
-                .UseReasonlets(new ReasonletChatOptions { DefaultScope = scope })
-                .UseFunctionInvocation()
-                .Build(provider);
-            var options = new ChatOptions
+            try
             {
-                Tools = [AIFunctionFactory.Create(() => "order", "orders.get"), AIFunctionFactory.Create(() => "refunded", "payments.refund")],
-            }.WithReasonletScope(scope);
+                var client = new ChatClientBuilder(model)
+                    .UseReasonlets(new ReasonletChatOptions { DefaultScope = scope })
+                    .UseFunctionInvocation()
+                    .Build(provider);
+                var options = new ChatOptions
+                {
+                    Tools = [AIFunctionFactory.Create(() => "order", "orders.get"), AIFunctionFactory.Create(() => "refunded", "payments.refund")],
+                }.WithReasonletScope(scope);
 
-            model.Script = run;
-            var response = await client.GetResponseAsync([new ChatMessage(ChatRole.User, Question)], options, Ct);
-            Assert.Equal("Done.", response.Text);
-
-            // Disposing the provider drains the capture queue.
-            await provider.DisposeAsync();
+                model.Script = run;
+                var response = await client.GetResponseAsync([new ChatMessage(ChatRole.User, Question)], options, Ct);
+                Assert.Equal("Done.", response.Text);
+            }
+            finally
+            {
+                // Disposing the provider drains the capture queue, and it runs when an assert fails too.
+                await provider.DisposeAsync();
+            }
         }
     }
 

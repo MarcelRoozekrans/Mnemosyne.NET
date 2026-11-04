@@ -45,6 +45,16 @@ public sealed class ReasonletCaptureOptionsTests
     }
 
     [Fact]
+    public void ADrainTimeoutAboveTheMaximumFails()
+    {
+        var result = new ReasonletCaptureOptions { DrainTimeout = TimeoutCheck.Max + TimeSpan.FromMilliseconds(1) }.Validate();
+
+        Assert.Equal(MnemosyneErrorCode.Validation, result.Error.Code);
+        Assert.StartsWith("DrainTimeout:", result.Error.Message, StringComparison.Ordinal);
+        Assert.True(new ReasonletCaptureOptions { DrainTimeout = TimeoutCheck.Max }.Validate().IsSuccess);
+    }
+
+    [Fact]
     public void ANonPositiveDrainTimeoutFails()
     {
         var result = new ReasonletCaptureOptions { DrainTimeout = TimeSpan.Zero }.Validate();

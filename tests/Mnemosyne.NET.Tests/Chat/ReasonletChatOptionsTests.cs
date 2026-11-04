@@ -49,6 +49,22 @@ public sealed class ReasonletChatOptionsTests
         Assert.StartsWith("MinSimilarity:", result.Error.Message, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData(0.0)]
+    [InlineData(1.0)]
+    public void MinSimilarityAtTheBoundsPasses(double value) =>
+        Assert.True(new ReasonletChatOptions { MinSimilarity = value }.Validate().IsSuccess);
+
+    [Fact]
+    public void ARecallTimeoutAboveTheMaximumFails()
+    {
+        var result = new ReasonletChatOptions { RecallTimeout = TimeoutCheck.Max + TimeSpan.FromMilliseconds(1) }.Validate();
+
+        Assert.Equal(MnemosyneErrorCode.Validation, result.Error.Code);
+        Assert.StartsWith("RecallTimeout:", result.Error.Message, StringComparison.Ordinal);
+        Assert.True(new ReasonletChatOptions { RecallTimeout = TimeoutCheck.Max }.Validate().IsSuccess);
+    }
+
     [Fact]
     public void NonPositiveRecallTimeoutFails()
     {
@@ -93,6 +109,14 @@ public sealed class ReasonletChatOptionsTests
     public void WithReasonletScopeRejectsInvalidScope()
     {
         var ex = Assert.Throws<ArgumentException>(() => new ChatOptions().WithReasonletScope(new ReasonletScope(" ")));
+
+        Assert.Equal("scope", ex.ParamName);
+    }
+
+    [Fact]
+    public void WithReasonletScopeRejectsTheDefaultScope()
+    {
+        var ex = Assert.Throws<ArgumentException>(() => new ChatOptions().WithReasonletScope(default));
 
         Assert.Equal("scope", ex.ParamName);
     }
