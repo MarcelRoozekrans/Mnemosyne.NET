@@ -4,11 +4,26 @@
 
 ## Current Position
 - **Milestone:** 3, Off-the-shelf integrations. Active since 2026-10-30. Design: `docs/superpowers/specs/2026-10-30-milestone-3-design.md`.
-- **Phase:** 3.5, UseReasonlets middleware and the find_procedure tool. It is **active** on branch `feat/phase-3.5-reasonlets-find-procedure`, cut from `main` at 87e89f2.
-  - Design approved by Marcel: `docs/superpowers/specs/2026-11-03-phase-3.5-use-reasonlets-design.md`.
-  - Plan written, 9 tasks, none started: `docs/superpowers/plans/2026-11-04-phase-3.5-use-reasonlets.md`.
-  - Execution method chosen by Marcel: **subagent-driven** (`superpowers:subagent-driven-development`). Tasks 5 and 6 carry `**Model:** opus`.
+- **Phase:** 3.5, UseReasonlets middleware and the find_procedure tool. **Complete** on branch `feat/phase-3.5-reasonlets-find-procedure`, cut from `main` at 87e89f2. The PR against main is open and waits for Marcel to merge it.
+  - All 9 plan tasks are done, each with a task review. A whole-branch review, one fix wave and a scoped re-review followed, and the pre-push review passed.
+  - Unit 1444, integration 301, and the AOT smoke publishes without warnings and exits 0.
 - **Previous phase:** 3.4, the AI.Sentinel adapter, merged as PR #30 on 2026-10-31 and released in 0.5.0 (#31).
+
+## Decisions taken during 3.5 execution
+- **Unanswered tool calls are not captured.** A response that ends on a `FunctionCallContent` with no result, or on an `InputRequestContent` approval request, is skipped with skip reason `pending_tool_calls`.
+  - This holds in every pipeline order and for host-driven tool loops, so each run is captured once with its full shape.
+  - The spec's claim that the inside order skips with `NoToolCalls` was wrong, and the spec now carries an amendment dated 2026-11-04.
+  - Whether a call is pending is decided at hand-off, because `FunctionInvokingChatClient` sets `InformationalOnly` after the middleware returns.
+- **Lazy resolution.** `UseReasonlets` resolves the memory and the capture queue on the first call, which breaks the DI cycle that hung startup when the chat evaluator judges with the same client.
+  - The chat evaluator marks its judge calls with an internal key, and the middleware passes those calls through untouched.
+  - A memory or queue that fails to resolve is counted, and the call goes on.
+- **Automatic captures are named after their tool shape.** No question text reaches another user's injected message.
+- **The capture queue is also `IDisposable`.** A synchronous `ServiceProvider.Dispose` drains it instead of throwing.
+- **`no_scope` is counted** whenever Recall or Capture is on.
+- **Follow-ups that need a decision:**
+  - #45: a parentless capture of a stored shape creates a duplicate Reasonlet;
+  - #46: judge calls from other libraries go through `UseReasonlets`;
+  - #47: extracted intent can carry question text into `find_procedure` results.
 
 ## Decisions taken during 3.4 execution
 - **ZeroAlloc analyzer switch.** `ZeroAllocAuthorizationDisableBundledAnalyzer=true` is set in the Sentinel csproj.
@@ -39,5 +54,5 @@
 - **Tests:** the repo refuses `dotnet test --filter`. Build first, then run the test exe with `-class <FQN>`.
 
 ## Recommended Next Step
-1. Execute the phase 3.5 plan with `superpowers:subagent-driven-development`, starting at Task 1. Task 1 Step 5 is an AOT stop gate: if `Microsoft.Extensions.AI` breaks the AOT publish, stop and report instead of suppressing.
-2. After the last task: whole-branch review, pre-push review, open the PR. Marcel merges.
+1. Marcel merges the phase 3.5 PR. After the merge, check that its `feat:` and `fix:` commits appear in the release-please PR.
+2. Start phase 3.6, the Agent Framework AIContextProvider: brainstorm its design. It builds on the same recall, capture queue and processor. Decide #45-#47 first or alongside it, since 3.6 inherits all three.
