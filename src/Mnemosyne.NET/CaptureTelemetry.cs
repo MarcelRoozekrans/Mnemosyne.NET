@@ -12,7 +12,7 @@ namespace Mnemosyne.NET;
 /// <remarks>
 /// <para>
 /// Start one with <see cref="Start"/> before an item is processed, report how it ended with exactly one of
-/// <see cref="Remembered"/>, <see cref="Skipped"/>, <see cref="Failed"/> or <see cref="Threw"/>, and dispose it, which
+/// <see cref="Remembered"/>, <see cref="Skipped"/>, <see cref="Failed"/>, <see cref="Threw"/> or <see cref="Cancelled"/>, and dispose it, which
 /// counts, times and stops it. On <c>mnemosyne.capture.runs</c> the outcome is <c>new_reasonlet</c>, <c>new_version</c> or
 /// <c>execution_only</c> for a stored capture, <c>skipped</c> with <c>mnemosyne.skip_reason</c> <c>no_question</c> or
 /// <c>no_tool_calls</c>, the error code's name for an error result, and <c>exception</c> with <c>error.type</c> set to the
@@ -53,6 +53,7 @@ internal sealed class CaptureTelemetry : IDisposable
     private string _outcome = RecallTelemetry.ExceptionOutcome;
     private string? _skipReason;
     private string? _errorType;
+    private bool _cancelled;
 
     private CaptureTelemetry(Activity? activity, long started)
     {
@@ -106,9 +107,22 @@ internal sealed class CaptureTelemetry : IDisposable
         RecallTelemetry.Threw(_activity, ex);
     }
 
+    /// <summary>
+    /// Reports an item cut short by its caller's cancellation, as at shutdown: no run outcome is counted and the activity
+    /// is not marked as failed, since the queue counts the item as dropped. The duration is still recorded.
+    /// </summary>
+    internal void Cancelled() => _cancelled = true;
+
     /// <summary>Counts and times the item, and stops the activity.</summary>
     public void Dispose()
     {
+        if (_cancelled)
+        {
+            Duration.Record(Stopwatch.GetElapsedTime(_started).TotalSeconds);
+            _activity?.Dispose();
+            return;
+        }
+
         var tags = new TagList { { RecallTelemetry.OutcomeTag, _outcome } };
         if (_skipReason is not null)
         {

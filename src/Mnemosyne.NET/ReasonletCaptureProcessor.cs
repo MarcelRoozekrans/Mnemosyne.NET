@@ -54,9 +54,9 @@ internal sealed class ReasonletCaptureProcessor(IReasonletMemory memory, Reasonl
                 telemetry.Remembered(receipt.Value.Kind);
             }
         }
-        catch (OperationCanceledException ex) when (ct.IsCancellationRequested)
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
-            telemetry.Threw(ex);
+            telemetry.Cancelled();
             throw;
         }
         catch (Exception ex)
@@ -91,14 +91,22 @@ internal sealed class ReasonletCaptureProcessor(IReasonletMemory memory, Reasonl
             return injected;
         }
 
-        var hash = graph.ComputeContentHash();
+        string? hash = null;
+        var hashed = false;
         ReasonletId? top = null;
         foreach (var lookup in item.Lookups)
         {
             foreach (var match in lookup)
             {
+                if (!hashed)
+                {
+                    var own = graph.ComputeContentHash();
+                    hash = own.IsSuccess ? own.Value : null;
+                    hashed = true;
+                }
+
                 var candidate = match.Reasonlet.Graph.ComputeContentHash();
-                if (hash.IsSuccess && candidate.IsSuccess && string.Equals(hash.Value, candidate.Value, StringComparison.Ordinal))
+                if (hash is not null && candidate.IsSuccess && string.Equals(hash, candidate.Value, StringComparison.Ordinal))
                 {
                     return match.Reasonlet.Id;
                 }

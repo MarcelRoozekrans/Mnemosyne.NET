@@ -67,11 +67,12 @@ public sealed class ReasonletCaptureProcessorTests
     {
         var memory = CaptureTestData.Memory();
         var broken = CaptureTestData.Match(new ReasonletGraph { Nodes = [], Edges = [], SchemaVersion = ReasonletGraph.CurrentSchemaVersion });
-        var item = CaptureTestData.Item() with { Lookups = [[broken]] };
+        var first = CaptureTestData.Match();
+        var item = CaptureTestData.Item() with { Lookups = [[first, broken]] };
 
         await Processor(memory).ProcessAsync(item, Ct);
 
-        Assert.Equal(broken.Reasonlet.Id, Assert.Single(memory.Captures).ParentId);
+        Assert.Equal(first.Reasonlet.Id, Assert.Single(memory.Captures).ParentId);
     }
 
     [Fact]

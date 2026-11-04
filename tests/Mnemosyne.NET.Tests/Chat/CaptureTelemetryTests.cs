@@ -88,6 +88,31 @@ public sealed class CaptureTelemetryTests
         AssertRun(capture, [new("error.type", "System.Net.Http.HttpRequestException"), new("mnemosyne.outcome", "exception")]);
     }
 
+    [Fact]
+    public async Task ACancelledCallerCountsNoRunAndIsNotAnError()
+    {
+        using var cts = new CancellationTokenSource();
+        var memory = new FakeReasonletMemory
+        {
+            RememberHandler = async (_, ct) =>
+            {
+                await cts.CancelAsync();
+                ct.ThrowIfCancellationRequested();
+                return CaptureTestData.Receipt();
+            },
+        };
+        using var capture = new TelemetryCapture();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            async () => await new ReasonletCaptureProcessor(memory, new ReasonletCaptureOptions()).ProcessAsync(CaptureTestData.Item(), cts.Token));
+
+        var activity = Single(capture);
+        Assert.NotEqual(ActivityStatusCode.Error, activity.Status);
+        Assert.Empty(activity.Events);
+        Assert.Empty(AllTags(activity));
+        Assert.Empty(capture.Of("mnemosyne.capture.runs"));
+    }
+
     [Theory]
     [InlineData(CaptureTelemetry.EnqueuedOutcome)]
     [InlineData(CaptureTelemetry.DroppedFullOutcome)]
