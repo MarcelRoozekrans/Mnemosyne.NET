@@ -53,6 +53,21 @@ public sealed class CaptureTelemetryTests
     }
 
     [Fact]
+    public async Task APendingToolCallIsSkippedWithItsReason()
+    {
+        using var capture = new TelemetryCapture();
+        var memory = CaptureTestData.Memory();
+
+        await Process(memory, CaptureTestData.Item([.. CaptureTestData.Refund().Take(4)]));
+
+        var activity = Single(capture);
+        Assert.Equal(ActivityStatusCode.Unset, activity.Status);
+        Assert.Empty(memory.Captures);
+        Assert.Equal([new("mnemosyne.outcome", "skipped"), new("mnemosyne.skip_reason", "pending_tool_calls")], AllTags(activity));
+        AssertRun(capture, [new("mnemosyne.outcome", "skipped"), new("mnemosyne.skip_reason", "pending_tool_calls")]);
+    }
+
+    [Fact]
     public async Task AnErrorResultIsCountedByCode()
     {
         var memory = new FakeReasonletMemory

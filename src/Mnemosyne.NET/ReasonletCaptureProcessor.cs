@@ -30,6 +30,12 @@ internal sealed class ReasonletCaptureProcessor(IReasonletMemory memory, Reasonl
         try
         {
             var messages = Strip(item.Messages);
+            if (EndsWithPendingCall(messages))
+            {
+                telemetry.SkippedPendingToolCalls();
+                return;
+            }
+
             var details = new TranscriptCaptureDetails
             {
                 Scope = item.Scope,
@@ -83,6 +89,13 @@ internal sealed class ReasonletCaptureProcessor(IReasonletMemory memory, Reasonl
 
         return false;
     }
+
+    /// <summary>
+    /// Whether the run stops on a function call nobody answered: the last message holds a call, and any result for it would
+    /// have to come after it. Such a response is one trip of a tool loop that the caller drives, not a finished run.
+    /// </summary>
+    private static bool EndsWithPendingCall(List<ChatMessage> messages) =>
+        messages.Count > 0 && messages[^1].Contents.Any(content => content is FunctionCallContent);
 
     private static ReasonletId? Parent(ReasonletCaptureItem item, ReasonletGraph graph)
     {

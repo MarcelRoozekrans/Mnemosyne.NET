@@ -31,20 +31,24 @@ public sealed class PipelineOrderTests
     }
 
     [Fact]
-    public async Task InsideFunctionInvocationSkipsWithNoToolCalls()
+    public async Task InsideFunctionInvocationCapturesOnceWithoutTheParent()
     {
-        var (client, store, queue) = Build(outside: false, expose: false, [Call("c1", "orders.get")]);
+        var match = CaptureTestData.Match();
+        var (client, store, queue) = Build(
+            outside: false, expose: false, [Call("c1", "orders.get")],
+            memory => memory.Returns(match));
         await using var _ = queue;
         using var runs = new RunCounter();
 
         await client.GetResponseAsync([new(ChatRole.User, CaptureTestData.Question)], Options(), Ct);
         await queue.DrainAsync(Ct);
 
-        // Each trip to the model is its own call. The one that asks for the tool has no result yet, so it is skipped; the
-        // one after it sees the tool exchange as part of its request and is captured on its own.
-        Assert.Equal(["skipped/no_tool_calls", "new_reasonlet"], runs.Seen);
+        // The trip that asks for the tool ends on an unanswered call, so it is skipped. The trip after it is a continuation:
+        // it is captured on its own, without the parent that the first trip's recall injected.
+        Assert.Equal(["skipped/pending_tool_calls", "new_reasonlet"], runs.Seen);
         var capture = Assert.Single(store.Captures);
         Assert.Equal("orders.get", Assert.Single(ReasonletPromptFormatter.Steps(capture.Graph)).Label);
+        Assert.Null(capture.ParentId);
     }
 
     [Fact]

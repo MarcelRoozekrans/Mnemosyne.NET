@@ -38,6 +38,7 @@ internal sealed class CaptureTelemetry : IDisposable
     private const string SkipReasonTag = "mnemosyne.skip_reason";
     private const string ErrorTypeTag = "error.type";
     private const string SkippedOutcome = "skipped";
+    private const string PendingToolCallsReason = "pending_tool_calls";
 
     private static readonly Counter<long> Runs =
         RecallTelemetry.Meter.CreateCounter<long>("mnemosyne.capture.runs", "{run}", "Background captures, by outcome.");
@@ -86,6 +87,15 @@ internal sealed class CaptureTelemetry : IDisposable
     {
         _outcome = SkippedOutcome;
         _skipReason = reason == TranscriptSkipReason.NoQuestion ? "no_question" : "no_tool_calls";
+        _activity?.SetTag(RecallTelemetry.OutcomeTag, _outcome);
+        _activity?.SetTag(SkipReasonTag, _skipReason);
+    }
+
+    /// <summary>Reports a run that ends on a function call with no result: outcome <c>skipped</c>, reason <c>pending_tool_calls</c>.</summary>
+    internal void SkippedPendingToolCalls()
+    {
+        _outcome = SkippedOutcome;
+        _skipReason = PendingToolCallsReason;
         _activity?.SetTag(RecallTelemetry.OutcomeTag, _outcome);
         _activity?.SetTag(SkipReasonTag, _skipReason);
     }

@@ -143,6 +143,47 @@ public sealed class ReasonletCaptureProcessorTests
     }
 
     [Fact]
+    public async Task ATrailingUnansweredCallIsNotCaptured()
+    {
+        var memory = CaptureTestData.Memory();
+
+        await Processor(memory).ProcessAsync(CaptureTestData.Item([.. CaptureTestData.Refund().Take(4)]), Ct);
+
+        Assert.Empty(memory.Captures);
+    }
+
+    [Fact]
+    public async Task ATrailingCallWithItsResultIsCaptured()
+    {
+        var memory = CaptureTestData.Memory();
+
+        await Processor(memory).ProcessAsync(CaptureTestData.Item([.. CaptureTestData.Refund().Take(5)]), Ct);
+
+        Assert.Single(memory.Captures);
+    }
+
+    [Fact]
+    public async Task AFinalTextAfterAFullExchangeIsCaptured()
+    {
+        var memory = CaptureTestData.Memory();
+
+        await Processor(memory).ProcessAsync(CaptureTestData.Item(), Ct);
+
+        Assert.Single(memory.Captures);
+    }
+
+    [Fact]
+    public async Task AStrippedLookupCallDoesNotCountAsPending()
+    {
+        var memory = CaptureTestData.Memory();
+        ChatMessage[] messages = [.. CaptureTestData.Refund().Take(5), CaptureTestData.RefundWithLookup()[1]];
+
+        await Processor(memory).ProcessAsync(CaptureTestData.Item(messages), Ct);
+
+        Assert.Single(memory.Captures);
+    }
+
+    [Fact]
     public async Task NoQuestionIsSkipped()
     {
         var memory = CaptureTestData.Memory();
