@@ -1,11 +1,13 @@
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
 using Mnemosyne.NET.Abstractions;
+using Mnemosyne.NET.Tests.Core;
 using Xunit;
 
 namespace Mnemosyne.NET.Tests.Chat;
 
 /// <summary>What <c>UseReasonlets</c> checks and resolves when the pipeline is built.</summary>
+[Collection(nameof(RecallTelemetryCollection))]
 public sealed class UseReasonletsTests
 {
     private static readonly ReasonletScope Scope = new("support");

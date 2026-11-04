@@ -1,11 +1,13 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Mnemosyne.NET.Abstractions;
+using Mnemosyne.NET.Tests.Core;
 using Xunit;
 
 namespace Mnemosyne.NET.Tests.Chat;
 
 /// <summary>What <c>AddReasonletCapture</c> registers, and that stopping the host or disposing the provider drains the queue.</summary>
+[Collection(nameof(RecallTelemetryCollection))]
 public sealed class CaptureRegistrationTests
 {
     private static readonly TimeSpan Guard = TimeSpan.FromSeconds(30);

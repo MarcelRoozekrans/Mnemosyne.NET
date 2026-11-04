@@ -1,12 +1,14 @@
 using Microsoft.Extensions.AI;
 using Mnemosyne.NET.Abstractions;
 using Mnemosyne.NET.Tests.Abstractions;
+using Mnemosyne.NET.Tests.Core;
 using Xunit;
 using Result = ZeroAlloc.Results.Result<Mnemosyne.NET.Abstractions.ReasonletReceipt, Mnemosyne.NET.Abstractions.MnemosyneError>;
 
 namespace Mnemosyne.NET.Tests.Chat;
 
 /// <summary>Turning one finished chat call into a capture.</summary>
+[Collection(nameof(RecallTelemetryCollection))]
 public sealed class ReasonletCaptureProcessorTests
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;

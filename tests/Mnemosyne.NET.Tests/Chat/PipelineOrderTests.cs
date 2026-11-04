@@ -21,11 +21,13 @@ public sealed class PipelineOrderTests
     {
         var (client, store, queue) = Build(outside: true, expose: false, [Call("c1", "orders.get")]);
         await using var _ = queue;
+        using var runs = new RunCounter();
 
         var response = await client.GetResponseAsync([new(ChatRole.User, CaptureTestData.Question)], Options(), Ct);
         await queue.DrainAsync(Ct);
 
         Assert.Equal("done", response.Text);
+        Assert.Equal(["new_reasonlet"], runs.Seen);
         var capture = Assert.Single(store.Captures);
         Assert.Equal("orders.get", Assert.Single(ReasonletPromptFormatter.Steps(capture.Graph)).Label);
     }
@@ -99,49 +101,5 @@ public sealed class PipelineOrderTests
         var builder = new ChatClientBuilder(model);
         _ = outside ? builder.UseReasonlets(options).UseFunctionInvocation() : builder.UseFunctionInvocation().UseReasonlets(options);
         return (builder.Build(provider), store, provider.GetRequiredService<ReasonletCaptureQueue>());
-    }
-
-    /// <summary>
-    /// Hears the capture runs counter directly. The queue's reader starts with the execution context flow suppressed, so the
-    /// trace-matching telemetry capture never hears it.
-    /// </summary>
-    private sealed class RunCounter : IDisposable
-    {
-        private readonly System.Collections.Concurrent.ConcurrentQueue<string> _seen = new();
-        private readonly System.Diagnostics.Metrics.MeterListener _listener = new();
-
-        public RunCounter()
-        {
-            _listener.InstrumentPublished = (instrument, listener) =>
-            {
-                if (instrument.Name == "mnemosyne.capture.runs")
-                {
-                    listener.EnableMeasurementEvents(instrument);
-                }
-            };
-            _listener.SetMeasurementEventCallback<long>((_, _, tags, _) =>
-            {
-                string? outcome = null;
-                string? reason = null;
-                foreach (var tag in tags)
-                {
-                    if (tag.Key == "mnemosyne.outcome")
-                    {
-                        outcome = tag.Value as string;
-                    }
-                    else if (tag.Key == "mnemosyne.skip_reason")
-                    {
-                        reason = tag.Value as string;
-                    }
-                }
-
-                _seen.Enqueue(reason is null ? outcome! : $"{outcome}/{reason}");
-            });
-            _listener.Start();
-        }
-
-        public IReadOnlyList<string> Seen => [.. _seen];
-
-        public void Dispose() => _listener.Dispose();
     }
 }
