@@ -5,7 +5,7 @@ sidebar_position: 3
 
 # Telemetry
 
-Mnemosyne emits OpenTelemetry traces and metrics for every store operation, every recall and every call to an evaluator or a capture guard. It uses only the in-box `System.Diagnostics` types, so it adds no dependency and stays native AOT clean. Your host decides whether to collect the signals and where to send them.
+Mnemosyne emits OpenTelemetry traces and metrics for every store operation, every recall, every call to an evaluator or a capture guard, and the `UseReasonlets` chat middleware and its background capture. It uses only the in-box `System.Diagnostics` types, so it adds no dependency and stays native AOT clean. Your host decides whether to collect the signals and where to send them.
 
 ## Turn it on
 
@@ -28,7 +28,7 @@ builder.Services.AddOpenTelemetry()
 
 Add the exporters you already use, such as OTLP, as usual.
 
-No activity is created without a listener, and the store builds no tag for one, so a host that doesn't collect the signals pays very little for them.
+No activity is created without a listener, and the store builds no tag for one, so a host that doesn't collect the signals pays little for them.
 
 ## Operations
 
@@ -159,8 +159,33 @@ A remember without a registered guard starts no `mnemosyne.guard` activity.
 
 A rising `Conflict` count on `erase` or `prune` means concurrent writes are colliding; both are safe to retry. On `reject`, `Conflict` is mostly a reviewer's mistake: the Reasonlet is active, or has versions below it. A rising `Unavailable` count means the database can't serve. On `evaluate`, a rising `Unavailable` or `exception` count means the judge is failing; while it is down, runs are stored with the agent's verdict. A `Validation`, `NotFound`, `Conflict` or `Blocked` outcome on `evaluate` means the evaluator adapter has a bug: the facade throws `InvalidOperationException` for it. On `guard`, a rising `Unavailable` or `exception` count means the guard is failing, and remembers are failing with it; a rising `blocked` count on `mnemosyne.guard.inspections` is the guard doing its work, and the `mnemosyne.guard.detector` tag on the activity says which detector. Any error code from a guard other than `Unavailable` is an adapter bug, and `Blocked` is included: a guard blocks with a verdict, not with an error. The facade throws `InvalidOperationException` for it. [Data lifecycle](data-lifecycle.md) and [the store's errors](postgresql.md#errors) explain when each happens.
 
+## Chat pipeline and capture
+
+The `UseReasonlets` middleware and the background capture behind it emit their own signals on the same source and meter. They are not operations: they carry `mnemosyne.outcome` but no `mnemosyne.operation` tag, and they don't count on `mnemosyne.operations`.
+
+| Signal | Type and unit | Tags | Emitted |
+|---|---|---|---|
+| `mnemosyne.chat.recall` | activity | `mnemosyne.outcome` | once per recall the middleware makes for a new question |
+| `mnemosyne.chat.recalls` | counter, `{recall}` | `mnemosyne.outcome`; `mnemosyne.skip_reason` on a skip; `error.type` on an exception | once per recall, and once per call that skips it |
+| `mnemosyne.capture.queue` | counter, `{item}` | `mnemosyne.outcome`; `error.type` on an exception | once per finished call offered to the capture queue |
+| `mnemosyne.capture.run` | activity | `mnemosyne.outcome`, `mnemosyne.skip_reason` on a skip | once per item the worker processes |
+| `mnemosyne.capture.runs` | counter, `{run}` | `mnemosyne.outcome`; `mnemosyne.skip_reason` on a skip; `error.type` on an exception | once per item the worker processes |
+| `mnemosyne.capture.duration` | histogram, seconds | none | once per item the worker processes, cancelled ones included |
+
+The outcomes:
+
+| Signal | Outcomes |
+|---|---|
+| `mnemosyne.chat.recalls` | `injected`, `no_match`, `timeout`, an error code's name, `exception`, `formatter_failed`, or `skipped` with the reason `no_scope` or `continuation` |
+| `mnemosyne.capture.queue` | `enqueued`; `dropped_full` when the queue is full; `dropped_shutdown` for an item offered during a drain or left over when the drain timed out; `exception` when building or offering the item threw |
+| `mnemosyne.capture.runs` | `new_reasonlet`, `new_version` or `execution_only` for a stored capture, an error code's name, `exception`, or `skipped` with the reason `no_question`, `no_tool_calls` or `pending_tool_calls` |
+
+A call without a scope counts as `skipped` with `no_scope` whenever `Recall` or `Capture` is on. A request that doesn't end in a new user question counts as `continuation` when `Recall` is on. A recall cut short by the caller's own cancellation counts nothing, and neither does an item the drain cancels: the queue counts that one as `dropped_shutdown`. A judge call from the chat evaluator passes through the middleware uncounted.
+
+A timeout, a formatter failure, an error result and an exception mark the `mnemosyne.chat.recall` activity as failed, with `error.type` set as described in [Failures on an activity](#failures-on-an-activity). The memory's own `mnemosyne.recall` activity runs inside it. The worker processes items outside the trace of the chat call that queued them, so each `mnemosyne.capture.run` is a root activity, and the facade's and the store's activities for the remember run inside it.
+
 ## Privacy
 
-No signal carries user data: no question, answer, intent, name, graph, tags, scope, subject or run id, and no error or exception message. Reasonlet ids and versions are opaque, so they appear, and so do scores. So does a Reasonlet's review status, `active` or `pending_review`. No reviewer identity is recorded. An evaluator's name appears too: it names the judge, such as `llm-judge`, and nothing about the run. A guard's name and its detector's appear the same way, such as `redactor` and `pii.email`: they name the check, not the text it matched, and a guard's own error text never reaches a signal or the error the facade returns.
+No signal carries user data: no question, answer, intent, name, graph, tags, scope, subject or run id, no injected text, no tool or argument name, and no error or exception message. Reasonlet ids and versions are opaque, so they appear, and so do scores. So does a Reasonlet's review status, `active` or `pending_review`. No reviewer identity is recorded. An evaluator's name appears too: it names the judge, such as `llm-judge`, and nothing about the run. A guard's name and its detector's appear the same way, such as `redactor` and `pii.email`: they name the check, not the text it matched, and a guard's own error text never reaches a signal or the error the facade returns.
 
 Scope and subject are left out on purpose. A scope often names a tenant and a subject names a person, and telemetry is exported, sampled and kept in other systems with their own retention. If you need a breakdown by tenant, add it in your own wrapper, where you decide what may leave your application.

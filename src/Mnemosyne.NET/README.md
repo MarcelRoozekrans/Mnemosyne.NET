@@ -75,7 +75,7 @@ if (capture.IsFailure)
 var remembered = await memory.RememberAsync(capture.Value, ct);
 ```
 
-A `UseReasonlets()` chat client middleware that does this for you is planned for a later release.
+The `UseReasonlets()` chat middleware does this for you: see [Chat pipeline](#chat-pipeline).
 
 ## Judging runs
 
@@ -200,7 +200,7 @@ To manage the tool list yourself, create the function with `ReasonletTools.Creat
 
 ### Limits
 
-One call to the client is one question and one answer, tool loop included. Conversations that run over several calls are not followed. That is planned for phase 3.6. A call that threw or was cancelled is not captured, and neither is a stream that is not read to the end.
+One call to the client is one question and one answer, tool loop included. Conversations that run over several calls are not followed yet; that is planned. A call that threw or was cancelled is not captured, and neither is a stream that is not read to the end.
 
 ### Background capture
 
@@ -234,6 +234,6 @@ A skipped recall carries the tag `mnemosyne.skip_reason` with `no_scope` or `con
 - [Judging runs with Minos](https://marcelroozekrans.github.io/Mnemosyne.NET/guides/minos-evaluator): a ready-made evaluator, its threshold, failures and privacy.
 - [Judging runs with a chat model](https://marcelroozekrans.github.io/Mnemosyne.NET/guides/chat-evaluator): an evaluator for any chat client, its criteria, reply format and failures.
 - [Data lifecycle](https://marcelroozekrans.github.io/Mnemosyne.NET/guides/data-lifecycle): the review gate, erasure and retention.
-- [Telemetry](https://marcelroozekrans.github.io/Mnemosyne.NET/guides/telemetry): the recall, evaluate and guard activities and metrics, alongside the store's.
+- [Telemetry](https://marcelroozekrans.github.io/Mnemosyne.NET/guides/telemetry): the recall, evaluate and guard activities and metrics, the chat middleware's and the background capture's signals, alongside the store's.
 
 See the [repository README](https://github.com/MarcelRoozekrans/Mnemosyne.NET#readme).
