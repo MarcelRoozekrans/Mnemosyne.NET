@@ -122,6 +122,15 @@ jobs:
             exit 1
           fi
 
+      # Merges the Cobertura reports and fails below 80 percent line coverage, or when codecov.yml
+      # would let a drop in coverage pass quietly. Linux only: ci-baseline's gate runs on Linux
+      # runners only, so the ubuntu leg, which also runs the Docker tier, is the one measured.
+      - name: Coverage gate
+        if: runner.os == 'Linux'
+        uses: MarcelRoozekrans/ci-baseline/actions/coverage-gate@v1
+        with:
+          reports: "tests/*/bin/Release/**/TestResults/*.cobertura.xml"
+
       - name: Upload coverage to Codecov
         if: '!cancelled()'
         uses: codecov/codecov-action@v7
@@ -290,10 +299,10 @@ jobs:
     needs: [build-test, pack-validate, aot-publish]
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    # Trusted Publishing mints a short-lived key from an OIDC token. A job-level permissions
-    # block replaces the workflow-level one, so contents: read is restated.
+    # Trusted Publishing mints a short-lived key from an OIDC token. contents: write lets the
+    # SBOM step attach its file to the GitHub release.
     permissions:
-      contents: read
+      contents: write
       id-token: write
     steps:
       - name: Checkout
@@ -355,3 +364,13 @@ jobs:
             --source https://api.nuget.org/v3/index.json \
             --api-key "$NUGET_API_KEY" \
             --skip-duplicate
+
+      # A CycloneDX SBOM of the solution, attached to the GitHub release of this version. The tag
+      # is v plus the version GitVersion derived, which the step above proved is a stable release,
+      # so it names the release whether the job runs on the release event or on a dispatch. The
+      # release exists by now: release-please created it, and that is what started this run.
+      - name: Attach the SBOM to the GitHub release
+        uses: MarcelRoozekrans/ci-baseline/actions/sbom@v1
+        with:
+          solution: Mnemosyne.NET.slnx
+          tag: v${{ env.PACKAGE_VERSION }}
