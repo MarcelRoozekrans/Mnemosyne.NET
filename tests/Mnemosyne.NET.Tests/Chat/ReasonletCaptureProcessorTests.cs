@@ -267,6 +267,14 @@ public sealed class ReasonletCaptureProcessorTests
     }
 
     [Fact]
+    public void ARunOfOnlyALookupCallAndItsResultHasNothingPending()
+    {
+        var lookup = CaptureTestData.RefundWithLookup();
+
+        Assert.False(ReasonletCaptureProcessor.EndsWithPendingCall([lookup[1], lookup[2]]));
+    }
+
+    [Fact]
     public async Task NoQuestionIsSkipped()
     {
         var memory = CaptureTestData.Memory();

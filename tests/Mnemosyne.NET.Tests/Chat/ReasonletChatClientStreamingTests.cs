@@ -94,6 +94,24 @@ public sealed class ReasonletChatClientStreamingTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task ATokenOnTheEnumeratorAndOneOnTheCallAreBothHonoured()
+    {
+        using var callCts = new CancellationTokenSource();
+        using var enumeratorCts = new CancellationTokenSource();
+        var inner = FakeChatClient.Streaming((_, _, _) => Yield(Updates()));
+        var stream = Client(inner).GetStreamingResponseAsync([new(ChatRole.User, Question)], null, callCts.Token).WithCancellation(enumeratorCts.Token);
+
+        var count = 0;
+        await foreach (var _ in stream)
+        {
+            count++;
+        }
+
+        Assert.Equal(Updates().Count, count);
+        Assert.Single(await CapturedAsync());
+    }
+
+    [Fact]
     public async Task StreamingInjectsLikeNonStreaming()
     {
         var match = CaptureTestData.Match();
