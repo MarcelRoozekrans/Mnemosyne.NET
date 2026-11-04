@@ -124,32 +124,39 @@ public sealed class UseReasonletsTests
     }
 
     [Fact]
-    public void WithoutIsServiceAMissingQueueStillFailsTheBuild()
-    {
-        using var inner = Provider(new FakeReasonletMemory());
-        var builder = new ChatClientBuilder(FakeChatClient.Replying("done")).UseReasonlets();
-
-        var error = Assert.Throws<InvalidOperationException>(() => builder.Build(new NoIsServiceProvider(inner)));
-
-        Assert.Contains("AddReasonletCapture", error.Message, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public async Task WithoutIsServiceTheQueueIsResolvedWhenThePipelineIsBuilt()
+    public async Task WithoutIsServiceTheQueueIsResolvedOnFirstUseOnly()
     {
         var memory = CaptureTestData.Memory();
-        var services = new ServiceCollection();
-        services.AddSingleton<IReasonletMemory>(memory);
-        services.AddReasonletCapture();
-        await using var inner = services.BuildServiceProvider();
+        var queue = new ReasonletCaptureQueue(new ReasonletCaptureProcessor(memory, new ReasonletCaptureOptions()), new ReasonletCaptureOptions());
+        await using var _ = queue;
+        var provider = new MinimalProvider { [typeof(IReasonletMemory)] = () => memory, [typeof(ReasonletCaptureQueue)] = () => queue };
 
         using var client = new ChatClientBuilder(FakeChatClient.Replying(new ChatResponse([.. CaptureTestData.Refund().Skip(1)])))
             .UseReasonlets(new ReasonletChatOptions { DefaultScope = Scope })
-            .Build(new NoIsServiceProvider(inner));
-        await client.GetResponseAsync([new(ChatRole.User, CaptureTestData.Question)], null, Ct);
-        await inner.GetRequiredService<ReasonletCaptureQueue>().DrainAsync(Ct);
+            .Build(provider);
+        Assert.Equal(0, provider.Resolutions(typeof(ReasonletCaptureQueue)));
+        Assert.Equal(0, provider.Resolutions(typeof(IReasonletMemory)));
 
+        await client.GetResponseAsync([new(ChatRole.User, CaptureTestData.Question)], null, Ct);
+        await queue.DrainAsync(Ct);
+
+        Assert.Equal(1, provider.Resolutions(typeof(ReasonletCaptureQueue)));
         Assert.Single(memory.Captures);
+    }
+
+    [Fact]
+    public async Task WithoutIsServiceAMissingQueueIsCountedOnTheCall()
+    {
+        var provider = new MinimalProvider { [typeof(IReasonletMemory)] = () => new FakeReasonletMemory() };
+        using var client = new ChatClientBuilder(FakeChatClient.Replying("done"))
+            .UseReasonlets(new ReasonletChatOptions { DefaultScope = Scope })
+            .Build(provider);
+        using var telemetry = new TelemetryCapture();
+
+        var response = await client.GetResponseAsync([new(ChatRole.User, CaptureTestData.Question)], null, Ct);
+
+        Assert.Equal("done", response.Text);
+        AssertResolutionFailures(telemetry, "mnemosyne.capture.queue", 1);
     }
 
     [Fact]
@@ -254,11 +261,32 @@ public sealed class UseReasonletsTests
         });
     }
 
-    /// <summary>A container that cannot say whether a service is registered: it offers no <see cref="IServiceProviderIsService"/>.</summary>
-    private sealed class NoIsServiceProvider(IServiceProvider inner) : IServiceProvider
+    /// <summary>
+    /// A minimal container: a factory per service type and a count of how often each was resolved. It offers no
+    /// <see cref="IServiceProviderIsService"/>, so it cannot say whether a service is registered.
+    /// </summary>
+    private sealed class MinimalProvider : IServiceProvider
     {
-        public object? GetService(Type serviceType) =>
-            serviceType == typeof(IServiceProviderIsService) ? null : inner.GetService(serviceType);
+        private readonly Dictionary<Type, Func<object>> _factories = [];
+        private readonly Dictionary<Type, int> _resolutions = [];
+
+        public Func<object> this[Type type]
+        {
+            set => _factories[type] = value;
+        }
+
+        public int Resolutions(Type type) => _resolutions.GetValueOrDefault(type);
+
+        public object? GetService(Type serviceType)
+        {
+            if (!_factories.TryGetValue(serviceType, out var factory))
+            {
+                return null;
+            }
+
+            _resolutions[serviceType] = Resolutions(serviceType) + 1;
+            return factory();
+        }
     }
 
     /// <summary>A provider with the memory but without <c>AddReasonletCapture</c>.</summary>

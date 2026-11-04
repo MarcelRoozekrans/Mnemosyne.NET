@@ -28,7 +28,9 @@ public static class ReasonletChatClientBuilderExtensions
     /// queue that <c>AddReasonletCapture</c> registers are registered. It resolves the memory and the queue on first use, so
     /// a memory whose evaluator judges with this same client, as <c>AddMnemosyneChatEvaluator</c> does with the unkeyed
     /// client, does not form a cycle. A container without <see cref="IServiceProviderIsService"/> cannot be asked, so there
-    /// the queue is resolved when the pipeline is built and the memory on first use.
+    /// both checks are skipped and the memory and the queue are still resolved on first use: a missing memory then counts as
+    /// <c>exception</c> on <c>mnemosyne.chat.recalls</c>, and a missing queue as <c>exception</c> on
+    /// <c>mnemosyne.capture.queue</c>, on each call, and neither breaks the call.
     /// </para>
     /// <para>
     /// A memory or queue whose resolution throws on a call never breaks that call. A memory that cannot be resolved counts
@@ -49,7 +51,7 @@ public static class ReasonletChatClientBuilderExtensions
     /// <exception cref="ArgumentException">The options are invalid.</exception>
     /// <exception cref="InvalidOperationException">
     /// Thrown when the pipeline is built without a registered <see cref="IReasonletMemory"/>, or with capture on and
-    /// <c>AddReasonletCapture</c> not called.
+    /// <c>AddReasonletCapture</c> not called. Only a container with <see cref="IServiceProviderIsService"/> is checked.
     /// </exception>
     public static ChatClientBuilder UseReasonlets(this ChatClientBuilder builder, ReasonletChatOptions? options = null)
     {
@@ -78,18 +80,16 @@ public static class ReasonletChatClientBuilderExtensions
             {
                 queue = new Lazy<ReasonletCaptureQueue?>(() => null);
             }
-            else if (registry is not null)
-            {
-                queue = registry.IsService(typeof(ReasonletCaptureQueue))
-                    ? new Lazy<ReasonletCaptureQueue?>(services.GetRequiredService<ReasonletCaptureQueue>, LazyThreadSafetyMode.PublicationOnly)
-                    : throw new InvalidOperationException(MissingQueue);
-            }
             else
             {
-                // A container that cannot say whether a service is registered: resolve the queue now, so a missing one
-                // still fails the build rather than the first call.
-                var resolved = services.GetService<ReasonletCaptureQueue>() ?? throw new InvalidOperationException(MissingQueue);
-                queue = new Lazy<ReasonletCaptureQueue?>(() => resolved);
+                // A container that cannot say whether a service is registered skips the check: resolving the queue here
+                // would bring the cycle back, so a missing queue shows on the first call, counted by the hand-off.
+                if (registry is not null && !registry.IsService(typeof(ReasonletCaptureQueue)))
+                {
+                    throw new InvalidOperationException(MissingQueue);
+                }
+
+                queue = new Lazy<ReasonletCaptureQueue?>(services.GetRequiredService<ReasonletCaptureQueue>, LazyThreadSafetyMode.PublicationOnly);
             }
 
             return new ReasonletChatClient(inner, memory, queue, options, time);

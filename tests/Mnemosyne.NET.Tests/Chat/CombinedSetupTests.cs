@@ -48,6 +48,31 @@ public sealed class CombinedSetupTests
     }
 
     [Fact]
+    public async Task StartingTheHostedServicesBeforeResolvingTheClientDoesNotHang()
+    {
+        var (services, _, _) = Services();
+        await using var provider = services.BuildServiceProvider();
+
+        await Task.Run(
+            async () =>
+            {
+                var hosted = provider.GetRequiredService<IEnumerable<IHostedService>>().ToList();
+                foreach (var service in hosted)
+                {
+                    await service.StartAsync(Ct);
+                }
+
+                var client = provider.GetRequiredService<IChatClient>();
+                Assert.NotNull(client.GetService<ReasonletChatClient>());
+                foreach (var service in hosted)
+                {
+                    await service.StopAsync(Ct);
+                }
+            },
+            Ct).WaitAsync(Guard, Ct);
+    }
+
+    [Fact]
     public async Task TheJudgeCallPassesThroughWithoutRecallToolOrKey()
     {
         var (services, store, model) = Services();
