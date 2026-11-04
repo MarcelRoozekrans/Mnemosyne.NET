@@ -156,6 +156,25 @@ public sealed class RepoConventionsTests
     }
 
     [Fact]
+    public void TheCoreDependsOnAiDiAndHostingAbstractionsOnly()
+    {
+        var project = XDocument.Load(Path.Combine(RepoRoot(), "src", "Mnemosyne.NET", "Mnemosyne.NET.csproj"));
+        var packages = project.Descendants("PackageReference")
+            .Select(e => e.Attribute("Include")?.Value)
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+        Assert.Equal(
+            new string?[]
+            {
+                "Microsoft.Extensions.AI",
+                "Microsoft.Extensions.AI.Abstractions",
+                "Microsoft.Extensions.DependencyInjection.Abstractions",
+                "Microsoft.Extensions.Hosting.Abstractions",
+            },
+            packages);
+    }
+
+    [Fact]
     public void TheSentinelGuardDependsOnAbstractionsSentinelAndDiAbstractionsOnly()
     {
         // The guard plugs into the facade through the ports, so it must not reference the core package.

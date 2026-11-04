@@ -81,8 +81,8 @@ public sealed class MnemosyneOptionsTests
     [Fact]
     public void TheLongestTimeoutIsOneACancellationTokenSourceAccepts()
     {
-        using var accepted = new CancellationTokenSource(MnemosyneOptions.MaxEvaluationTimeout, TimeProvider.System);
-        Assert.Throws<ArgumentOutOfRangeException>(() => new CancellationTokenSource(MnemosyneOptions.MaxEvaluationTimeout + TimeSpan.FromMilliseconds(1), TimeProvider.System));
+        using var accepted = new CancellationTokenSource(TimeoutCheck.Max, TimeProvider.System);
+        Assert.Throws<ArgumentOutOfRangeException>(() => new CancellationTokenSource(TimeoutCheck.Max + TimeSpan.FromMilliseconds(1), TimeProvider.System));
     }
 
     [Fact]
