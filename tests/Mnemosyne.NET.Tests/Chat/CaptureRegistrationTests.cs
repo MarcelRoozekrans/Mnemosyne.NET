@@ -85,6 +85,18 @@ public sealed class CaptureRegistrationTests
         Assert.Equal(CaptureTestData.Question, Assert.Single(memory.Captures).Question);
     }
 
+    [Fact]
+    public async Task DisposingTheProviderSynchronouslyDrainsTheQueue()
+    {
+        var memory = CaptureTestData.Memory();
+        var provider = Provider(memory);
+
+        Assert.True(provider.GetRequiredService<ReasonletCaptureQueue>().TryEnqueue(CaptureTestData.Item()));
+        await Task.Run(provider.Dispose, Ct).WaitAsync(Guard, Ct);
+
+        Assert.Equal(CaptureTestData.Question, Assert.Single(memory.Captures).Question);
+    }
+
     private static ServiceProvider Provider(FakeReasonletMemory memory)
     {
         var services = new ServiceCollection();

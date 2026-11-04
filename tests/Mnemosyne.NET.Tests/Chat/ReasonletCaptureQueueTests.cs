@@ -158,6 +158,35 @@ public sealed class ReasonletCaptureQueueTests
     }
 
     [Fact]
+    public async Task SyncDisposeDrainsWithinDrainTimeout()
+    {
+        var gate = new Gate();
+        var queue = Queue(gate.Memory, drainTimeout: TimeSpan.FromMilliseconds(100));
+        using var telemetry = new TelemetryCapture();
+        Assert.True(queue.TryEnqueue(Item("q1")));
+        await gate.EnteredAsync();
+
+        await Task.Run(queue.Dispose, Ct).WaitAsync(TimeSpan.FromSeconds(2), Ct);
+
+        Assert.True(gate.SawCancellation);
+        Assert.Contains(CaptureTelemetry.DroppedShutdownOutcome, Outcomes(telemetry));
+    }
+
+    [Fact]
+    public async Task SyncAndAsyncDisposeShareOneDrain()
+    {
+        var memory = CaptureTestData.Memory();
+        var queue = Queue(memory);
+        Assert.True(queue.TryEnqueue(Item("q1")));
+        await Task.Run(queue.Dispose, Ct).WaitAsync(Guard, Ct);
+
+        var disposed = queue.DisposeAsync();
+
+        Assert.True(disposed.IsCompletedSuccessfully);
+        Assert.Single(memory.Captures);
+    }
+
+    [Fact]
     public async Task SecondDrainReturnsAtOnce()
     {
         var memory = CaptureTestData.Memory();

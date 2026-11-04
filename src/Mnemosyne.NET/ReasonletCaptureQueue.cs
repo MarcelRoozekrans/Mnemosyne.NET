@@ -15,11 +15,12 @@ namespace Mnemosyne.NET;
 /// <see cref="DrainAsync"/> closes the queue and waits for the reader to work through what is left. When its token fires
 /// first, the reader's token is cancelled: the item in progress is cancelled and the rest is skipped. Every item that does
 /// not finish is counted once as <c>dropped_shutdown</c>. Stopping the host drains through
-/// <see cref="ReasonletCaptureHostedService"/>; disposing drains bounded by <see cref="ReasonletCaptureOptions.DrainTimeout"/>.
+/// <see cref="ReasonletCaptureHostedService"/>; disposing, synchronously or not, drains bounded by
+/// <see cref="ReasonletCaptureOptions.DrainTimeout"/>, so a provider disposed either way never throws because of the queue.
 /// There is one drain: a later call waits for it, and its token can cut it short too.
 /// </para>
 /// </remarks>
-internal sealed class ReasonletCaptureQueue : IAsyncDisposable
+internal sealed class ReasonletCaptureQueue : IAsyncDisposable, IDisposable
 {
     private readonly ReasonletCaptureProcessor _processor;
     private readonly TimeSpan _drainTimeout;
@@ -82,6 +83,16 @@ internal sealed class ReasonletCaptureQueue : IAsyncDisposable
     {
         using var timeout = new CancellationTokenSource(_drainTimeout);
         await DrainAsync(timeout.Token).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Drains as <see cref="DisposeAsync"/> does, blocking until it ends. Every await in the drain and the reader uses
+    /// <c>ConfigureAwait(false)</c>, so blocking on a synchronization context cannot deadlock.
+    /// </summary>
+    public void Dispose()
+    {
+        using var timeout = new CancellationTokenSource(_drainTimeout);
+        DrainAsync(timeout.Token).GetAwaiter().GetResult();
     }
 
     private async Task WaitAsync(Task drain, CancellationToken ct)

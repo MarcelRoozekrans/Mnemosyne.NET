@@ -100,8 +100,8 @@ public static class ServiceCollectionExtensions
     /// <remarks>
     /// The capture remembers through the registered <see cref="IReasonletMemory"/>, for example from
     /// <see cref="AddMnemosyne"/>. The queue's reader starts on the first capture, so a host without the generic host
-    /// still captures. Without a host, dispose the service provider asynchronously to drain the queue, bounded by
-    /// <see cref="ReasonletCaptureOptions.DrainTimeout"/>. A second call adds no second hosted service.
+    /// still captures. Without a host, disposing the service provider, synchronously or asynchronously, drains the queue,
+    /// bounded by <see cref="ReasonletCaptureOptions.DrainTimeout"/>. A second call adds no second hosted service.
     /// </remarks>
     /// <param name="services">The service collection.</param>
     /// <param name="options">The settings, or null for the defaults.</param>
