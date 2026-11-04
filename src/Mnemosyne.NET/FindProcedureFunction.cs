@@ -72,8 +72,9 @@ internal sealed class FindProcedureFunction : AIFunction
             _lookups.Enqueue(matches);
             return result;
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception) when (!cancellationToken.IsCancellationRequested)
         {
+            // Only the caller's own cancellation propagates; a memory that cancels itself, as on a timeout, is unavailable.
             return Unavailable;
         }
     }
@@ -110,14 +111,18 @@ internal sealed class FindProcedureFunction : AIFunction
     private static bool TryReadTop(AIFunctionArguments arguments, out int top)
     {
         top = DefaultTop;
-        if (!arguments.TryGetValue("top", out var value))
+        if (!arguments.TryGetValue("top", out var value) || value is null or JsonElement { ValueKind: JsonValueKind.Null })
         {
+            // A model that sends "top": null means no preference, as one that leaves it out does.
             return true;
         }
 
         var number = value switch
         {
             int i => i,
+
+            // The lower bound is not redundant: a cast to int keeps only the low 32 bits, so a large negative long could
+            // land in range.
             long l when l is >= 0 and <= MaxTop => (int)l,
             JsonElement { ValueKind: JsonValueKind.Number } element when element.TryGetInt32(out var i) => i,
             _ => (int?)null,

@@ -157,12 +157,27 @@ public sealed class FindProcedureFunctionTests
         { 5, 2 },
         { null, 2 },
         { "refund", "x" },
-        { "refund", null },
         { "refund", 6L },
+
+        // A long cast to int keeps only its low 32 bits, which for this value are 1; the lower bound keeps it out.
+        { "refund", -4294967295L },
         { "refund", 2.5 },
         { "refund", 0 },
-        { "refund", Json("null") },
     };
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ANullTopDefaultsToThree(bool json)
+    {
+        object? top = json ? Json("null") : null;
+        var memory = new FakeReasonletMemory();
+        var function = ReasonletTools.CreateFindProcedure(memory, Scope);
+
+        await function.InvokeAsync(Args(("question", "refund"), ("top", top)), CancellationToken.None);
+
+        Assert.Equal(3, Assert.Single(memory.Queries).Top);
+    }
 
     [Fact]
     public async Task ErrorResultReturnsUnavailable()
@@ -193,14 +208,28 @@ public sealed class FindProcedureFunctionTests
     }
 
     [Fact]
-    public async Task CancellationPropagates()
+    public async Task TheCallersCancellationPropagates()
     {
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
         var memory = new FakeReasonletMemory();
-        memory.Throws(new OperationCanceledException());
+        memory.Throws(new OperationCanceledException(cts.Token));
         var function = ReasonletTools.CreateFindProcedure(memory, Scope);
 
         await Assert.ThrowsAsync<OperationCanceledException>(
-            async () => await function.InvokeAsync(Args(("question", "refund")), CancellationToken.None));
+            async () => await function.InvokeAsync(Args(("question", "refund")), cts.Token));
+    }
+
+    [Fact]
+    public async Task ACancellationThatIsNotTheCallersReturnsUnavailable()
+    {
+        var memory = new FakeReasonletMemory();
+        memory.Throws(new TaskCanceledException("store timeout"));
+        var function = ReasonletTools.CreateFindProcedure(memory, Scope);
+
+        var result = await function.InvokeAsync(Args(("question", "refund")), CancellationToken.None);
+
+        Assert.Equal("""{"error":"unavailable"}""", Assert.IsType<JsonElement>(result).GetRawText());
     }
 
     [Fact]
