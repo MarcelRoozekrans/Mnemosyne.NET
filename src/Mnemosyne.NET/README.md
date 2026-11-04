@@ -188,6 +188,8 @@ var response = await client.GetResponseAsync(messages, options);
 
 A call is a new question when its last message is a user message with text. A request that ends in tool results or an assistant message is a continuation and gets no recall. The recall asks for the best match, with `MinSimilarity` as the cut-off, or the selector's own when it is null. A match becomes one system message, placed after your leading system messages, in a copy of the message list. Your list is not changed. `Formatter` replaces the text.
 
+The built-in text holds the Reasonlet's name, its similarity, success rate and run count, and its steps with their tool and argument names. It never holds argument values or the text of the question that produced it. Captures from the middleware are named after their tools, such as `orders.get → payments.refund`, so the name carries no question text either. A Reasonlet you remember yourself keeps the name you give it, or the first line of its question when you give none, and that name is what other users of the scope see.
+
 A recall that hits `RecallTimeout` stops waiting, even if the memory ignores the token, and the chat call proceeds. Memory failures never break the chat call: an error, a timeout, an exception or a formatter that throws means no injection, and they show up only in telemetry. Cancelling the call's own token still throws.
 
 ### find_procedure

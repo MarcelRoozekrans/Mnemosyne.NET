@@ -38,6 +38,40 @@ public sealed class ReasonletCaptureProcessorTests
     }
 
     [Fact]
+    public async Task TheNameIsTheToolShapeAndNeverTheQuestion()
+    {
+        var memory = CaptureTestData.Memory();
+
+        await Processor(memory).ProcessAsync(CaptureTestData.Item(), Ct);
+
+        var capture = Assert.Single(memory.Captures);
+        Assert.Equal("orders.get → payments.refund", capture.Name);
+        Assert.DoesNotContain(CaptureTestData.Question, capture.Name, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ALongToolShapeIsCutToTheNameLimit()
+    {
+        var memory = CaptureTestData.Memory();
+        var tool = new string('t', 60) + "\U0001F600";
+        List<ChatMessage> messages = [new(ChatRole.User, CaptureTestData.Question)];
+        for (var i = 0; i < 6; i++)
+        {
+            messages.Add(new(ChatRole.Assistant, [new FunctionCallContent($"c{i}", $"{tool}{i}")]));
+            messages.Add(new(ChatRole.Tool, [new FunctionResultContent($"c{i}", "ok")]));
+        }
+
+        messages.Add(new(ChatRole.Assistant, "Done."));
+
+        await Processor(memory).ProcessAsync(CaptureTestData.Item(messages), Ct);
+
+        var name = Assert.Single(memory.Captures).Name!;
+        Assert.StartsWith($"{tool}0 → {tool}1 → ", name, StringComparison.Ordinal);
+        Assert.Equal(ReasonletMemory.MaxDefaultNameLength, name.EnumerateRunes().Count());
+        Assert.False(char.IsHighSurrogate(name[^1]));
+    }
+
+    [Fact]
     public async Task InjectedParentWins()
     {
         var memory = CaptureTestData.Memory();

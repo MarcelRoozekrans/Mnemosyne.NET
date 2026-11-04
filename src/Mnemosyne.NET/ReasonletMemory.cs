@@ -453,7 +453,18 @@ public sealed class ReasonletMemory : IReasonletMemory
     {
         // The question is not blank, so at least one line survives the trim.
         var line = question.Split(LineBreaks, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)[0];
-        var span = line.AsSpan();
+        return CutName(line);
+    }
+
+    /// <summary>
+    /// Cuts a text that does not start with white space to <see cref="MaxDefaultNameLength"/> code points, then trims its
+    /// end. A cut never splits a surrogate pair.
+    /// </summary>
+    /// <param name="text">The text. Must not be blank or start with white space.</param>
+    /// <returns>The name, which is never blank.</returns>
+    internal static string CutName(string text)
+    {
+        var span = text.AsSpan();
         var end = 0;
         for (var count = 0; count < MaxDefaultNameLength && end < span.Length; count++)
         {
@@ -462,8 +473,8 @@ public sealed class ReasonletMemory : IReasonletMemory
             end += consumed;
         }
 
-        // A cut can land just after a space; the trimmed line itself never ends in one.
-        return line[..end].TrimEnd();
+        // A cut can land just after a space.
+        return text[..end].TrimEnd();
     }
 
     /// <summary>

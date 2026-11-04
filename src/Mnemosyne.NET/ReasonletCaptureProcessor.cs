@@ -7,7 +7,8 @@ namespace Mnemosyne.NET;
 /// <remarks>
 /// <para>
 /// It removes the <c>find_procedure</c> calls and their results, builds the capture with
-/// <see cref="ReasonletTranscript.ToCapture"/>, picks the parent, sets the outcome and remembers it. The parent is the first
+/// <see cref="ReasonletTranscript.ToCapture"/>, picks the parent, names it after its tool shape, sets the outcome and
+/// remembers it. The parent is the first
 /// that applies: the injected one; the first lookup match, in lookup order, whose graph has the run graph's content hash;
 /// the top match of the first lookup that returned any; none.
 /// </para>
@@ -49,7 +50,7 @@ internal sealed class ReasonletCaptureProcessor(IReasonletMemory memory, Reasonl
                 return;
             }
 
-            var capture = built.Value with { ParentId = Parent(item, built.Value.Graph) };
+            var capture = built.Value with { ParentId = Parent(item, built.Value.Graph), Name = ShapeName(built.Value.Graph) };
             var receipt = await memory.RememberAsync(capture, ct).ConfigureAwait(false);
             if (receipt.IsFailure)
             {
@@ -70,6 +71,13 @@ internal sealed class ReasonletCaptureProcessor(IReasonletMemory memory, Reasonl
             telemetry.Threw(ex);
         }
     }
+
+    /// <summary>
+    /// Names the capture after its tool shape, the step labels in order joined by an arrow, cut to the name limit. The name
+    /// is offered to other users of the scope, so it is built from the graph alone and never from the user's question.
+    /// </summary>
+    private static string ShapeName(ReasonletGraph graph) =>
+        ReasonletMemory.CutName(string.Join(" → ", ReasonletPromptFormatter.Steps(graph).Select(step => step.Label)));
 
     /// <summary>The run succeeded when its last assistant message has text and the model did not stop on a filter or the length.</summary>
     private static bool Succeeded(List<ChatMessage> messages, ChatFinishReason? finish)
