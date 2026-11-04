@@ -4,18 +4,22 @@ namespace Mnemosyne.NET.Tests.Chat;
 
 /// <summary>
 /// A hand-written <see cref="IChatClient"/> that records what the code under test sends and replies with a canned
-/// <see cref="ChatResponse"/>, or throws.
+/// <see cref="ChatResponse"/>, a reply computed from the request, or throws.
 /// </summary>
 internal sealed class FakeChatClient : IChatClient
 {
-    private readonly Func<CancellationToken, ChatResponse> _reply;
+    private readonly Func<IReadOnlyList<ChatMessage>, ChatOptions?, CancellationToken, Task<ChatResponse>> _reply;
+    private readonly List<IEnumerable<ChatMessage>> _received = [];
     private readonly List<IReadOnlyList<ChatMessage>> _requests = [];
     private readonly List<ChatOptions?> _options = [];
 
-    private FakeChatClient(Func<CancellationToken, ChatResponse> reply) => _reply = reply;
+    private FakeChatClient(Func<IReadOnlyList<ChatMessage>, ChatOptions?, CancellationToken, Task<ChatResponse>> reply) => _reply = reply;
 
-    /// <summary>Gets the messages of every call, in order.</summary>
+    /// <summary>Gets the messages of every call, in order, copied when the call was made.</summary>
     public IReadOnlyList<IReadOnlyList<ChatMessage>> Requests => _requests;
+
+    /// <summary>Gets the message sequence instance of every call, in order, as it was passed.</summary>
+    public IReadOnlyList<IEnumerable<ChatMessage>> Received => _received;
 
     /// <summary>Gets the options of every call, in order.</summary>
     public IReadOnlyList<ChatOptions?> Options => _options;
@@ -25,16 +29,20 @@ internal sealed class FakeChatClient : IChatClient
 
     /// <summary>Replies with one assistant message holding <paramref name="text"/>.</summary>
     public static FakeChatClient Replying(string text) =>
-        new(_ => new ChatResponse(new ChatMessage(ChatRole.Assistant, text)));
+        new((_, _, _) => Task.FromResult(new ChatResponse(new ChatMessage(ChatRole.Assistant, text))));
 
     /// <summary>Replies with <paramref name="response"/>.</summary>
-    public static FakeChatClient Replying(ChatResponse response) => new(_ => response);
+    public static FakeChatClient Replying(ChatResponse response) => new((_, _, _) => Task.FromResult(response));
+
+    /// <summary>Replies with what <paramref name="reply"/> computes from the request's messages, options and token.</summary>
+    public static FakeChatClient Replying(Func<IReadOnlyList<ChatMessage>, ChatOptions?, CancellationToken, Task<ChatResponse>> reply) =>
+        new(reply);
 
     /// <summary>Throws <paramref name="exception"/> from every call.</summary>
-    public static FakeChatClient Throwing(Exception exception) => new(_ => throw exception);
+    public static FakeChatClient Throwing(Exception exception) => new((_, _, _) => throw exception);
 
     /// <summary>Honours the token: a cancelled call throws, as a real client does.</summary>
-    public static FakeChatClient HonouringCancellation() => new(ct =>
+    public static FakeChatClient HonouringCancellation() => new((_, _, ct) =>
     {
         ct.ThrowIfCancellationRequested();
         throw new InvalidOperationException("The token was not cancelled.");
@@ -42,10 +50,12 @@ internal sealed class FakeChatClient : IChatClient
 
     public Task<ChatResponse> GetResponseAsync(IEnumerable<ChatMessage> messages, ChatOptions? options = null, CancellationToken cancellationToken = default)
     {
-        _requests.Add(messages.ToList());
+        var request = messages.ToList();
+        _received.Add(messages);
+        _requests.Add(request);
         _options.Add(options);
         LastToken = cancellationToken;
-        return Task.FromResult(_reply(cancellationToken));
+        return _reply(request, options, cancellationToken);
     }
 
     // The evaluator never streams.
