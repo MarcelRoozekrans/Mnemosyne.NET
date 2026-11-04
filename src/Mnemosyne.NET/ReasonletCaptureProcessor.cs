@@ -30,13 +30,13 @@ internal sealed class ReasonletCaptureProcessor(IReasonletMemory memory, Reasonl
         using var telemetry = CaptureTelemetry.Start();
         try
         {
-            var messages = Strip(item.Messages);
-            if (EndsWithPendingCall(messages))
+            if (item.EndsWithPendingCall)
             {
                 telemetry.SkippedPendingToolCalls();
                 return;
             }
 
+            var messages = Strip(item.Messages);
             var details = new TranscriptCaptureDetails
             {
                 Scope = item.Scope,
@@ -99,13 +99,18 @@ internal sealed class ReasonletCaptureProcessor(IReasonletMemory memory, Reasonl
     }
 
     /// <summary>
-    /// Whether the run stops on a call nobody answered: the last message holds a function call that is not informational
-    /// only, or an input request such as a tool approval request, and any answer to it would have to come after it. Such a
-    /// response is one trip of a tool loop that the caller drives, not a finished run.
+    /// Whether the run stops on a call nobody answered: once the <c>find_procedure</c> calls are removed, the last message
+    /// holds a function call that is not informational only, or an input request such as a tool approval request, and any
+    /// answer to it would have to come after it. Such a response is one trip of a tool loop that the caller drives, not a
+    /// finished run. Decide it when the call is handed off, before an outer layer changes the calls.
     /// </summary>
-    private static bool EndsWithPendingCall(List<ChatMessage> messages) =>
-        messages.Count > 0
-        && messages[^1].Contents.Any(content => content is FunctionCallContent { InformationalOnly: false } or InputRequestContent);
+    /// <param name="messages">The finished call's messages.</param>
+    internal static bool EndsWithPendingCall(IReadOnlyList<ChatMessage> messages)
+    {
+        var stripped = Strip(messages);
+        return stripped.Count > 0
+            && stripped[^1].Contents.Any(content => content is FunctionCallContent { InformationalOnly: false } or InputRequestContent);
+    }
 
     private static ReasonletId? Parent(ReasonletCaptureItem item, ReasonletGraph graph)
     {

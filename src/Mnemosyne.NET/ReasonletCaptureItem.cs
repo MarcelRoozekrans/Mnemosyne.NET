@@ -15,6 +15,11 @@ namespace Mnemosyne.NET;
 /// </param>
 /// <param name="ResponseId">The response id, recorded as the run id, or null.</param>
 /// <param name="FinishReason">The response's finish reason, or null.</param>
+/// <param name="EndsWithPendingCall">
+/// Whether the run ended on a call nobody answered, decided when the call was handed off. It is decided then because a
+/// function invocation layer outside the middleware marks the calls it invokes as informational only afterwards, while the
+/// item may still wait in the queue.
+/// </param>
 internal sealed record ReasonletCaptureItem(
     ReasonletScope Scope,
     string? SubjectId,
@@ -23,4 +28,5 @@ internal sealed record ReasonletCaptureItem(
     IReadOnlyList<IReadOnlyList<ReasonletMatch>> Lookups,
     TimeSpan Duration,
     string? ResponseId,
-    ChatFinishReason? FinishReason);
+    ChatFinishReason? FinishReason,
+    bool EndsWithPendingCall);

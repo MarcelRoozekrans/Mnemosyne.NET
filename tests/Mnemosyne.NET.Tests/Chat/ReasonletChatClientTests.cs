@@ -483,6 +483,25 @@ public sealed class ReasonletChatClientTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task APendingCallIsDecidedAtHandOff()
+    {
+        // An outer function invocation layer marks the call informational after the hand-off, while the item may still
+        // wait in the queue; the item keeps what was true when it was handed off.
+        var call = new FunctionCallContent("c1", "orders.get");
+        var prepared = new ReasonletChatClient.PreparedCall(
+            new ReasonletCallScope(PerCall, null), [new(ChatRole.User, Question)], [new(ChatRole.User, Question)], null, null, null);
+        var item = ReasonletChatClient.CaptureItem(prepared, new ChatResponse(new ChatMessage(ChatRole.Assistant, [call])), TimeSpan.Zero);
+        call.InformationalOnly = true;
+        using var runs = new RunCounter();
+
+        await new ReasonletCaptureProcessor(_store, new ReasonletCaptureOptions()).ProcessAsync(item, Ct);
+
+        Assert.True(item.EndsWithPendingCall);
+        Assert.Equal(["skipped/pending_tool_calls"], runs.Seen);
+        Assert.Empty(_store.Captures);
+    }
+
+    [Fact]
     public async Task LookupsReachTheCapture()
     {
         var looked = CaptureTestData.Match();

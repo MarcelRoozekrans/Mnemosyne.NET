@@ -213,17 +213,23 @@ internal sealed class ReasonletChatClient : DelegatingChatClient
 
     /// <summary>
     /// Builds the capture item of a call that returned: the caller's messages without the suggestion, then the response's,
-    /// with the injected parent, the tool's lookups, the duration and the response's id and finish reason.
+    /// with the injected parent, the tool's lookups, the duration, the response's id and finish reason, and whether it ends on
+    /// a call nobody answered, decided now.
     /// </summary>
-    internal static ReasonletCaptureItem CaptureItem(PreparedCall call, ChatResponse response, TimeSpan duration) => new(
-        call.Scope.Scope,
-        call.Scope.SubjectId,
-        [.. call.Request, .. response.Messages],
-        call.Parent,
-        call.Lookup?.Lookups ?? [],
-        duration,
-        response.ResponseId,
-        response.FinishReason);
+    internal static ReasonletCaptureItem CaptureItem(PreparedCall call, ChatResponse response, TimeSpan duration)
+    {
+        List<ChatMessage> messages = [.. call.Request, .. response.Messages];
+        return new(
+            call.Scope.Scope,
+            call.Scope.SubjectId,
+            messages,
+            call.Parent,
+            call.Lookup?.Lookups ?? [],
+            duration,
+            response.ResponseId,
+            response.FinishReason,
+            ReasonletCaptureProcessor.EndsWithPendingCall(messages));
+    }
 
     /// <summary>
     /// Recalls the top match for <paramref name="question"/> under the recall timeout and renders it, counting the outcome.

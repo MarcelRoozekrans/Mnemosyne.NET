@@ -29,15 +29,21 @@ internal static class CaptureTestData
         .. Refund().Skip(1),
     ];
 
-    public static ReasonletCaptureItem Item(IReadOnlyList<ChatMessage>? messages = null) => new(
-        new ReasonletScope("scope"),
-        "subject-1",
-        messages ?? Refund(),
-        null,
-        [],
-        TimeSpan.FromMilliseconds(1500),
-        "resp-1",
-        ChatFinishReason.Stop);
+    /// <summary>An item as the middleware hands it off, with the pending call decided from its messages.</summary>
+    public static ReasonletCaptureItem Item(IReadOnlyList<ChatMessage>? messages = null)
+    {
+        messages ??= Refund();
+        return new(
+            new ReasonletScope("scope"),
+            "subject-1",
+            messages,
+            null,
+            [],
+            TimeSpan.FromMilliseconds(1500),
+            "resp-1",
+            ChatFinishReason.Stop,
+            ReasonletCaptureProcessor.EndsWithPendingCall(messages));
+    }
 
     public static ReasonletMatch Match(ReasonletGraph? graph = null) => new(
         TestData.Definition() with { Id = ReasonletId.New(), Graph = graph ?? TestData.Graph() },
