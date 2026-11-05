@@ -191,6 +191,22 @@ public sealed class RepoConventionsTests
         Assert.Equal(new string?[] { "AI.Sentinel", "Microsoft.Extensions.DependencyInjection.Abstractions" }, packages);
     }
 
+    [Fact]
+    public void TheAgentFrameworkProviderDependsOnCoreAndAgentsAbstractionsOnly()
+    {
+        var project = XDocument.Load(Path.Combine(RepoRoot(), "src", "Mnemosyne.NET.AgentFramework", "Mnemosyne.NET.AgentFramework.csproj"));
+        var projects = project.Descendants("ProjectReference")
+            .Select(e => Path.GetFileName(e.Attribute("Include")?.Value.Replace('\\', '/')))
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+        var packages = project.Descendants("PackageReference")
+            .Select(e => e.Attribute("Include")?.Value)
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+        Assert.Equal(new string?[] { "Mnemosyne.NET.csproj" }, projects);
+        Assert.Equal(new string?[] { "Microsoft.Agents.AI.Abstractions" }, packages);
+    }
+
     private static string StripComments(string yaml) =>
         string.Join('\n', yaml.Split('\n').Where(l => !l.TrimStart().StartsWith('#')));
 

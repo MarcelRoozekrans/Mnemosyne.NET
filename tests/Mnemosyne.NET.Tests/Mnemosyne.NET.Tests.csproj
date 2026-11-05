@@ -6,6 +6,7 @@
   <ItemGroup>
     <PackageReference Include="JsonSchema.Net" />
     <PackageReference Include="Minos.NET.SystemOne" />
+    <PackageReference Include="Microsoft.Agents.AI" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="xunit.v3" />
@@ -25,6 +26,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Mnemosyne.NET.Abstractions\Mnemosyne.NET.Abstractions.csproj" />
+    <ProjectReference Include="..\..\src\Mnemosyne.NET.AgentFramework\Mnemosyne.NET.AgentFramework.csproj" />
     <ProjectReference Include="..\..\src\Mnemosyne.NET.Minos\Mnemosyne.NET.Minos.csproj" />
     <ProjectReference Include="..\..\src\Mnemosyne.NET.Sentinel\Mnemosyne.NET.Sentinel.csproj" />
     <ProjectReference Include="..\..\src\Mnemosyne.NET.PostgreSql\Mnemosyne.NET.PostgreSql.csproj" />
