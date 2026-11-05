@@ -11,7 +11,7 @@ The code below comes from [`samples/Mnemosyne.Samples.ChatPipeline`](https://git
 
 ## Set it up
 
-A host registers the store, an embedding generator, the facade and the capture queue, in that order:
+A host registers the store, an embedding generator, the capture guard, the facade and the capture queue:
 
 ```csharp
 services.AddSingleton(_ => NpgsqlDataSource.Create(connectionString)); // a factory, so the container disposes it
@@ -39,7 +39,7 @@ new ChatClientBuilder(scripted)
 
 The sample passes a scripted client where an application passes the client of its model provider.
 
-Building the pipeline without a registered `IReasonletMemory`, or with capture on and without `AddReasonletCapture`, throws `InvalidOperationException`, so the mistake shows at startup. Invalid options throw `ArgumentException`.
+Building the pipeline without a registered `IReasonletMemory`, or with capture on and without `AddReasonletCapture`, throws `InvalidOperationException`, so the mistake shows when the client is built. Only a container that supports `IServiceProviderIsService` is checked. Invalid options throw `ArgumentException`.
 
 ### Order
 
@@ -106,7 +106,7 @@ The capture's duration is how long the inner call took. For a streamed call it r
 
 ## find_procedure
 
-Set `ExposeFindProcedure` and the model gets a `find_procedure` tool, bound to the call's scope, that looks up procedures that worked before for a question. The sample does not use it, so the sample checks nothing here. The snippet is from the `Mnemosyne.NET` package README.
+Set `ExposeFindProcedure` and the model gets a `find_procedure` tool, bound to the call's scope, that looks up procedures that worked before for a question. The sample does not use it, so the sample checks nothing here. The snippet is a sketch of the same pipeline with the tool on.
 
 ```csharp
 services.AddChatClient(inner)
@@ -114,7 +114,7 @@ services.AddChatClient(inner)
     .UseFunctionInvocation();
 ```
 
-- **When to expose it.** The injected recall offers the single best match for the user's question. Expose the tool when the model should be able to look for more, for example with a different wording or for a sub-task. It is off by default because it adds a tool the model sees.
+- **When to expose it.** The injected recall offers one match, the best (the recall asks for `Top = 1`) for the user's question. Expose the tool when the model should be able to look for more, for example with a different wording or for a sub-task. It is off by default because it adds a tool the model sees.
 - **What it takes.** A `question`, and optionally `top`, from 1 to 5, which defaults to 3.
 - **What it returns.** A JSON array of matches, each with its id, name, version, similarity, success rate, runs and steps. A step is a tool name with its argument names.
 - **What it never shows.** The intent, because it is text extracted from one user's question and the users of a scope would see each other's. Argument values are not there either.
@@ -128,9 +128,9 @@ To manage the tool list yourself, create the function with `ReasonletTools.Creat
 
 A judge or guard uses a client without `UseReasonlets`. A judge that calls the same client would otherwise be recalled for and captured like a user's question. The chat evaluator's own judge calls bypass the middleware, so it can share the unkeyed client. A guard or judge from another library carries no such mark and needs a keyed client without the middleware. [Judging runs with a chat model](chat-evaluator.md#on-a-client-with-usereasonlets) owns this rule and explains it.
 
-The AI.Sentinel guard in the sample is the other kind of check: it scans what is about to be stored, not a chat call. In act 3 the question is "Which invoice was paid with card 4111 1111 1111 1111?", sent through a client with another tool shape. AI.Sentinel's PII detector rates a card number Critical, above the guard's default of `High`, so the capture is blocked and the store never sees it. Without the guard, this new tool shape would have been a second pending review. The sample checks the `Blocked` outcome, that no review is pending and that recall for the question finds nothing.
+The AI.Sentinel guard in the sample is the other kind of check: it scans what is about to be stored, not a chat call. In act 3 the question is "Which invoice was paid with card 4111 1111 1111 1111?", sent through a client with another tool shape. AI.Sentinel blocks the capture, so the store never sees it. The sample checks the `Blocked` outcome, that no review is pending and that recall for the question finds nothing.
 
-The detector matches the digit pattern of a card number and does not check the Luhn sum. The severity is the detector's, so the sample is where a change would show first.
+The rest was observed by hand, not checked by the sample. AI.Sentinel's PII detector rates a card number Critical, above the guard's default of `High`. This tool shape is new, so without the guard it would be a second pending review. The detector matches the digit pattern of a card number and does not check the Luhn sum: 16-digit numbers blocked whether or not the sum was valid, and numbers of 12, 15 and 17 digits did not block.
 
 ## Limits
 
