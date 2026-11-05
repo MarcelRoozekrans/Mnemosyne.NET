@@ -18,7 +18,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Mnemosyne.NET;
 using Mnemosyne.NET.AgentFramework;
 
-services.AddMnemosyne();         // the memory, with a store and an embedding generator registered
+services.AddMnemosyne();         // the memory, selector and clock; you register the store and the embedding generator
 services.AddReasonletCapture();  // the capture queue and its worker
 
 // provider is the built IServiceProvider and chatClient is the agent's IChatClient.
@@ -50,15 +50,20 @@ Invalid options throw `ArgumentException` when the provider is built.
 
 ## Scope and subject
 
-The default resolver uses the agent's name as the scope, with no subject. An agent without a name has no scope, so memory is skipped for its runs and counted with the skip reason `no_scope`.
+The default resolver uses the agent's name as the scope, with no subject. An agent without a name has no scope, so memory is skipped for its runs. The skip is counted with the reason `no_scope` only when `Recall` or `Capture` is on.
 
 Renaming an agent starts a new scope. Its procedures stay under the old name. If you rename agents, or want several agents to share procedures, return a stable scope from your own resolver. The resolver also sets the subject, which ends up in the capture's provenance:
 
 ```csharp
-new ReasonletAgentOptions
+using Mnemosyne.NET.Abstractions;
+
+var options = new ReasonletAgentOptions
 {
     ScopeResolver = (agent, session) => new ReasonletAgentScope(new ReasonletScope("support"), SubjectId: "user-7"),
-}
+};
+
+// The options go to the provider's constructor.
+var contextProvider = new ReasonletContextProvider(provider, options);
 ```
 
 A resolver that returns null skips memory for the run. A resolver that throws is counted as `exception` and treated as no scope. The run is never failed.
@@ -84,7 +89,7 @@ The provider uses the same instruments as `UseReasonlets`: `mnemosyne.chat.recal
 ## Limits
 
 - One run is one procedure. A conversation that spans several runs is not followed as one procedure.
-- A run that ends in an approval request or a clarifying question is not captured, and the run that answers it starts a new capture. The two are not joined.
+- A run that ends on an unanswered tool call or an approval request is not captured. A clarifying question asked in plain text is a normal finished run and is captured as its own procedure. Either way, the run that answers is a separate capture, and the two are never joined.
 - A failed run is not captured, because Agent Framework does not call the provider's end hook for it. A streamed run that is not read to the end is not captured either.
 - One run at a time per session. A new run on a session replaces whatever an earlier run left behind.
 - Do not use `UseReasonlets` on the agent's chat client together with this provider. The middleware would sit inside the agent's tool loop, where each round trip is a separate call. Nothing detects the combination. Use the provider for agents and `UseReasonlets` for plain chat clients.
