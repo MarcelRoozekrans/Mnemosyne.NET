@@ -15,13 +15,14 @@ namespace Mnemosyne.NET.Tests.AgentFramework;
 /// <summary>What the provider does before a run: the scope, the recall, the injection and the <c>find_procedure</c> tool.</summary>
 /// <remarks>The class shares the recall telemetry's non-parallel collection, because it asserts the recall counter.</remarks>
 [Collection(nameof(RecallTelemetryCollection))]
-public sealed class ReasonletContextProviderTests
+public sealed class ReasonletContextProviderTests : IAsyncDisposable
 {
     private const string Recalls = "mnemosyne.chat.recalls";
     private const string Integration = "mnemosyne.integration";
     private const string Outcome = "mnemosyne.outcome";
 
     private readonly FakeReasonletMemory _memory = new();
+    private readonly List<ServiceProvider> _containers = [];
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
@@ -37,6 +38,28 @@ public sealed class ReasonletContextProviderTests
         var response = await Agent(client, Provider()).RunAsync(CaptureTestData.Question, cancellationToken: Ct);
 
         Assert.Equal("Refunded.", response.Text);
+        Assert.Equal(2, client.Options.Count);
+        Assert.All(client.Options, options => Assert.Equal(text, options!.Instructions));
+        Assert.All(client.Requests.SelectMany(request => request), message => Assert.DoesNotContain(text, message.Text, StringComparison.Ordinal));
+        AssertRecall(telemetry, "injected");
+    }
+
+    [Fact]
+    public async Task MatchIsInjectedAsInstructionsOnEveryInnerCallWhenStreaming()
+    {
+        var match = CaptureTestData.Match();
+        _memory.Returns(match);
+        var text = ReasonletPromptFormatter.Format(match);
+        var client = FakeAgentChatClient.ToolLoop();
+        using var telemetry = new TelemetryCapture();
+
+        var updates = new List<AgentResponseUpdate>();
+        await foreach (var update in Agent(client, Provider()).RunStreamingAsync(CaptureTestData.Question, cancellationToken: Ct))
+        {
+            updates.Add(update);
+        }
+
+        Assert.Equal("Refunded.", updates.ToAgentResponse().Text);
         Assert.Equal(2, client.Options.Count);
         Assert.All(client.Options, options => Assert.Equal(text, options!.Instructions));
         Assert.All(client.Requests.SelectMany(request => request), message => Assert.DoesNotContain(text, message.Text, StringComparison.Ordinal));
@@ -358,6 +381,22 @@ public sealed class ReasonletContextProviderTests
     }
 
     [Fact]
+    public async Task AFindProcedureFromAnEarlierProviderIsKept()
+    {
+        var client = FakeAgentChatClient.Answering();
+        var host = AIFunctionFactory.Create(() => "host", ReasonletTools.FindProcedureName);
+        var agent = new ChatClientAgent(client, new ChatClientAgentOptions
+        {
+            Name = "support",
+            AIContextProviders = [new ToolProvider(host), Provider(new ReasonletAgentOptions { ExposeFindProcedure = true })],
+        });
+
+        await agent.RunAsync(CaptureTestData.Question, cancellationToken: Ct);
+
+        Assert.Same(host, Assert.Single(Assert.Single(client.Options)!.Tools!, t => t.Name == ReasonletTools.FindProcedureName));
+    }
+
+    [Fact]
     public async Task MissingMemoryIsCountedAndTheRunGoesOn()
     {
         var client = FakeAgentChatClient.ToolLoop();
@@ -377,6 +416,24 @@ public sealed class ReasonletContextProviderTests
         Assert.Equal("exception", count.Tag(Outcome));
         Assert.Equal(typeof(InvalidOperationException).FullName, count.Tag("error.type"));
         Assert.Equal("agent", count.Tag(Integration));
+    }
+
+    [Fact]
+    public async Task AContinuationWithTheToolOnAndAMissingMemoryCountsBoth()
+    {
+        // As UseReasonlets does: the skip is counted for the recall, and the memory is still resolved for the tool.
+        var client = FakeAgentChatClient.Answering();
+        await using var container = new ServiceCollection().BuildServiceProvider();
+        var provider = new ReasonletContextProvider(container, new ReasonletAgentOptions { ExposeFindProcedure = true });
+        using var telemetry = new TelemetryCapture();
+
+        await Agent(client, provider).RunAsync([new(ChatRole.User, [new DataContent(new byte[] { 1 }, "image/png")])], cancellationToken: Ct);
+
+        var counts = telemetry.Of(Recalls);
+        Assert.Equal(2, counts.Count);
+        Assert.Single(counts, c => (string?)c.Tag("mnemosyne.skip_reason") == "continuation");
+        Assert.Single(counts, c => (string?)c.Tag(Outcome) == "exception");
+        Assert.DoesNotContain(Assert.Single(client.Options)!.Tools!, tool => tool.Name == ReasonletTools.FindProcedureName);
     }
 
     [Fact]
@@ -456,6 +513,63 @@ public sealed class ReasonletContextProviderTests
     }
 
     [Fact]
+    public async Task ANullSessionIsRecalledForAndGetsTheToolButStoresNothing()
+    {
+        var match = CaptureTestData.Match();
+        _memory.Returns(match);
+        var provider = Provider(new ReasonletAgentOptions { ExposeFindProcedure = true });
+        var agent = Agent(FakeAgentChatClient.Answering(), provider);
+
+        var context = await provider.ProvideAsync(agent, null, [new(ChatRole.User, CaptureTestData.Question)], null, Ct);
+
+        Assert.Equal(ReasonletPromptFormatter.Format(match), context.Instructions);
+        Assert.IsType<FindProcedureFunction>(Assert.Single(context.Tools!));
+        Assert.Equal(0, provider.RunStateCount);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task ARunOnASessionLeavesItsStateWhenCaptureIsOn(bool capture)
+    {
+        var match = CaptureTestData.Match();
+        _memory.Returns(match);
+        var provider = Provider(new ReasonletAgentOptions { ExposeFindProcedure = true, Capture = capture });
+        var client = FakeAgentChatClient.Answering();
+        var agent = Agent(client, provider);
+        var session = await agent.CreateSessionAsync(Ct);
+
+        await agent.RunAsync(CaptureTestData.Question, session, cancellationToken: Ct);
+
+        Assert.Equal(capture, provider.TryGetRunState(session, out var state));
+        if (capture)
+        {
+            Assert.Equal(new ReasonletAgentScope(new ReasonletScope("support")), state!.Scope);
+            Assert.Equal(match.Reasonlet.Id, state.Parent);
+            Assert.Same(Assert.Single(client.Options)!.Tools!.OfType<FindProcedureFunction>().Single(), state.Lookup);
+        }
+    }
+
+    [Fact]
+    public async Task ARunWithoutScopeForgetsTheSessionsEarlierState()
+    {
+        var unnamed = false;
+        var provider = Provider(new ReasonletAgentOptions
+        {
+            ScopeResolver = (agent, session) => unnamed ? null : ReasonletAgentOptions.DefaultScope(agent, session),
+        });
+        var agent = Agent(FakeAgentChatClient.Answering(), provider);
+        var session = await agent.CreateSessionAsync(Ct);
+        await agent.RunAsync(CaptureTestData.Question, session, cancellationToken: Ct);
+        Assert.True(provider.TryGetRunState(session, out _));
+        unnamed = true;
+
+        await agent.RunAsync(CaptureTestData.Question, session, cancellationToken: Ct);
+
+        Assert.False(provider.TryGetRunState(session, out _));
+    }
+
+    [Fact]
     public void StateKeysAreEmpty() => Assert.Empty(Provider().StateKeys);
 
     [Fact]
@@ -489,8 +603,20 @@ public sealed class ReasonletContextProviderTests
         return services;
     }
 
-    private ReasonletContextProvider Provider(ReasonletAgentOptions? options = null) =>
-        new(Services(_memory).BuildServiceProvider(), options);
+    public async ValueTask DisposeAsync()
+    {
+        foreach (var container in _containers)
+        {
+            await container.DisposeAsync();
+        }
+    }
+
+    private ReasonletContextProvider Provider(ReasonletAgentOptions? options = null)
+    {
+        var container = Services(_memory).BuildServiceProvider();
+        _containers.Add(container);
+        return new(container, options);
+    }
 
     private static ChatClientAgent Agent(
         IChatClient client, ReasonletContextProvider provider, string? name = "support", IList<AITool>? tools = null, string? instructions = null) =>
@@ -536,5 +662,14 @@ public sealed class ReasonletContextProviderTests
 
         protected override ValueTask<AIContext> InvokingCoreAsync(InvokingContext context, CancellationToken cancellationToken) =>
             new(new AIContext());
+    }
+
+    /// <summary>A provider ahead of the Reasonlet one that adds a tool.</summary>
+    private sealed class ToolProvider(AITool tool) : AIContextProvider(null, null, null)
+    {
+        public override IReadOnlyList<string> StateKeys => ["tool-provider"];
+
+        protected override ValueTask<AIContext> ProvideAIContextAsync(InvokingContext context, CancellationToken cancellationToken) =>
+            new(new AIContext { Tools = [tool] });
     }
 }

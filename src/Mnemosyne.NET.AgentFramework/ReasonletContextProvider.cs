@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
@@ -30,13 +31,17 @@ namespace Mnemosyne.NET.AgentFramework;
 /// </para>
 /// <para>
 /// With <see cref="ReasonletAgentOptions.ExposeFindProcedure"/> on, each run gets its own <c>find_procedure</c> tool,
-/// unless the agent or the run already has a tool of that name.
+/// unless a tool of that name is already there. The provider sees the agent's tools, the run's tools and the tools added
+/// by the providers listed before it in <c>AIContextProviders</c>; a tool added by a provider listed after it is not seen,
+/// so list such a provider first.
 /// </para>
 /// <para>
 /// The provider resolves <see cref="IReasonletMemory"/> on the first run that needs it, not when it is built, so a memory
 /// whose evaluator judges with the agent's own chat client forms no cycle, and a missing registration never breaks the
 /// agent's construction. A memory that cannot be resolved is counted once per run as <c>exception</c> on
-/// <c>mnemosyne.chat.recalls</c>, and the run goes on without recall and tool; the next run tries again. It resolves the
+/// <c>mnemosyne.chat.recalls</c>, and the run goes on without recall and tool; the next run tries again. With recall and
+/// the tool both on, a run without user text still resolves the memory for the tool, so such a run counts both
+/// <c>continuation</c> and, when the memory cannot be resolved, <c>exception</c>, as <c>UseReasonlets</c> does. It resolves the
 /// registered <see cref="TimeProvider"/>, or uses <see cref="TimeProvider.System"/>, when it is built.
 /// </para>
 /// <para>
@@ -94,19 +99,35 @@ public sealed class ReasonletContextProvider : AIContextProvider
     /// <param name="cancellationToken">The caller's cancellation.</param>
     /// <returns>The suggestion as instructions and the run's tool, either of which can be absent.</returns>
     /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> is cancelled.</exception>
-    protected override async ValueTask<AIContext> ProvideAIContextAsync(InvokingContext context, CancellationToken cancellationToken)
+    protected override ValueTask<AIContext> ProvideAIContextAsync(InvokingContext context, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(context);
-        var scope = ResolveScope(context, cancellationToken);
+        return ProvideAsync(context.Agent, context.Session, context.AIContext.Messages, context.AIContext.Tools, cancellationToken);
+    }
+
+    /// <summary>Gets the number of sessions that hold a run's state; for tests.</summary>
+    internal int RunStateCount => _runs.Count();
+
+    /// <summary>Gets the state the start of the last run on <paramref name="session"/> left, if any.</summary>
+    internal bool TryGetRunState(AgentSession session, [NotNullWhen(true)] out AgentRunState? state) => _runs.TryGetValue(session, out state);
+
+    /// <summary>
+    /// The steps before a run, on what <see cref="ProvideAIContextAsync"/> reads from its context: the agent, the session,
+    /// which the type allows to be null, the run's new messages and the tools already offered.
+    /// </summary>
+    internal async ValueTask<AIContext> ProvideAsync(
+        AIAgent agent, AgentSession? session, IEnumerable<ChatMessage>? messages, IEnumerable<AITool>? tools, CancellationToken cancellationToken)
+    {
+        var scope = ResolveScope(agent, session, cancellationToken);
         if (scope is null)
         {
             // Nothing of an earlier run on this session, such as an abandoned stream, may reach this run's end.
-            Forget(context.Session);
+            Forget(session);
             return new AIContext();
         }
 
-        var question = Question(context.AIContext.Messages);
-        var wantsTool = _options.ExposeFindProcedure && !HasFindProcedure(context.AIContext.Tools);
+        var question = Question(messages);
+        var wantsTool = _options.ExposeFindProcedure && !HasFindProcedure(tools);
         var memory = (_options.Recall && question is not null) || wantsTool ? ResolveMemory(cancellationToken) : null;
         ReasonletSuggestion? suggestion = null;
         if (_options.Recall)
@@ -123,7 +144,7 @@ public sealed class ReasonletContextProvider : AIContextProvider
         }
 
         var lookup = wantsTool && memory is not null ? ReasonletTools.CreateFindProcedure(memory, scope.Scope) : null;
-        if (context.Session is { } session && _options.Capture)
+        if (session is not null && _options.Capture)
         {
             // A new run replaces whatever an earlier run on the session left behind.
             _runs.AddOrUpdate(session, new AgentRunState(scope, suggestion?.Id, lookup, _time.GetTimestamp()));
@@ -136,12 +157,12 @@ public sealed class ReasonletContextProvider : AIContextProvider
     /// Asks the resolver for the run's scope. A null scope is counted as <c>no_scope</c> when recall or capture is on; a
     /// resolver that throws is counted as <c>exception</c> and gives no scope. The caller's own cancellation propagates.
     /// </summary>
-    private ReasonletAgentScope? ResolveScope(InvokingContext context, CancellationToken ct)
+    private ReasonletAgentScope? ResolveScope(AIAgent agent, AgentSession? session, CancellationToken ct)
     {
         ReasonletAgentScope? scope;
         try
         {
-            scope = _options.ScopeResolver(context.Agent, context.Session);
+            scope = _options.ScopeResolver(agent, session);
         }
         catch (Exception ex) when (!(ex is OperationCanceledException && ct.IsCancellationRequested))
         {
