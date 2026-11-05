@@ -84,6 +84,19 @@ public sealed class ReasonletSuggestionsTests
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
+    public async Task ACancellationThatIsNeitherTheCallersNorTheTimeoutIsAnException(bool infinite)
+    {
+        _memory.Throws(new OperationCanceledException("own"));
+        using var telemetry = new TelemetryCapture();
+
+        Assert.Null(await RecallAsync(new ReasonletSuggestionOptions { RecallTimeout = infinite ? Timeout.InfiniteTimeSpan : TimeSpan.FromMinutes(5) }));
+
+        AssertRecall(telemetry, "exception");
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
     public async Task AFormatterFailureSuggestsNothing(bool throws)
     {
         _memory.Returns(CaptureTestData.Match());
@@ -255,6 +268,26 @@ public sealed class ReasonletSuggestionsTests
 
         Assert.Equal(MnemosyneErrorCode.Validation, result.Error.Code);
         Assert.StartsWith("TimeProvider:", result.Error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RecallRejectsNullArguments()
+    {
+        var options = new ReasonletSuggestionOptions();
+        await Assert.ThrowsAsync<ArgumentNullException>("memory", async () => await ReasonletSuggestions.RecallAsync(null!, Scope, "q", options, "chat", Ct));
+        await Assert.ThrowsAsync<ArgumentNullException>("question", async () => await ReasonletSuggestions.RecallAsync(_memory, Scope, null!, options, "chat", Ct));
+        await Assert.ThrowsAsync<ArgumentNullException>("options", async () => await ReasonletSuggestions.RecallAsync(_memory, Scope, "q", null!, "chat", Ct));
+        await Assert.ThrowsAsync<ArgumentNullException>("integration", async () => await ReasonletSuggestions.RecallAsync(_memory, Scope, "q", options, null!, Ct));
+        Assert.Empty(_memory.Queries);
+    }
+
+    [Fact]
+    public void CountMethodsRejectNullArguments()
+    {
+        Assert.Throws<ArgumentNullException>("reason", () => ReasonletSuggestions.CountSkipped(null!, "chat"));
+        Assert.Throws<ArgumentNullException>("integration", () => ReasonletSuggestions.CountSkipped("no_scope", null!));
+        Assert.Throws<ArgumentNullException>("exception", () => ReasonletSuggestions.CountFailed(null!, "chat"));
+        Assert.Throws<ArgumentNullException>("integration", () => ReasonletSuggestions.CountFailed(new InvalidOperationException(), null!));
     }
 
     private ValueTask<ReasonletSuggestion?> RecallAsync(

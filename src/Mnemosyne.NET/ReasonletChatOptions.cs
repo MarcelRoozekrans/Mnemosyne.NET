@@ -44,6 +44,5 @@ public sealed class ReasonletChatOptions
     /// <returns>Success, or a validation failure whose path is the offending property.</returns>
     public UnitResult<MnemosyneError> Validate() => Check.All(
         () => DefaultScope is { } scope ? Check.Nested(scope.Validate(), nameof(DefaultScope)) : UnitResult<MnemosyneError>.Success(),
-        () => MinSimilarity is { } min ? Check.UnitInterval(min, nameof(MinSimilarity)) : UnitResult<MnemosyneError>.Success(),
-        () => TimeoutCheck.Positive(RecallTimeout, nameof(RecallTimeout)));
+        () => ReasonletSuggestionOptions.ValidateRecall(MinSimilarity, RecallTimeout));
 }

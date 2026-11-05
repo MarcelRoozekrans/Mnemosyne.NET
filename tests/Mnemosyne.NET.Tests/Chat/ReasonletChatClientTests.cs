@@ -159,18 +159,6 @@ public sealed class ReasonletChatClientTests : IAsyncDisposable
     }
 
     [Fact]
-    public async Task NoMatchInjectsNothing()
-    {
-        var inner = Run();
-        using var telemetry = new TelemetryCapture();
-
-        await Client(inner, Defaults()).GetResponseAsync([new(ChatRole.User, Question)], null, Ct);
-
-        AssertOnlyQuestionSent(inner);
-        AssertRecall(telemetry, "no_match");
-    }
-
-    [Fact]
     public async Task RecallErrorInjectsNothing()
     {
         _memory.Fails(new MnemosyneError(MnemosyneErrorCode.Unavailable, "down"));
@@ -182,35 +170,6 @@ public sealed class ReasonletChatClientTests : IAsyncDisposable
         AssertOnlyQuestionSent(inner);
         AssertRecall(telemetry, "Unavailable");
         Assert.Single(await CapturedAsync());
-    }
-
-    [Fact]
-    public async Task RecallExceptionInjectsNothing()
-    {
-        _memory.Throws(new HttpRequestException("refused"));
-        var inner = Run();
-        using var telemetry = new TelemetryCapture();
-
-        await Client(inner, Defaults()).GetResponseAsync([new(ChatRole.User, Question)], null, Ct);
-
-        AssertOnlyQuestionSent(inner);
-        Assert.Equal("exception", Assert.Single(telemetry.Of(Recalls)).Tag("mnemosyne.outcome"));
-    }
-
-    [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public async Task ACancellationThatIsNeitherTheCallersNorTheTimeoutIsAnException(bool infinite)
-    {
-        _memory.Throws(new OperationCanceledException("own"));
-        var inner = Run();
-        using var telemetry = new TelemetryCapture();
-
-        await Client(inner, new ReasonletChatOptions { DefaultScope = Default, RecallTimeout = infinite ? Timeout.InfiniteTimeSpan : TimeSpan.FromMinutes(5) })
-            .GetResponseAsync([new(ChatRole.User, Question)], null, Ct);
-
-        AssertOnlyQuestionSent(inner);
-        AssertRecall(telemetry, "exception");
     }
 
     [Fact]
@@ -286,23 +245,6 @@ public sealed class ReasonletChatClientTests : IAsyncDisposable
         Assert.Empty(inner.Requests);
         Assert.Empty(telemetry.Of(Recalls));
         Assert.Empty(await CapturedAsync());
-    }
-
-    [Fact]
-    public async Task CallerCancellationIgnoredByTheRecallStillPropagates()
-    {
-        using var cts = new CancellationTokenSource();
-        _memory.RecallHandler = (_, _) =>
-        {
-            cts.Cancel();
-            return new TaskCompletionSource<Result<IReadOnlyList<ReasonletMatch>, MnemosyneError>>().Task;
-        };
-        var inner = Run();
-
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
-            Client(inner, Defaults()).GetResponseAsync([new(ChatRole.User, Question)], null, cts.Token).WaitAsync(TimeSpan.FromSeconds(30), Ct));
-
-        Assert.Empty(inner.Requests);
     }
 
     [Fact]

@@ -49,6 +49,10 @@ public static class ReasonletSuggestions
     public static async ValueTask<ReasonletSuggestion?> RecallAsync(
         IReasonletMemory memory, ReasonletScope scope, string question, ReasonletSuggestionOptions options, string integration, CancellationToken ct)
     {
+        ArgumentNullException.ThrowIfNull(memory);
+        ArgumentNullException.ThrowIfNull(question);
+        ArgumentNullException.ThrowIfNull(options);
+        ArgumentNullException.ThrowIfNull(integration);
         using var telemetry = ChatTelemetry.Start(integration);
         var timeout = options.RecallTimeout;
         using var timer = timeout == Timeout.InfiniteTimeSpan ? null : new CancellationTokenSource(timeout, options.TimeProvider);
@@ -122,7 +126,12 @@ public static class ReasonletSuggestions
     /// </summary>
     /// <param name="reason">Why the recall was skipped, such as <see cref="NoScopeReason"/> or <see cref="ContinuationReason"/>.</param>
     /// <param name="integration">The integration that skipped, tagged as <c>mnemosyne.integration</c>.</param>
-    public static void CountSkipped(string reason, string integration) => ChatTelemetry.Skipped(reason, integration);
+    public static void CountSkipped(string reason, string integration)
+    {
+        ArgumentNullException.ThrowIfNull(reason);
+        ArgumentNullException.ThrowIfNull(integration);
+        ChatTelemetry.Skipped(reason, integration);
+    }
 
     /// <summary>
     /// Counts one recall that could not run at all, such as a memory that failed to resolve or a scope resolver that threw:
@@ -134,6 +143,8 @@ public static class ReasonletSuggestions
     /// <param name="integration">The integration whose recall failed, tagged as <c>mnemosyne.integration</c>.</param>
     public static void CountFailed(Exception exception, string integration)
     {
+        ArgumentNullException.ThrowIfNull(exception);
+        ArgumentNullException.ThrowIfNull(integration);
         using var telemetry = ChatTelemetry.Start(integration);
         telemetry.Threw(exception);
     }

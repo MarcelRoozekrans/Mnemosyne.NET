@@ -28,7 +28,11 @@ public sealed class ReasonletSuggestionOptions
     /// <summary>Validates the options.</summary>
     /// <returns>Success, or a validation failure whose path is the offending property.</returns>
     public UnitResult<MnemosyneError> Validate() => Check.All(
-        () => MinSimilarity is { } min ? Check.UnitInterval(min, nameof(MinSimilarity)) : UnitResult<MnemosyneError>.Success(),
-        () => TimeoutCheck.Positive(RecallTimeout, nameof(RecallTimeout)),
+        () => ValidateRecall(MinSimilarity, RecallTimeout),
         () => Check.NotNull(TimeProvider, nameof(TimeProvider)));
+
+    /// <summary>The rules every recall setting shares: the similarity floor is in [0, 1] and the timeout is valid.</summary>
+    internal static UnitResult<MnemosyneError> ValidateRecall(double? minSimilarity, TimeSpan recallTimeout) => Check.All(
+        () => minSimilarity is { } min ? Check.UnitInterval(min, nameof(MinSimilarity)) : UnitResult<MnemosyneError>.Success(),
+        () => TimeoutCheck.Positive(recallTimeout, nameof(RecallTimeout)));
 }
