@@ -210,3 +210,62 @@ IChatClient client = new ChatClientBuilder(realClient)
 ```
 
 The sample also uses the same offline embedding stand-in as store and recall, so [the same caveat applies](#the-embedding-generator-is-a-stand-in).
+
+## Agent Framework
+
+[`samples/Mnemosyne.Samples.AgentFramework`](https://github.com/MarcelRoozekrans/Mnemosyne.NET/tree/main/samples/Mnemosyne.Samples.AgentFramework) is a console app that shows `ReasonletContextProvider` on a Microsoft Agent Framework agent. It needs only Docker and the .NET 10 SDK. It needs no API key and no model.
+
+### What it does
+
+1. Registers the PostgreSQL store, an embedding generator, the facade with `AddMnemosyne` and the capture queue, and runs the migrations. The review gate is off. The agent is a `ChatClientAgent` with a `ReasonletContextProvider` in its `AIContextProviders`.
+2. Runs the agent twice through a scripted client that plays the model:
+   - **Run 1**, "How do I refund an order?": the model calls `orders_get` and `payments_refund`. The capture stores a new Reasonlet, and the first call to the model carried no recalled Reasonlet;
+   - **Run 2**, "How do I refund an order for a customer?" on a fresh session: the provider recalls the Reasonlet and adds it to the run's instructions. The sample checks that the name is in the system text of the first call and in no user or assistant message.
+3. Waits for each capture to finish with a listener on the `mnemosyne.capture.runs` counter, so it never sleeps for a fixed time.
+4. Checks every reply, outcome and count shown below, and exits with code 1 if not.
+5. Erases the scope, so a run leaves nothing behind.
+
+### Run it
+
+Clone the repository, then from the sample's folder:
+
+```bash
+cd samples/Mnemosyne.Samples.AgentFramework
+docker compose up -d --wait
+dotnet run
+docker compose down
+```
+
+The database listens on port 5435, so it can run next to the other samples' databases. To use another server, set the `MNEMOSYNE_SAMPLE_PG` environment variable to its connection string. The server needs PostgreSQL 15 or later with pgvector 0.8.0 or later.
+
+### The output
+
+```text
+Run 1. Ask "How do I refund an order?" and let the capture run in the background.
+  Capture outcome: new_reasonlet. Matches for the same question: 1 ("orders_get → payments_refund", 1 run).
+
+Run 2. Ask "How do I refund an order for a customer?" on a fresh session.
+  The first call to the model carried the recalled Reasonlet "orders_get → payments_refund" in its instructions, and no message did.
+  Capture outcome: execution_only. Runs of the Reasonlet: 2.
+```
+
+- **Run 1.** Nothing is known yet, so the first call carries no recalled Reasonlet. The capture is a new procedure, and it is recallable at once because the review gate is off.
+- **Run 2.** The provider recalls the Reasonlet for a differently worded question and returns it as the run's instructions. The sample finds it in the system text of the first call and in no user or assistant message. The run only adds an execution to the Reasonlet, which now has 2 runs.
+
+The sample scopes its Reasonlets with a `ScopeResolver` that returns a fixed scope. Without one, the provider uses the agent's name as the scope.
+
+The sample checks all of this itself and exits with code 1 if a receipt differs, so a change to the provider that broke what this page shows would fail the run.
+
+### The model is a stand-in
+
+`ScriptedChatClient` is not a model. It replays a fixed script of tool calls and an answer. In an application, build the agent on a real chat client from Microsoft.Extensions.AI, for example an Ollama or OpenAI `IChatClient`:
+
+```csharp
+var agent = new ChatClientAgent(realClient, new ChatClientAgentOptions
+{
+    Name = "support-agent",
+    AIContextProviders = [new ReasonletContextProvider(provider, new ReasonletAgentOptions())],
+});
+```
+
+The sample also uses the same offline embedding stand-in as store and recall, so [the same caveat applies](#the-embedding-generator-is-a-stand-in).

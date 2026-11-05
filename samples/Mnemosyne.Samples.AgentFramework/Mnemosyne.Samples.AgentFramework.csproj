@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Agents.AI" />
+    <PackageReference Include="Microsoft.Extensions.AI" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The offline stand-ins, shared by the samples: embeddings, a scripted chat client and a capture watcher. -->
+    <Compile Include="../Shared/HashingEmbeddingGenerator.cs" Link="HashingEmbeddingGenerator.cs" />
+    <Compile Include="../Shared/ScriptedChatClient.cs" Link="ScriptedChatClient.cs" />
+    <Compile Include="../Shared/CaptureRunWatcher.cs" Link="CaptureRunWatcher.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/Mnemosyne.NET.Abstractions/Mnemosyne.NET.Abstractions.csproj" />
+    <ProjectReference Include="../../src/Mnemosyne.NET/Mnemosyne.NET.csproj" />
+    <ProjectReference Include="../../src/Mnemosyne.NET.PostgreSql/Mnemosyne.NET.PostgreSql.csproj" />
+    <ProjectReference Include="../../src/Mnemosyne.NET.AgentFramework/Mnemosyne.NET.AgentFramework.csproj" />
+  </ItemGroup>
+
+</Project>
