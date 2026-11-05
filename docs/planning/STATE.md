@@ -6,7 +6,7 @@
 - **Milestone:** 3, Off-the-shelf integrations. Active since 2026-10-30. Design: `docs/superpowers/specs/2026-10-30-milestone-3-design.md`.
 - **Phase:** 3.6, the Agent Framework AIContextProvider. **Complete** on branch `feat/phase-3.6-agent-framework-context-provider`. PR #54 against main is open and waits for Marcel to merge it.
   - All 9 plan tasks are done, each with a task review and a fix round for its findings, Minors included. An Opus whole-branch review followed, then one fix wave with a scoped re-review. The pre-push review passed: `docs/superpowers/reviews/pre-push-review-2026-11-05-1123.md`.
-  - main at 0.6.1 is merged into the branch. Unit 1563, PostgreSQL 313, the AOT smoke publishes without warnings and exits 0, the pack gives 6 nupkg, and the docsite builds.
+  - main at 0.6.1 is merged into the branch. Unit 1565, PostgreSQL 313, the AOT smoke publishes without warnings and exits 0, the pack gives 6 nupkg, and the docsite builds.
   - #45 and #47 close with the PR. #46 is closed with a comment linking `docs/guides/chat-evaluator.md`. #55 is filed for the duplicated PostgreSQL test helpers.
 - **Next phase:** 3.7, integration docs and samples. It is pending, with no design yet.
 - **Previous phase:** 3.5 merged as PR #48 and was released in 0.6.0.
@@ -39,6 +39,6 @@ All of these are in the spec's 2026-11-05 amendments.
 - **Tests:** the repo refuses `dotnet test --filter`. Build first, then run the test exe with `-class <FQN>`.
 
 ## Recommended Next Step
-1. Check PR #54's checks, both codecov checks included, and fix any that are red. Then Marcel merges.
+1. PR #54 is green on every check at ebc7847, both codecov checks included. Marcel merges.
 2. After the merge, check that the PR's `feat:` and `fix:` entries appear in the release-please PR.
 3. Start phase 3.7, integration docs and samples: run `start-next-phase`, which brainstorms its design.
