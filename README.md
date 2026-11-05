@@ -22,6 +22,7 @@ Documentation: <https://marcelroozekrans.github.io/Mnemosyne.NET/>
 | [`Mnemosyne.NET.PostgreSql`](src/Mnemosyne.NET.PostgreSql/README.md) | The PostgreSQL and pgvector store |
 | [`Mnemosyne.NET.Minos`](src/Mnemosyne.NET.Minos/README.md) | A run evaluator that asks a Minos.NET decision model |
 | [`Mnemosyne.NET.Sentinel`](src/Mnemosyne.NET.Sentinel/README.md) | A capture guard that runs AI.Sentinel's detectors |
+| [`Mnemosyne.NET.AgentFramework`](src/Mnemosyne.NET.AgentFramework/README.md) | A context provider that recalls and captures for Microsoft Agent Framework agents |
 
 Part of the same family as [Minos.NET](https://github.com/MarcelRoozekrans/Minos.NET)
 (decisions), [Rag.NET](https://github.com/MarcelRoozekrans/Rag.NET) (knowledge),

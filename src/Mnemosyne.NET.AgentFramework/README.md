@@ -6,4 +6,89 @@ Reasonlet memory for [Microsoft Agent Framework](https://github.com/microsoft/ag
 dotnet add package Mnemosyne.NET.AgentFramework
 ```
 
-`ReasonletAgentOptions` holds the settings: how a run's scope is resolved, whether to recall and capture, and whether to expose the `find_procedure` tool.
+`ReasonletContextProvider` is an Agent Framework `AIContextProvider`. Before each run it recalls the best known procedure for the user's question and adds it to the run's instructions. After a successful run it hands the run to the background capture, which remembers it. It does for an agent what `UseReasonlets` does for an `IChatClient`.
+
+## Setup
+
+Register the memory and the capture queue, then add one provider to the agent's `AIContextProviders`. Build one provider per agent.
+
+```csharp
+using Microsoft.Agents.AI;
+using Microsoft.Extensions.DependencyInjection;
+using Mnemosyne.NET;
+using Mnemosyne.NET.AgentFramework;
+
+services.AddMnemosyne();         // the memory, with a store and an embedding generator registered
+services.AddReasonletCapture();  // the capture queue and its worker
+
+// provider is the built IServiceProvider and chatClient is the agent's IChatClient.
+var agent = new ChatClientAgent(chatClient, new ChatClientAgentOptions
+{
+    Name = "support-agent",
+    AIContextProviders = [new ReasonletContextProvider(provider, new ReasonletAgentOptions())],
+});
+```
+
+The provider resolves `IReasonletMemory` and `IReasonletCaptureSink` on the first run that needs them, not when it is built. A memory that judges with the agent's own chat client therefore forms no cycle. A resolution that fails is counted, the run goes on, and the next run tries again.
+
+## Options
+
+`ReasonletAgentOptions`:
+
+| Option | Default | What it does |
+|---|---|---|
+| `ScopeResolver` | `ReasonletAgentOptions.DefaultScope` | Finds the run's scope, and optionally its subject, from the agent and the session |
+| `Recall` | `true` | Recalls a procedure and adds it to the run's instructions |
+| `Capture` | `true` | Captures the finished run |
+| `ExposeFindProcedure` | `false` | Adds the `find_procedure` tool to the run |
+| `MinSimilarity` | `null` | The lowest similarity to suggest; null keeps the selector's own cut-off |
+| `RecallTimeout` | 5 seconds | How long a recall may take before the run goes on without it |
+| `Formatter` | `null` | Writes a match as the suggestion text; null uses the built-in format |
+| `Source` | `mnemosyne.agent` | The source recorded on a captured run |
+
+Invalid options throw `ArgumentException` when the provider is built.
+
+## Scope and subject
+
+The default resolver uses the agent's name as the scope, with no subject. An agent without a name has no scope, so memory is skipped for its runs and counted with the skip reason `no_scope`.
+
+Renaming an agent starts a new scope. Its procedures stay under the old name. If you rename agents, or want several agents to share procedures, return a stable scope from your own resolver. The resolver also sets the subject, which ends up in the capture's provenance:
+
+```csharp
+new ReasonletAgentOptions
+{
+    ScopeResolver = (agent, session) => new ReasonletAgentScope(new ReasonletScope("support"), SubjectId: "user-7"),
+}
+```
+
+A resolver that returns null skips memory for the run. A resolver that throws is counted as `exception` and treated as no scope. The run is never failed.
+
+## What a run does
+
+**Recall.** The question is the text of the last user message among the run's new messages. The top match is rendered and returned as the run's instructions. It is never added as a message, so it reaches every model call of the run and is never saved into the conversation's history. A last user message with no text, such as one that only holds an image or answers an approval request, is not recalled for and is counted with the skip reason `continuation`. No match, an error, a timeout or a formatter that throws leaves the instructions out.
+
+**Capture.** After a successful run the provider hands the run to the capture queue and does not wait for it. The capture takes this run's new request messages as the agent received them, without the injected instructions, plus all response messages. Earlier history is not captured. The recalled procedure is the parent, so a rerun is recorded as an execution of it and not as a new Reasonlet. The graph is the run's tool shape, as `ReasonletTranscript.ToCapture` builds it. A run without a session is captured without a parent and without lookups.
+
+**find_procedure.** With `ExposeFindProcedure` on, each run gets its own `find_procedure` tool, bound to the run's scope. Its lookups are removed from the capture and can set the parent. The provider does not add the tool when one named `find_procedure` is already present. It sees the agent's tools, the run's tools and the tools added by providers listed before it in `AIContextProviders`, so list a provider that adds tools first.
+
+## What users of a scope see
+
+Everyone who uses a scope can recall what the others captured. A captured Reasonlet is named after its tools, such as `orders.get → payments.refund`, and holds tool names and argument names, never argument values. The suggestion text and the `find_procedure` result show tool shapes and argument names. They never show intent or question text.
+
+## Failures and telemetry
+
+Memory never breaks or slows a run. A missing scope, a recall that fails or times out, a memory or sink that cannot be resolved, a full queue and a failed capture are counted, and the run goes on. Only the caller's own cancellation propagates.
+
+The provider uses the same instruments as `UseReasonlets`: `mnemosyne.chat.recall`, `mnemosyne.chat.recalls`, `mnemosyne.capture.queue` and the capture counters. Recall signals carry the tag `mnemosyne.integration` with `agent`, where the chat middleware's carry `chat`. Captures carry the source `mnemosyne.agent`, so the two paths stay apart in the store. No signal carries the scope, the subject, the question, the suggested text, a tool or argument name, or an exception message.
+
+## Limits
+
+- One run is one procedure. A conversation that spans several runs is not followed as one procedure.
+- A run that ends in an approval request or a clarifying question is not captured, and the run that answers it starts a new capture. The two are not joined.
+- A failed run is not captured, because Agent Framework does not call the provider's end hook for it. A streamed run that is not read to the end is not captured either.
+- One run at a time per session. A new run on a session replaces whatever an earlier run left behind.
+- Do not use `UseReasonlets` on the agent's chat client together with this provider. The middleware would sit inside the agent's tool loop, where each round trip is a separate call. Nothing detects the combination. Use the provider for agents and `UseReasonlets` for plain chat clients.
+- A tool named `find_procedure` on the host side is removed from captures, whether it is yours or Mnemosyne's.
+- A judge or guard that calls a chat model must use a client without `UseReasonlets`. The provider sits on the agent, not on the chat client, so judge calls never reach it.
+
+See the [repository README](https://github.com/MarcelRoozekrans/Mnemosyne.NET#readme).

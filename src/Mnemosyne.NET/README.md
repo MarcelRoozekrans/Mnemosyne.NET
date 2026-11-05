@@ -210,6 +210,16 @@ The queue drains when the host stops. Without a host, disposing the service prov
 
 The capture's duration is how long the inner call took. For a streamed call it runs from the first read of the stream to the last, so it includes the time your code spends between reads.
 
+### Recall and capture for other hosts
+
+The middleware is built on public pieces, so a host that is not an `IChatClient` pipeline can use the same recall and the same queue. Agent Framework agents should use [`Mnemosyne.NET.AgentFramework`](../Mnemosyne.NET.AgentFramework/README.md), which is built on them, and not `UseReasonlets`.
+
+- `ReasonletSuggestions.RecallAsync(memory, scope, question, options, integration, ct)` recalls the best match for a question and returns a `ReasonletSuggestion` with the match's id and its text, or null. It applies the timeout, abandons a slow memory call, formats the match with `ReasonletSuggestionOptions` and counts the outcome. `integration` is `ReasonletSuggestions.ChatIntegration` or `ReasonletSuggestions.AgentIntegration`, the value of the `mnemosyne.integration` tag.
+- `ReasonletSuggestions.CountSkipped(reason, integration)` counts a recall the host skipped, such as `ReasonletSuggestions.NoScopeReason` or `ReasonletSuggestions.ContinuationReason`. `ReasonletSuggestions.CountFailed(exception, integration)` counts a recall that could not run at all, such as a memory that failed to resolve.
+- `IReasonletCaptureSink`, which `AddReasonletCapture` registers, takes a finished run with `TryCapture(ReasonletCaptureRun run)`. It returns false when the queue is full or shut down, and counts that itself. It never throws for those cases. `ReasonletCaptureRun` holds the scope, the messages, and optionally the subject, the injected parent, the `find_procedure` lookups, the duration, the run id, the finish reason and the source. A null source means `ReasonletCaptureOptions.Source`.
+- `ReasonletCaptures.CountFailed(exception)` counts a capture that could not be handed over, on `mnemosyne.capture.queue` as `exception`.
+- `ReasonletTools.CreateFindProcedure` returns a `FindProcedureFunction`. Its `Lookups` property reports the matches of each lookup the model made, so a host can set the parent from them.
+
 ### Telemetry
 
 On the existing activity source and meter. The `outcome` tag carries the values below.
