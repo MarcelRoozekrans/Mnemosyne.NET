@@ -32,8 +32,8 @@ public sealed class ChatTelemetryTests
 
         var activity = Single(telemetry);
         Assert.Equal(ActivityStatusCode.Unset, activity.Status);
-        Assert.Equal([new("mnemosyne.outcome", "injected")], Tags(activity));
-        AssertCounted(telemetry, [new("mnemosyne.outcome", "injected")]);
+        Assert.Equal([new("mnemosyne.integration", "chat"), new("mnemosyne.outcome", "injected")], Tags(activity));
+        AssertCounted(telemetry, [new("mnemosyne.integration", "chat"), new("mnemosyne.outcome", "injected")]);
     }
 
     [Fact]
@@ -45,8 +45,8 @@ public sealed class ChatTelemetryTests
 
         var activity = Single(telemetry);
         Assert.Equal(ActivityStatusCode.Unset, activity.Status);
-        Assert.Equal([new("mnemosyne.outcome", "no_match")], Tags(activity));
-        AssertCounted(telemetry, [new("mnemosyne.outcome", "no_match")]);
+        Assert.Equal([new("mnemosyne.integration", "chat"), new("mnemosyne.outcome", "no_match")], Tags(activity));
+        AssertCounted(telemetry, [new("mnemosyne.integration", "chat"), new("mnemosyne.outcome", "no_match")]);
     }
 
     [Fact]
@@ -62,8 +62,8 @@ public sealed class ChatTelemetryTests
 
         var activity = Single(telemetry);
         Assert.Equal(ActivityStatusCode.Error, activity.Status);
-        Assert.Equal([new("error.type", "timeout"), new("mnemosyne.outcome", "timeout")], Tags(activity));
-        AssertCounted(telemetry, [new("mnemosyne.outcome", "timeout")]);
+        Assert.Equal([new("error.type", "timeout"), new("mnemosyne.integration", "chat"), new("mnemosyne.outcome", "timeout")], Tags(activity));
+        AssertCounted(telemetry, [new("mnemosyne.integration", "chat"), new("mnemosyne.outcome", "timeout")]);
     }
 
     [Fact]
@@ -76,8 +76,8 @@ public sealed class ChatTelemetryTests
 
         var activity = Single(telemetry);
         Assert.Equal(ActivityStatusCode.Error, activity.Status);
-        Assert.Equal([new("error.type", "Validation"), new("mnemosyne.outcome", "Validation")], Tags(activity));
-        AssertCounted(telemetry, [new("mnemosyne.outcome", "Validation")]);
+        Assert.Equal([new("error.type", "Validation"), new("mnemosyne.integration", "chat"), new("mnemosyne.outcome", "Validation")], Tags(activity));
+        AssertCounted(telemetry, [new("mnemosyne.integration", "chat"), new("mnemosyne.outcome", "Validation")]);
     }
 
     [Fact]
@@ -91,12 +91,12 @@ public sealed class ChatTelemetryTests
         var activity = Single(telemetry);
         Assert.Equal(ActivityStatusCode.Error, activity.Status);
         Assert.Equal(
-            [new("error.type", "System.Net.Http.HttpRequestException"), new("mnemosyne.outcome", "exception")],
+            [new("error.type", "System.Net.Http.HttpRequestException"), new("mnemosyne.integration", "chat"), new("mnemosyne.outcome", "exception")],
             Tags(activity));
         var recorded = Assert.Single(activity.Events);
         Assert.Equal("exception", recorded.Name);
         Assert.Equal([new KeyValuePair<string, object?>("exception.type", "System.Net.Http.HttpRequestException")], recorded.Tags);
-        AssertCounted(telemetry, [new("error.type", "System.Net.Http.HttpRequestException"), new("mnemosyne.outcome", "exception")]);
+        AssertCounted(telemetry, [new("error.type", "System.Net.Http.HttpRequestException"), new("mnemosyne.integration", "chat"), new("mnemosyne.outcome", "exception")]);
     }
 
     [Fact]
@@ -109,9 +109,9 @@ public sealed class ChatTelemetryTests
 
         var activity = Single(telemetry);
         Assert.Equal(ActivityStatusCode.Error, activity.Status);
-        Assert.Equal([new("error.type", "formatter_failed"), new("mnemosyne.outcome", "formatter_failed")], Tags(activity));
+        Assert.Equal([new("error.type", "formatter_failed"), new("mnemosyne.integration", "chat"), new("mnemosyne.outcome", "formatter_failed")], Tags(activity));
         Assert.Empty(activity.Events);
-        AssertCounted(telemetry, [new("mnemosyne.outcome", "formatter_failed")]);
+        AssertCounted(telemetry, [new("mnemosyne.integration", "chat"), new("mnemosyne.outcome", "formatter_failed")]);
     }
 
     [Fact]
@@ -122,7 +122,7 @@ public sealed class ChatTelemetryTests
         await Call(new ReasonletChatOptions());
 
         Assert.Empty(telemetry.Activities);
-        AssertCounted(telemetry, [new("mnemosyne.outcome", "skipped"), new("mnemosyne.skip_reason", "no_scope")]);
+        AssertCounted(telemetry, [new("mnemosyne.integration", "chat"), new("mnemosyne.outcome", "skipped"), new("mnemosyne.skip_reason", "no_scope")]);
     }
 
     [Fact]
@@ -133,7 +133,7 @@ public sealed class ChatTelemetryTests
         await Call(new ReasonletChatOptions { DefaultScope = Scope }, messages: [new(ChatRole.Assistant, "go on")]);
 
         Assert.Empty(telemetry.Activities);
-        AssertCounted(telemetry, [new("mnemosyne.outcome", "skipped"), new("mnemosyne.skip_reason", "continuation")]);
+        AssertCounted(telemetry, [new("mnemosyne.integration", "chat"), new("mnemosyne.outcome", "skipped"), new("mnemosyne.skip_reason", "continuation")]);
     }
 
     [Fact]
@@ -154,7 +154,7 @@ public sealed class ChatTelemetryTests
         var activity = Single(telemetry);
         Assert.NotEqual(ActivityStatusCode.Error, activity.Status);
         Assert.Empty(activity.Events);
-        Assert.Empty(Tags(activity));
+        Assert.Equal([new("mnemosyne.integration", "chat")], Tags(activity));
         Assert.Empty(telemetry.Of(Recalls));
     }
 
