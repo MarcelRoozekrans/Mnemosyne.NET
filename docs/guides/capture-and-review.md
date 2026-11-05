@@ -38,9 +38,10 @@ The question and the answer are copied as they are: nothing in the transcript st
 |---|---|
 | No parent, and the scope holds no Reasonlet with this graph | `NewReasonlet`, at version 1.0 |
 | A parent, and a different graph | `NewVersion`, linked to the parent |
-| The graph of the parent, or of a Reasonlet the scope already holds | `ExecutionOnly`: a run is recorded and nothing new is stored |
+| A parent, and the graph of the parent | `ExecutionOnly`: a run is recorded and nothing new is stored |
+| No parent, and the scope already holds this graph | `ExecutionOnly`, on the Reasonlet that holds it |
 
-The worker counts the kind on `mnemosyne.capture.runs` as `new_reasonlet`, `new_version` or `execution_only`. The sample shows two of them. Act 1 is `new_reasonlet`. Act 2 asks a differently worded question that recalls the Reasonlet from act 1, and the capture is `execution_only`. The sample does not produce `new_version`.
+The worker counts the kind on `mnemosyne.capture.runs` ([Telemetry](telemetry.md#chat-pipeline-agent-provider-and-capture) lists its outcomes) as `new_reasonlet`, `new_version` or `execution_only`. The sample shows two of them. Act 1 is `new_reasonlet`. Act 2 asks a differently worded question that recalls the Reasonlet from act 1, and the capture is `execution_only`. The worker takes the recalled Reasonlet as the capture's parent, and the run has the parent's graph. [Background capture](chat-pipeline.md#background-capture) explains how the worker picks the parent. The sample does not produce `new_version`.
 
 ## The capture guard
 
@@ -70,7 +71,7 @@ In the chat pipeline, a blocked capture never reaches the reply. The call return
 
 ### What is guarded
 
-Only `RememberAsync` is guarded. `RecordExecutionAsync` is not: it records a run on a Reasonlet that is already stored, and takes no question or graph. A capture that would be `ExecutionOnly` still passes the guard first, because the guard runs before the store decides. The guard lives in the facade, so a caller that writes to `IReasonletStore` directly bypasses it. Reasonlets stored before a guard was registered are not scanned again.
+Only `RememberAsync` is guarded. `RecordExecutionAsync` is not: it records a run on a Reasonlet that is already stored, and takes no graph. It can take a question and an answer, to let an evaluator judge the run. They are never stored, but they reach the evaluator without passing the guard. A capture that would be `ExecutionOnly` still passes the guard first, because the guard runs before the store decides. The guard lives in the facade, so a caller that writes to `IReasonletStore` directly bypasses it. Reasonlets stored before a guard was registered are not scanned again.
 
 [Telemetry](telemetry.md#the-guard-activity) lists the guard's activity, counter and tags. They name the guard and the detector, never the text that matched.
 
@@ -94,7 +95,7 @@ A lower threshold blocks every detection of that severity, not only the PII you 
 
 The pipeline sees the capture's question, its intent and its name, as one user message each, in that order. A blank intent or name is left out. It sees nothing else: not the answer, the graph or the provenance. The answer of a chat call is the business of AI.Sentinel's chat middleware on the host's client, not of this guard.
 
-For a capture that the chat middleware built, the intent is empty at that point, because the facade resolves it after the guard runs. The name is the tool shape. So the question is what gets scanned. That follows from the code, and the sample does not check it.
+For a capture that the chat middleware built, the intent is empty at that point, because the facade resolves it after the guard runs. The name is the tool shape. So the question and the tool-shape name get scanned, and the question is the part that can carry a secret. That follows from the code, and the sample does not check it.
 
 ### Act 3
 
@@ -105,15 +106,13 @@ Act 3. Ask "Which invoice was paid with card 4111 1111 1111 1111?" through a cli
   Capture outcome: Blocked. Pending reviews: 0. Matches for the card question: 0.
 ```
 
-The sample checks the reply, the `Blocked` outcome, that no review is pending and that recall for the question finds nothing. The rest was observed by hand and is not checked by the sample: AI.Sentinel rates a card number Critical, which is above the default of `High`; and without the guard this shape would have been a second pending review. [Chat pipeline](chat-pipeline.md#judges-and-guards) describes the other observations about the card number.
-
-The ratings of other kinds of data are not checked here either. The adapter README lists which PII AI.Sentinel rates High and which Medium. Read it before relying on the default for emails or phone numbers.
+The sample checks the reply, the `Blocked` outcome, that no review is pending and that recall for the question finds nothing. [Chat pipeline](chat-pipeline.md#judges-and-guards) lists what was only observed by hand, such as the card number's severity. The adapter README lists which PII AI.Sentinel rates High and which Medium. Read it before relying on the default for emails or phone numbers.
 
 ### A known limit: a throwing detector
 
 The guard fails closed when the pipeline as a whole throws, and when the facade's timeout runs out. It does not fail closed when a single detector throws. The pipeline catches that exception, skips the detector, calls `SentinelOptions.OnDetectorFailure` and counts the detector's result as clean. The result carries no failure signal, so the guard cannot tell. A detector that depends on an endpoint, such as a semantic one, is skipped while the endpoint is down, and the capture can be stored without that control.
 
-This was reported as [AI.Sentinel#550](https://github.com/MarcelRoozekrans/AI.Sentinel/issues/550). The issue is closed: upstream merged a fix on 2026-11-04 that adds `PipelineResult.Failures` and `IsComplete`. The version this repository pins, AI.Sentinel 4.2.0, does not have those members, and the adapter does not read them. A unit test pins the gap: with a throwing detector, the capture is allowed and the store is called. Until the adapter moves to a release with the signal, set `OnDetectorFailure` in the host's AI.Sentinel options to learn about a skipped detector. The sample does not exercise this.
+This was reported as [AI.Sentinel#550](https://github.com/MarcelRoozekrans/AI.Sentinel/issues/550). The issue is closed: upstream closed it on 2026-11-04 as completed, with a fix that adds `PipelineResult.Failures` and `IsComplete`. The version this repository pins, AI.Sentinel 4.2.0, does not have those members, and the adapter does not read them. A unit test pins the gap: with a throwing detector, the capture is allowed and the store is called. Until the adapter moves to a release with the signal, set `OnDetectorFailure` in the host's AI.Sentinel options to learn about a skipped detector. The sample does not exercise this.
 
 ## The review gate
 
@@ -149,6 +148,6 @@ A review screen reads the pending list from the start each time, because ids fol
 - The guard is as good as its detectors. It sees the question, intent and name, and not the answer or the graph.
 - A throwing detector is skipped and counted as clean. See the known limit above.
 - A capture the guard cannot inspect is lost. The chat pipeline does not retry it.
-- Only `RememberAsync` is guarded. `RecordExecutionAsync` and direct writes to the store are not.
+- Only `RememberAsync` is guarded. `RecordExecutionAsync` and direct writes to the store are not, and the question and answer of a run pass to the evaluator unguarded.
 - The gate holds back new Reasonlets and new versions. It does not review runs.
 - No reviewer identity or comment is stored. Keep that in your own audit trail.
