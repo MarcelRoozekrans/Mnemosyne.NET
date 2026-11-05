@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.0](https://github.com/MarcelRoozekrans/Mnemosyne.NET/compare/v0.6.1...v0.7.0) (2026-11-05)
+
+
+### Features
+
+* phase 3.6 — Agent Framework context provider ([#54](https://github.com/MarcelRoozekrans/Mnemosyne.NET/issues/54)) ([727b534](https://github.com/MarcelRoozekrans/Mnemosyne.NET/commit/727b53483d425972caaef4096ef25bcffe673d54))
+
 ## [0.6.1](https://github.com/MarcelRoozekrans/Mnemosyne.NET/compare/v0.6.0...v0.6.1) (2026-11-04)
 
 
