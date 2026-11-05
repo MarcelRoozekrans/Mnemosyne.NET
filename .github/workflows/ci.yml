@@ -289,6 +289,34 @@ jobs:
           MNEMOSYNE_SAMPLE_PG: Host=localhost;Port=5432;Username=postgres;Password=postgres;Database=mnemosyne_evaluation_sample
         run: dotnet run --project samples/Mnemosyne.Samples.Evaluation -c Release
 
+      # The chat pipeline sample checks the three acts the docs describe for the chat pipeline: the capture held for review,
+      # the recalled Reasonlet in the system text, and the capture AI.Sentinel blocks. It exits 1 when any differ.
+      # It needs a database of its own as well: the schema is migrated with 256 dimensions, not the smoke's 3.
+      # It gates publish-nuget through aot-publish on purpose: a release must not ship docs whose sample fails.
+      - name: Create the chat pipeline sample's database
+        env:
+          PGPASSWORD: postgres
+        run: psql -h localhost -U postgres -c 'CREATE DATABASE mnemosyne_chat_sample'
+
+      - name: Run the chat pipeline sample
+        env:
+          MNEMOSYNE_SAMPLE_PG: Host=localhost;Port=5432;Username=postgres;Password=postgres;Database=mnemosyne_chat_sample
+        run: dotnet run --project samples/Mnemosyne.Samples.ChatPipeline -c Release
+
+      # The Agent Framework sample checks what the docs describe for the agent provider: the Reasonlet recalled into the
+      # run's instructions, and the capture outcome of each run. It exits 1 when any differ.
+      # It needs a database of its own as well: the schema is migrated with 256 dimensions, not the smoke's 3.
+      # It gates publish-nuget through aot-publish on purpose: a release must not ship docs whose sample fails.
+      - name: Create the Agent Framework sample's database
+        env:
+          PGPASSWORD: postgres
+        run: psql -h localhost -U postgres -c 'CREATE DATABASE mnemosyne_agent_sample'
+
+      - name: Run the Agent Framework sample
+        env:
+          MNEMOSYNE_SAMPLE_PG: Host=localhost;Port=5432;Username=postgres;Password=postgres;Database=mnemosyne_agent_sample
+        run: dotnet run --project samples/Mnemosyne.Samples.AgentFramework -c Release
+
   # The real push to nuget.org. Two ways in: a published release (the automatic path), or a
   # manual dispatch with publish_to_nuget set, for re-running a push that died partway.
   # Both run the full matrix and pack-validate on that commit first, and both refuse a prerelease.

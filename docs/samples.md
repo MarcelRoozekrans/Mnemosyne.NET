@@ -198,6 +198,8 @@ The detector matches the digit pattern of a card number and does not check the L
 
 The sample checks all of this itself and exits with code 1 if a receipt differs, so a change to capture, review or the guard that broke what this page shows would fail the run.
 
+The repository's CI runs the sample on every pull request to `main` and every push to `main`, so a change that broke these receipts would fail CI.
+
 ### The model is a stand-in
 
 `ScriptedChatClient` is not a model. It replays a fixed script of tool calls and an answer. In an application, register a real chat model through Microsoft.Extensions.AI and build the pipeline on it, for example with an Ollama or OpenAI `IChatClient`:
@@ -254,6 +256,8 @@ Run 2. Ask "How do I refund an order for a customer?" on a fresh session.
 The sample scopes its Reasonlets with a `ScopeResolver` that returns a fixed scope. Without one, the provider uses the agent's name as the scope.
 
 The sample checks all of this itself and exits with code 1 if a receipt differs. What it asserts about the provider is the recall, which must find the Reasonlet for the second question, and the instructions, which must carry its name on the first call and in no message. A change to the provider that broke either would fail the run.
+
+The repository's CI runs the sample on every pull request to `main` and every push to `main`, so a change that broke the recall or the instructions would fail CI.
 
 ### The model is a stand-in
 
