@@ -116,7 +116,9 @@ services.AddChatClient(providerClient)
 
 When the client's pipeline has `UseReasonlets`, each judge call carries an internal mark, and the middleware passes a marked call straight through: no recall, no `find_procedure` tool, no capture, and no count in telemetry. The middleware removes the mark before the call goes on, so it never reaches the provider. A client without the middleware, such as a keyed client from the section above, gets no mark.
 
-Other judges and guards that call a chat client through their own libraries, such as a Minos.NET decision client built on an `IChatClient`, don't carry the mark. With `UseReasonlets` on that client, their calls are recalled for like any other. Give them a keyed client without the middleware.
+The rule is: a judge or guard uses a client without `UseReasonlets`. The chat evaluator's own judge calls bypass the middleware internally, so it can share the unkeyed client. Other judges and guards that call a chat client through their own libraries, such as a Minos.NET decision client built on an `IChatClient`, don't carry the mark. With `UseReasonlets` on that client, their calls are recalled for like any other. Give them a keyed client without the middleware.
+
+The [Agent Framework context provider](https://github.com/MarcelRoozekrans/Mnemosyne.NET/blob/main/src/Mnemosyne.NET.AgentFramework/README.md) is unaffected. It sits on the agent, not on the chat client, so no judge call reaches it, whichever client the judge uses.
 
 ## Criteria
 

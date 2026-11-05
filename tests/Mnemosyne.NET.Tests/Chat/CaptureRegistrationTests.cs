@@ -35,6 +35,19 @@ public sealed class CaptureRegistrationTests
     }
 
     [Fact]
+    public async Task AddReasonletCaptureRegistersTheQueueAsTheSink()
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton<IReasonletMemory>(CaptureTestData.Memory());
+        services.AddReasonletCapture();
+        services.AddReasonletCapture();
+        await using var provider = services.BuildServiceProvider();
+
+        Assert.Same(provider.GetRequiredService<ReasonletCaptureQueue>(), provider.GetRequiredService<IReasonletCaptureSink>());
+        Assert.Single(provider.GetServices<IReasonletCaptureSink>());
+    }
+
+    [Fact]
     public async Task ASecondCallsOptionsReachTheProcessor()
     {
         var memory = CaptureTestData.Memory();
@@ -45,7 +58,7 @@ public sealed class CaptureRegistrationTests
         await using var provider = services.BuildServiceProvider();
 
         var queue = provider.GetRequiredService<ReasonletCaptureQueue>();
-        Assert.True(queue.TryEnqueue(CaptureTestData.Item()));
+        Assert.True(queue.TryCapture(new ReasonletCaptureRun(new ReasonletScope("scope"), CaptureTestData.Refund())));
         await queue.DrainAsync(Ct);
 
         Assert.Equal("second", Assert.Single(memory.Captures).Provenance.Source);

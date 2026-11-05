@@ -76,7 +76,7 @@ public sealed class FindProcedureFunctionTests
         var item = Assert.Single(Assert.IsType<JsonElement>(result).EnumerateArray());
         Assert.Equal(match.Reasonlet.Id.ToString(), item.GetProperty("id").GetString());
         Assert.Equal("refund-order", item.GetProperty("name").GetString());
-        Assert.Equal("refund an order", item.GetProperty("intent").GetString());
+        Assert.False(item.TryGetProperty("intent", out _));
         Assert.Equal("1", item.GetProperty("version").GetString());
         Assert.Equal(0.82, item.GetProperty("similarity").GetDouble());
         Assert.Equal(0.75, item.GetProperty("successRate").GetDouble());
@@ -254,6 +254,30 @@ public sealed class FindProcedureFunctionTests
 
         Assert.Equal(22, function.Lookups.Count);
     }
+
+    [Fact]
+    public async Task HostCreatedToolReportsItsLookups()
+    {
+        var memory = new FakeReasonletMemory();
+        var first = Match();
+        memory.RecallHandler = (query, _) => Task.FromResult(
+            ZeroAlloc.Results.Result<IReadOnlyList<ReasonletMatch>, MnemosyneError>.Success(
+                query.Question == "one" ? [first] : []));
+        var function = ReasonletTools.CreateFindProcedure(memory, Scope);
+
+        await function.InvokeAsync(Args(("question", "one")), CancellationToken.None);
+        var snapshot = function.Lookups;
+        await function.InvokeAsync(Args(("question", "two")), CancellationToken.None);
+
+        Assert.Equal(2, function.Lookups.Count);
+        Assert.Same(first, Assert.Single(function.Lookups[0]));
+        Assert.Empty(function.Lookups[1]);
+        Assert.Single(snapshot);
+    }
+
+    [Fact]
+    public void CreateFindProcedureRejectsANullMemory() =>
+        Assert.Throws<ArgumentNullException>("memory", () => ReasonletTools.CreateFindProcedure(null!, Scope));
 
     [Fact]
     public async Task FailedRecallsAreNotRecorded()

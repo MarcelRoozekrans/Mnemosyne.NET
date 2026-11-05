@@ -24,8 +24,28 @@ public sealed class UseReasonletsTests
         var error = Assert.Throws<InvalidOperationException>(() => builder.Build(provider));
 
         Assert.Equal(
-            "UseReasonlets captures by default and needs services.AddReasonletCapture(); call it, or set ReasonletChatOptions.Capture = false.",
+            "UseReasonlets captures by default and needs an IReasonletCaptureSink, which services.AddReasonletCapture() registers; call it, or set ReasonletChatOptions.Capture = false.",
             error.Message);
+    }
+
+    [Fact]
+    public async Task ACustomRegisteredSinkReceivesTheRuns()
+    {
+        var sink = new RecordingSink();
+        var services = new ServiceCollection();
+        services.AddSingleton<IReasonletMemory>(new FakeReasonletMemory());
+        services.AddSingleton<IReasonletCaptureSink>(sink);
+        await using var provider = services.BuildServiceProvider();
+        var inner = FakeChatClient.Replying("done");
+
+        using var client = new ChatClientBuilder(inner)
+            .UseReasonlets(new ReasonletChatOptions { DefaultScope = Scope })
+            .Build(provider);
+        await client.GetResponseAsync([new(ChatRole.User, CaptureTestData.Question)], null, Ct);
+
+        var run = Assert.Single(sink.Runs);
+        Assert.Equal(Scope, run.Scope);
+        Assert.Equal(CaptureTestData.Question, run.Messages[0].Text);
     }
 
     [Fact]
@@ -127,20 +147,20 @@ public sealed class UseReasonletsTests
     public async Task WithoutIsServiceTheQueueIsResolvedOnFirstUseOnly()
     {
         var memory = CaptureTestData.Memory();
-        var queue = new ReasonletCaptureQueue(new ReasonletCaptureProcessor(memory, new ReasonletCaptureOptions()), new ReasonletCaptureOptions());
+        var queue = new ReasonletCaptureQueue(new ReasonletCaptureProcessor(memory), new ReasonletCaptureOptions());
         await using var _ = queue;
-        var provider = new MinimalProvider { [typeof(IReasonletMemory)] = () => memory, [typeof(ReasonletCaptureQueue)] = () => queue };
+        var provider = new MinimalProvider { [typeof(IReasonletMemory)] = () => memory, [typeof(IReasonletCaptureSink)] = () => queue };
 
         using var client = new ChatClientBuilder(FakeChatClient.Replying(new ChatResponse([.. CaptureTestData.Refund().Skip(1)])))
             .UseReasonlets(new ReasonletChatOptions { DefaultScope = Scope })
             .Build(provider);
-        Assert.Equal(0, provider.Resolutions(typeof(ReasonletCaptureQueue)));
+        Assert.Equal(0, provider.Resolutions(typeof(IReasonletCaptureSink)));
         Assert.Equal(0, provider.Resolutions(typeof(IReasonletMemory)));
 
         await client.GetResponseAsync([new(ChatRole.User, CaptureTestData.Question)], null, Ct);
         await queue.DrainAsync(Ct);
 
-        Assert.Equal(1, provider.Resolutions(typeof(ReasonletCaptureQueue)));
+        Assert.Equal(1, provider.Resolutions(typeof(IReasonletCaptureSink)));
         Assert.Single(memory.Captures);
     }
 
@@ -213,7 +233,7 @@ public sealed class UseReasonletsTests
         var resolutions = 0;
         var services = new ServiceCollection();
         services.AddSingleton<IReasonletMemory>(new FakeReasonletMemory());
-        services.AddSingleton<ReasonletCaptureQueue>(_ =>
+        services.AddSingleton<IReasonletCaptureSink>(_ =>
         {
             resolutions++;
             throw new InvalidOperationException("broken");
@@ -295,5 +315,16 @@ public sealed class UseReasonletsTests
         var services = new ServiceCollection();
         services.AddSingleton<IReasonletMemory>(memory);
         return services.BuildServiceProvider();
+    }
+
+    private sealed class RecordingSink : IReasonletCaptureSink
+    {
+        public List<ReasonletCaptureRun> Runs { get; } = [];
+
+        public bool TryCapture(ReasonletCaptureRun run)
+        {
+            Runs.Add(run);
+            return true;
+        }
     }
 }

@@ -58,6 +58,39 @@ internal sealed partial class ReasonletRepository(IAsyncDbConnection connection)
     public partial Task<ParentRow?> LockParentAsync(string scope, Guid id, IAsyncDbTransaction transaction, CancellationToken ct);
 
     /// <summary>
+    /// Takes a transaction-scoped advisory lock on a content hash in a scope, held until the transaction ends, so
+    /// parentless remembers of one shape in one scope run one at a time. Remembers of other shapes or scopes do not
+    /// wait, unless their keys collide.
+    /// </summary>
+    /// <remarks>
+    /// The key is a 64-bit hash of the scope and the content hash, computed by the server, so no scope text reaches a
+    /// lock name. Two keys that collide only make unrelated remembers wait for each other. Run
+    /// <see cref="LockHashMatchAsync"/> as the next statement: at READ COMMITTED it takes a new snapshot, after the
+    /// lock, and sees the Reasonlet that the previous holder committed.
+    /// </remarks>
+    [Command("SELECT pg_advisory_xact_lock(hashtextextended(@scope || ':' || @contentHash, 0))")]
+    public partial Task LockContentHashAsync(string scope, string contentHash, IAsyncDbTransaction transaction, CancellationToken ct);
+
+    /// <summary>
+    /// Finds the Reasonlet of the scope with a content hash and locks it <c>FOR NO KEY UPDATE</c> until the transaction
+    /// ends, as <see cref="LockParentAsync"/> locks a parent. Answers null when the scope has none. When several rows
+    /// share the hash, an Active one wins over a pending one, then the newest, then the highest id.
+    /// </summary>
+    /// <remarks>
+    /// The rows are sorted before they are locked and the limit applies after the lock, so a row that a concurrent
+    /// reject or erase deleted while this statement waited is skipped and the next one is locked.
+    /// </remarks>
+    [Query("""
+        SELECT id, version, status
+        FROM mnemosyne.reasonlets
+        WHERE scope = @scope AND content_hash = @contentHash
+        ORDER BY (status = 1) DESC, created_at DESC, id DESC
+        LIMIT 1
+        FOR NO KEY UPDATE
+        """)]
+    public partial Task<HashMatchRow?> LockHashMatchAsync(string scope, string contentHash, IAsyncDbTransaction transaction, CancellationToken ct);
+
+    /// <summary>
     /// Walks up <c>parent_id</c> within the scope from a Reasonlet to the top of its lineage, and returns every link
     /// it met, in no particular order: the caller follows them from the Reasonlet. Empty only when the Reasonlet is not
     /// in the scope.

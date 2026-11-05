@@ -30,7 +30,7 @@ internal static class CaptureTestData
     ];
 
     /// <summary>An item as the middleware hands it off, with the pending call decided from its messages.</summary>
-    public static ReasonletCaptureItem Item(IReadOnlyList<ChatMessage>? messages = null)
+    public static ReasonletCaptureItem Item(IReadOnlyList<ChatMessage>? messages = null, string source = "test.source")
     {
         messages ??= Refund();
         return new(
@@ -42,7 +42,8 @@ internal static class CaptureTestData
             TimeSpan.FromMilliseconds(1500),
             "resp-1",
             ChatFinishReason.Stop,
-            ReasonletCaptureProcessor.EndsWithPendingCall(messages));
+            ReasonletCaptureProcessor.EndsWithPendingCall(messages),
+            source);
     }
 
     public static ReasonletMatch Match(ReasonletGraph? graph = null) => new(

@@ -151,6 +151,140 @@ public sealed class RememberTests(PgVectorFixture fixture) : IClassFixture<PgVec
     }
 
     [Fact]
+    public async Task ParentlessRepeatOfAStoredShapeRecordsAnExecution()
+    {
+        var store = await MigratedStoreAsync();
+        var scope = PgVectorFixture.NewScope();
+        var first = (await store.RememberAsync(Entries.Entry(scope), Ct)).Value;
+        var entry = Entries.Entry(scope, provenance: new ReasonletProvenance { Source = "repeat" });
+
+        var receipt = (await store.RememberAsync(entry, Ct)).Value;
+
+        Assert.Equal(ReasonletCaptureKind.ExecutionOnly, receipt.Kind);
+        Assert.Equal(first.Id, receipt.Id);
+        Assert.Equal("1.0", receipt.Version);
+        Assert.Equal(ReasonletStatus.Active, receipt.Status);
+        Assert.NotEqual(first.Execution, receipt.Execution);
+        Assert.Equal(1L, await CountAsync("SELECT count(*) FROM mnemosyne.reasonlets WHERE scope = $1", scope.Value));
+        Assert.Equal(2L, await CountAsync("SELECT count(*) FROM mnemosyne.reasonlet_executions WHERE scope = $1", scope.Value));
+        await AssertSingleExecutionAsync(receipt, entry.Capture);
+    }
+
+    [Fact]
+    public async Task ParentlessRepeatPrefersActiveOverPending()
+    {
+        var store = await MigratedStoreAsync();
+        var scope = PgVectorFixture.NewScope();
+        var active = await InsertShapeAsync(scope, ReasonletStatus.Active, "1.0", TimeSpan.FromDays(2));
+        await InsertShapeAsync(scope, ReasonletStatus.PendingReview, "1.0", TimeSpan.FromDays(1));
+
+        var receipt = (await store.RememberAsync(Entries.Entry(scope) with { ReviewRequired = true }, Ct)).Value;
+
+        Assert.Equal(ReasonletCaptureKind.ExecutionOnly, receipt.Kind);
+        Assert.Equal(active, receipt.Id.Value);
+        Assert.Equal(ReasonletStatus.Active, receipt.Status);
+        Assert.Equal(2L, await CountAsync("SELECT count(*) FROM mnemosyne.reasonlets WHERE scope = $1", scope.Value));
+    }
+
+    [Fact]
+    public async Task ParentlessRepeatPicksTheNewestOfOneStatus()
+    {
+        var store = await MigratedStoreAsync();
+        var scope = PgVectorFixture.NewScope();
+        await InsertShapeAsync(scope, ReasonletStatus.PendingReview, "1.0", TimeSpan.FromDays(3));
+        var newest = await InsertShapeAsync(scope, ReasonletStatus.PendingReview, "1.4", TimeSpan.FromDays(1));
+        await InsertShapeAsync(scope, ReasonletStatus.PendingReview, "1.2", TimeSpan.FromDays(2));
+
+        var receipt = (await store.RememberAsync(Entries.Entry(scope), Ct)).Value;
+
+        Assert.Equal(ReasonletCaptureKind.ExecutionOnly, receipt.Kind);
+        Assert.Equal(newest, receipt.Id.Value);
+        Assert.Equal("1.4", receipt.Version);
+        Assert.Equal(ReasonletStatus.PendingReview, receipt.Status);
+        Assert.Equal(3L, await CountAsync("SELECT count(*) FROM mnemosyne.reasonlets WHERE scope = $1", scope.Value));
+    }
+
+    [Fact]
+    public async Task SameShapeInAnotherScopeIsANewReasonlet()
+    {
+        var store = await MigratedStoreAsync();
+        var other = (await store.RememberAsync(Entries.Entry(PgVectorFixture.NewScope()), Ct)).Value;
+        var scope = PgVectorFixture.NewScope();
+
+        var receipt = (await store.RememberAsync(Entries.Entry(scope), Ct)).Value;
+
+        Assert.Equal(ReasonletCaptureKind.NewReasonlet, receipt.Kind);
+        Assert.NotEqual(other.Id, receipt.Id);
+        Assert.Equal(1L, await CountAsync("SELECT count(*) FROM mnemosyne.reasonlet_executions WHERE reasonlet_id = $1", other.Id.Value));
+    }
+
+    [Fact]
+    public async Task ADifferentShapeWithoutAParentIsANewReasonlet()
+    {
+        var store = await MigratedStoreAsync();
+        var scope = PgVectorFixture.NewScope();
+        var first = (await store.RememberAsync(Entries.Entry(scope), Ct)).Value;
+
+        var receipt = (await store.RememberAsync(Entries.Entry(scope, Entries.Graph("b")), Ct)).Value;
+
+        Assert.Equal(ReasonletCaptureKind.NewReasonlet, receipt.Kind);
+        Assert.NotEqual(first.Id, receipt.Id);
+        Assert.Equal(2L, await CountAsync("SELECT count(*) FROM mnemosyne.reasonlets WHERE scope = $1", scope.Value));
+    }
+
+    [Fact]
+    public async Task RepeatAfterRejectIsANewReasonlet()
+    {
+        var store = await MigratedStoreAsync();
+        var scope = PgVectorFixture.NewScope();
+        var first = (await store.RememberAsync(Entries.Entry(scope) with { ReviewRequired = true }, Ct)).Value;
+        Assert.True((await store.RejectAsync(scope, first.Id, Ct)).IsSuccess);
+
+        var receipt = (await store.RememberAsync(Entries.Entry(scope) with { ReviewRequired = true }, Ct)).Value;
+
+        Assert.Equal(ReasonletCaptureKind.NewReasonlet, receipt.Kind);
+        Assert.NotEqual(first.Id, receipt.Id);
+        Assert.Equal(ReasonletStatus.PendingReview, receipt.Status);
+        Assert.Equal(1L, await CountAsync("SELECT count(*) FROM mnemosyne.reasonlets WHERE scope = $1", scope.Value));
+    }
+
+    [Fact]
+    public async Task ConcurrentParentlessCapturesOfOneShapeInsertOnce()
+    {
+        // Each caller holds its own pooled connection. The gate opens when the last caller has started, and releases
+        // all eight together, so their lookups race: without the advisory lock each would miss and insert its own row.
+        // The callers await the gate rather than block on it, so they hold no pool thread while they wait.
+        const int Callers = 8;
+        var store = await MigratedStoreAsync();
+        var scope = PgVectorFixture.NewScope();
+        var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var started = 0;
+
+        var tasks = Enumerable.Range(0, Callers).Select(_ => Task.Run(
+            async () =>
+            {
+                if (Interlocked.Increment(ref started) == Callers)
+                {
+                    gate.SetResult();
+                }
+
+                await gate.Task.WaitAsync(Ct);
+                return await store.RememberAsync(Entries.Entry(scope), Ct);
+            },
+            Ct)).ToArray();
+        var results = await Task.WhenAll(tasks);
+
+        Assert.All(results, r => Assert.True(r.IsSuccess));
+        Assert.Single(results.Select(r => r.Value.Id).Distinct());
+        Assert.Single(results, r => r.Value.Kind == ReasonletCaptureKind.NewReasonlet);
+        Assert.Equal(Callers - 1, results.Count(r => r.Value.Kind == ReasonletCaptureKind.ExecutionOnly));
+        Assert.Equal(1L, await CountAsync("SELECT count(*) FROM mnemosyne.reasonlets WHERE scope = $1", scope.Value));
+        Assert.Equal((long)Callers, await CountAsync("SELECT count(*) FROM mnemosyne.reasonlet_executions WHERE scope = $1", scope.Value));
+        Assert.Equal(Callers, await Entries.ScalarAsync<int>(
+            fixture.DataSource, "SELECT runs FROM mnemosyne.reasonlet_metrics WHERE scope = $1", scope.Value));
+    }
+
+    [Fact]
     public async Task ADifferentGraphCreatesVersionsThatShareOneSequenceAcrossTheLineage()
     {
         var store = await MigratedStoreAsync();
@@ -710,6 +844,28 @@ public sealed class RememberTests(PgVectorFixture fixture) : IClassFixture<PgVec
             END $$
             """);
         return leaf;
+    }
+
+    /// <summary>
+    /// Inserts a parentless Reasonlet in the scope with the hash of <see cref="Entries.Graph"/>'s default variant, created
+    /// <paramref name="age"/> ago, and returns its id.
+    /// </summary>
+    private async Task<Guid> InsertShapeAsync(ReasonletScope scope, ReasonletStatus status, string version, TimeSpan age)
+    {
+        var id = Guid.CreateVersion7();
+        var graph = Entries.Graph();
+        await Entries.ExecuteAsync(
+            fixture.DataSource,
+            "INSERT INTO mnemosyne.reasonlets (id, scope, name, intent, version, graph, content_hash, status, source, created_at, embedding) "
+            + "VALUES ($1, $2, 'n', 'i', $3, $4, $5, $6, 's', now() - $7, '[1,0,0]')",
+            id,
+            scope.Value,
+            version,
+            ReasonletGraphJson.Serialize(graph),
+            graph.ComputeContentHash().Value,
+            (short)status,
+            age);
+        return id;
     }
 
     /// <summary>Reads the parent_id of a Reasonlet, or null when it has none.</summary>

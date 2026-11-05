@@ -2,7 +2,6 @@ using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using Microsoft.Extensions.AI;
 using Mnemosyne.NET.Abstractions;
-using ZeroAlloc.Results;
 
 namespace Mnemosyne.NET;
 
@@ -23,7 +22,7 @@ namespace Mnemosyne.NET;
 /// Memory never breaks the call: a recall that fails, throws, times out or finds nothing, and a formatter that fails, only
 /// leave the suggestion out, a memory that cannot be resolved leaves the suggestion and the tool out, and a full queue,
 /// or a hand-off that throws, only drops the capture. Each shows up in
-/// <see cref="ChatTelemetry"/> or the queue's counter. The caller's own cancellation propagates, from the recall as from the
+/// <see cref="ReasonletSuggestions"/>' signals or the queue's counter. The caller's own cancellation propagates, from the recall as from the
 /// inner call. A call that throws or is cancelled is not captured.
 /// </para>
 /// <para>
@@ -43,8 +42,9 @@ internal sealed class ReasonletChatClient : DelegatingChatClient
     // middleware, as the chat evaluator does when it judges with the host's unkeyed client. A resolution that throws is
     // not cached, so a later call tries again.
     private readonly Lazy<IReasonletMemory> _memory;
-    private readonly Lazy<ReasonletCaptureQueue?> _queue;
+    private readonly Lazy<IReasonletCaptureSink?> _queue;
     private readonly ReasonletChatOptions _options;
+    private readonly ReasonletSuggestionOptions _suggestions;
     private readonly TimeProvider _time;
 
     /// <summary>Creates the middleware over a memory and a queue that already exist.</summary>
@@ -53,8 +53,8 @@ internal sealed class ReasonletChatClient : DelegatingChatClient
     /// <param name="queue">The capture queue, or null when nothing is captured.</param>
     /// <param name="options">The validated settings.</param>
     /// <param name="time">The clock for the recall timeout and the call's duration.</param>
-    public ReasonletChatClient(IChatClient inner, IReasonletMemory memory, ReasonletCaptureQueue? queue, ReasonletChatOptions options, TimeProvider time)
-        : this(inner, new Lazy<IReasonletMemory>(memory), new Lazy<ReasonletCaptureQueue?>(queue), options, time)
+    public ReasonletChatClient(IChatClient inner, IReasonletMemory memory, IReasonletCaptureSink? queue, ReasonletChatOptions options, TimeProvider time)
+        : this(inner, new Lazy<IReasonletMemory>(memory), new Lazy<IReasonletCaptureSink?>(queue), options, time)
     {
     }
 
@@ -69,13 +69,20 @@ internal sealed class ReasonletChatClient : DelegatingChatClient
     /// <param name="options">The validated settings.</param>
     /// <param name="time">The clock for the recall timeout and the call's duration.</param>
     public ReasonletChatClient(
-        IChatClient inner, Lazy<IReasonletMemory> memory, Lazy<ReasonletCaptureQueue?> queue, ReasonletChatOptions options, TimeProvider time)
+        IChatClient inner, Lazy<IReasonletMemory> memory, Lazy<IReasonletCaptureSink?> queue, ReasonletChatOptions options, TimeProvider time)
         : base(inner)
     {
         _memory = memory;
         _queue = queue;
         _options = options;
         _time = time;
+        _suggestions = new ReasonletSuggestionOptions
+        {
+            MinSimilarity = options.MinSimilarity,
+            RecallTimeout = options.RecallTimeout,
+            Formatter = options.Formatter,
+            TimeProvider = time,
+        };
     }
 
     /// <inheritdoc />
@@ -153,7 +160,7 @@ internal sealed class ReasonletChatClient : DelegatingChatClient
             // Counted whenever the call would have done something: with both switches off it was never going to.
             if (_options.Recall || _options.Capture)
             {
-                ChatTelemetry.Skipped(ChatTelemetry.NoScopeReason);
+                ReasonletSuggestions.CountSkipped(ReasonletSuggestions.NoScopeReason, ReasonletSuggestions.ChatIntegration);
             }
 
             return null;
@@ -173,9 +180,9 @@ internal sealed class ReasonletChatClient : DelegatingChatClient
         {
             if (question is null)
             {
-                ChatTelemetry.Skipped(ChatTelemetry.ContinuationReason);
+                ReasonletSuggestions.CountSkipped(ReasonletSuggestions.ContinuationReason, ReasonletSuggestions.ChatIntegration);
             }
-            else if (memory is not null && await RecallAsync(memory, scope.Scope, question, ct).ConfigureAwait(false) is { } suggestion)
+            else if (memory is not null && await ReasonletSuggestions.RecallAsync(memory, scope.Scope, question, _suggestions, ReasonletSuggestions.ChatIntegration, ct).ConfigureAwait(false) is { } suggestion)
             {
                 parent = suggestion.Id;
                 sent = Inject(request, suggestion.Text);
@@ -203,107 +210,28 @@ internal sealed class ReasonletChatClient : DelegatingChatClient
             }
 
             // A full or closed queue counts the drop itself; the call goes on either way.
-            queue.TryEnqueue(CaptureItem(call, response(), duration));
+            queue.TryCapture(CaptureRun(call, response(), duration));
         }
         catch (Exception ex)
         {
-            CaptureTelemetry.QueueFailed(ex);
+            ReasonletCaptures.CountFailed(ex);
         }
     }
 
     /// <summary>
-    /// Builds the capture item of a call that returned: the caller's messages without the suggestion, then the response's,
-    /// with the injected parent, the tool's lookups, the duration, the response's id and finish reason, and whether it ends on
-    /// a call nobody answered, decided now.
+    /// Builds the run of a call that returned: the caller's messages without the suggestion, then the response's, with the
+    /// injected parent, the tool's lookups, the duration, and the response's id and finish reason.
     /// </summary>
-    internal static ReasonletCaptureItem CaptureItem(PreparedCall call, ChatResponse response, TimeSpan duration)
-    {
-        List<ChatMessage> messages = [.. call.Request, .. response.Messages];
-        return new(
-            call.Scope.Scope,
-            call.Scope.SubjectId,
-            messages,
-            call.Parent,
-            call.Lookup?.Lookups ?? [],
-            duration,
-            response.ResponseId,
-            response.FinishReason,
-            ReasonletCaptureProcessor.EndsWithPendingCall(messages));
-    }
-
-    /// <summary>
-    /// Recalls the top match for <paramref name="question"/> under the recall timeout and renders it, counting the outcome.
-    /// </summary>
-    /// <returns>The match's id and text, or null when nothing is to be injected.</returns>
-    /// <exception cref="OperationCanceledException"><paramref name="ct"/> is cancelled.</exception>
-    private async ValueTask<(ReasonletId Id, string Text)?> RecallAsync(IReasonletMemory memory, ReasonletScope scope, string question, CancellationToken ct)
-    {
-        using var telemetry = ChatTelemetry.Start();
-        var timeout = _options.RecallTimeout;
-        using var timer = timeout == Timeout.InfiniteTimeSpan ? null : new CancellationTokenSource(timeout, _time);
-        using var linked = timer is null ? null : CancellationTokenSource.CreateLinkedTokenSource(ct, timer.Token);
-        var token = linked?.Token ?? ct;
-        var query = new ReasonletQuery { Scope = scope, Question = question, Top = 1, MinSimilarity = _options.MinSimilarity };
-        Task<Result<IReadOnlyList<ReasonletMatch>, MnemosyneError>>? pending = null;
-        Result<IReadOnlyList<ReasonletMatch>, MnemosyneError> recalled;
-        try
+    internal static ReasonletCaptureRun CaptureRun(PreparedCall call, ChatResponse response, TimeSpan duration) =>
+        new(call.Scope.Scope, [.. call.Request, .. response.Messages])
         {
-            ct.ThrowIfCancellationRequested();
-
-            // A hard stop: the wait ends when the token is cancelled, even when the memory ignores the token it was given.
-            pending = memory.RecallAsync(query, token).AsTask();
-            recalled = await pending.WaitAsync(token).ConfigureAwait(false);
-        }
-        catch (OperationCanceledException) when (ct.IsCancellationRequested)
-        {
-            ReasonletMemory.Abandon(pending);
-            telemetry.Cancelled();
-            throw;
-        }
-        catch (OperationCanceledException) when (timer is { IsCancellationRequested: true })
-        {
-            ReasonletMemory.Abandon(pending);
-            telemetry.TimedOut();
-            return null;
-        }
-        catch (Exception ex)
-        {
-            telemetry.Threw(ex);
-            return null;
-        }
-
-        if (recalled.IsFailure)
-        {
-            telemetry.Failed(recalled.Error.Code);
-            return null;
-        }
-
-        if (recalled.Value.Count == 0)
-        {
-            telemetry.NoMatch();
-            return null;
-        }
-
-        var match = recalled.Value[0];
-        string? text;
-        try
-        {
-            text = (_options.Formatter ?? ReasonletPromptFormatter.Format)(match);
-        }
-        catch (Exception)
-        {
-            text = null;
-        }
-
-        if (string.IsNullOrWhiteSpace(text))
-        {
-            telemetry.FormatterFailed();
-            return null;
-        }
-
-        telemetry.Injected();
-        return (match.Reasonlet.Id, text);
-    }
+            SubjectId = call.Scope.SubjectId,
+            InjectedParent = call.Parent,
+            Lookups = call.Lookup?.Lookups ?? [],
+            Duration = duration,
+            RunId = response.ResponseId,
+            FinishReason = response.FinishReason,
+        };
 
     /// <summary>Copies the request with the suggestion as a system message after the leading system messages.</summary>
     private static List<ChatMessage> Inject(IReadOnlyList<ChatMessage> request, string text)
@@ -337,8 +265,7 @@ internal sealed class ReasonletChatClient : DelegatingChatClient
         }
         catch (Exception ex) when (!(ex is OperationCanceledException && ct.IsCancellationRequested))
         {
-            using var telemetry = ChatTelemetry.Start();
-            telemetry.Threw(ex);
+            ReasonletSuggestions.CountFailed(ex, ReasonletSuggestions.ChatIntegration);
             return null;
         }
     }

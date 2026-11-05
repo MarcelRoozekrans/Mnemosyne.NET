@@ -10,11 +10,13 @@ public interface IReasonletMemory
     /// The outcome depends on <see cref="ReasonletCapture.ParentId"/> and the captured graph:
     /// <list type="table">
     /// <listheader><term>Capture</term><description>Result</description></listheader>
-    /// <item><term>No ParentId</term><description>A new Reasonlet at version 1.0, kind <see cref="ReasonletCaptureKind.NewReasonlet"/>.</description></item>
+    /// <item><term>No ParentId and the graph equal to a Reasonlet's in the scope</term><description>An execution only, recorded on that Reasonlet with the capture's outcome and provenance: an <see cref="ReasonletStatus.Active"/> one before a <see cref="ReasonletStatus.PendingReview"/> one, then the newest. Kind <see cref="ReasonletCaptureKind.ExecutionOnly"/>.</description></item>
+    /// <item><term>No ParentId and no Reasonlet of the scope with that graph</term><description>A new Reasonlet at version 1.0, kind <see cref="ReasonletCaptureKind.NewReasonlet"/>.</description></item>
     /// <item><term>ParentId set and the graph equal to the parent's</term><description>An execution only, recorded on the parent with the capture's outcome and provenance. Kind <see cref="ReasonletCaptureKind.ExecutionOnly"/>.</description></item>
     /// <item><term>ParentId set and the graph different</term><description>A new version, as a child with lineage. Kind <see cref="ReasonletCaptureKind.NewVersion"/>.</description></item>
     /// </list>
-    /// Two concurrent captures with the same parent but different graphs create sibling versions.
+    /// Two concurrent captures with the same parent but different graphs create sibling versions. Concurrent captures without a parent and with
+    /// one graph store it once: one is a new Reasonlet and the others are executions of it.
     /// When <c>MnemosyneOptions.RequireReview</c> is on, a new Reasonlet or a new version is stored as <see cref="ReasonletStatus.PendingReview"/>, and
     /// recall does not return it until <see cref="ApproveAsync"/> approves it.
     /// Error codes: <see cref="MnemosyneErrorCode.Validation"/> when the capture breaks an invariant,

@@ -5,6 +5,11 @@
   ],
   "packageRules": [
     {
+      "description": "Microsoft.Agents.AI and Microsoft.Agents.AI.Abstractions 1.24.0 is the supported floor of Mnemosyne.NET.AgentFramework: a host on an older line must still be able to use the package, so the floor is raised by hand, not by a bot.",
+      "matchPackageNames": ["Microsoft.Agents.AI", "Microsoft.Agents.AI.Abstractions"],
+      "enabled": false
+    },
+    {
       "description": "Microsoft.Testing.Extensions.CodeCoverage must move together with xunit.v3: CodeCoverage 18.1.0 and later need version 2 of Microsoft.Testing.Platform, while xunit.v3 3.x runs on version 1.",
       "matchPackageNames": ["xunit.v3", "Microsoft.Testing.Extensions.CodeCoverage"],
       "groupName": "xunit-v3-test-platform",

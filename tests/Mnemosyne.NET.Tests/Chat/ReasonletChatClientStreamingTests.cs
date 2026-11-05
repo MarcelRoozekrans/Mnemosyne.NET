@@ -19,7 +19,7 @@ public sealed class ReasonletChatClientStreamingTests : IAsyncDisposable
     private readonly ReasonletCaptureQueue _queue;
 
     public ReasonletChatClientStreamingTests() =>
-        _queue = new ReasonletCaptureQueue(new ReasonletCaptureProcessor(_store, new ReasonletCaptureOptions()), new ReasonletCaptureOptions());
+        _queue = new ReasonletCaptureQueue(new ReasonletCaptureProcessor(_store), new ReasonletCaptureOptions());
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 

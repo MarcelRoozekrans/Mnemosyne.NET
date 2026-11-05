@@ -123,11 +123,11 @@ public static class ServiceCollectionExtensions
         // The last options registered win; both factories resolve them rather than capture them.
         services.AddSingleton(options);
         services.TryAddSingleton(provider => new ReasonletCaptureProcessor(
-            provider.GetRequiredService<IReasonletMemory>(),
-            provider.GetRequiredService<ReasonletCaptureOptions>()));
+            provider.GetRequiredService<IReasonletMemory>()));
         services.TryAddSingleton(provider => new ReasonletCaptureQueue(
             provider.GetRequiredService<ReasonletCaptureProcessor>(),
             provider.GetRequiredService<ReasonletCaptureOptions>()));
+        services.TryAddSingleton<IReasonletCaptureSink>(provider => provider.GetRequiredService<ReasonletCaptureQueue>());
         services.AddHostedService<ReasonletCaptureHostedService>();
         return services;
     }

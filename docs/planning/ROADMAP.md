@@ -157,11 +157,13 @@ Design: [roadmap design](../superpowers/specs/2026-10-21-roadmap-design.md), bui
 **Plan:** `docs/superpowers/plans/2026-11-04-phase-3.5-use-reasonlets.md`
 **Completed:** 2026-11-04
 
-### Phase 3.6: Agent Framework AIContextProvider [status: pending]
+### Phase 3.6: Agent Framework AIContextProvider [status: complete]
 **Goal:** A thread-aware `AIContextProvider` in its own package for Microsoft Agent Framework, usable by Thalos.NET and Daedalus.NET.
 **Surface:** Backend
 **HelpWanted:** no
-**Plan:** _to be written_
+**Design:** `docs/superpowers/specs/2026-11-05-phase-3.6-agent-context-provider-design.md`
+**Plan:** `docs/superpowers/plans/2026-11-05-phase-3.6-agent-context-provider.md`
+**Completed:** 2026-11-05
 
 ### Phase 3.7: Integration docs and samples [status: pending]
 **Goal:** Docsite pages and samples for each integration.

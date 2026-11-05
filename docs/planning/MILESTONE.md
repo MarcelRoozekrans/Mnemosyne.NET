@@ -29,8 +29,8 @@ See the [milestone design](../superpowers/specs/2026-10-30-milestone-3-design.md
 2. Phase 3.2 — Redaction hook [complete]
 3. Phase 3.3 — Human review gate [complete]
 4. Phase 3.4 — AI.Sentinel adapter [complete]
-5. Phase 3.5 — UseReasonlets middleware and find_procedure tool [active]
-6. Phase 3.6 — Agent Framework AIContextProvider [pending]
+5. Phase 3.5 — UseReasonlets middleware and find_procedure tool [complete]
+6. Phase 3.6 — Agent Framework AIContextProvider [complete]
 7. Phase 3.7 — Integration docs and samples [pending]
 
 ## Audit History

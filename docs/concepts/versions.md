@@ -31,11 +31,14 @@ The store decides what a capture produces, in one atomic step. The receipt's `Ki
 
 | Capture | Result | `Kind` |
 |---|---|---|
-| No `ParentId` | A new Reasonlet, at version `1.0`. | `NewReasonlet` |
+| No `ParentId`, and the scope already holds a Reasonlet with the same graph | No new Reasonlet. The capture's outcome is recorded as a run of that Reasonlet. | `ExecutionOnly` |
+| No `ParentId`, and no Reasonlet of the scope has the graph | A new Reasonlet, at version `1.0`. | `NewReasonlet` |
 | `ParentId` set, and the graph is the same as the parent's | No new Reasonlet. The capture's outcome is recorded as a run of the parent. | `ExecutionOnly` |
 | `ParentId` set, and the graph differs | A new version, linked to the parent. | `NewVersion` |
 
 "The same graph" means the same content. The order of nodes, edges and properties doesn't matter.
+
+A capture without a parent is often an automatic one, such as a chat run that recalled nothing. When its graph is already stored in the scope, it counts as a run of that Reasonlet rather than as a duplicate. If several Reasonlets of the scope have the graph, the run goes to an `Active` one before a `PendingReview` one, and then to the newest. Two such captures at the same moment store the graph once: one creates the Reasonlet and the other is recorded as a run of it.
 
 So an agent can always remember with the recalled id as the parent. If it followed the procedure unchanged, Mnemosyne records a run. If it changed the procedure, Mnemosyne stores the change as a version.
 

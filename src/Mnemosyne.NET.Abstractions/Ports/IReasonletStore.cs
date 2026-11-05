@@ -15,6 +15,10 @@ public interface IReasonletStore
     /// <summary>Stores an entry, making the three-way ParentId decision atomically.</summary>
     /// <remarks>
     /// The store decides between a new Reasonlet, an execution only and a new version in one atomic step.
+    /// An entry without a <see cref="ReasonletCapture.ParentId"/> whose graph has the content hash of a Reasonlet already in the scope is an
+    /// execution only of that Reasonlet: an <see cref="ReasonletStatus.Active"/> one before a <see cref="ReasonletStatus.PendingReview"/> one,
+    /// then the newest. Only when the scope holds no Reasonlet with the hash is it a new Reasonlet. Concurrent parentless entries of one graph
+    /// in one scope must store it once, so a store serializes them; a hash may still sit on several Reasonlets of a scope, so it cannot be a unique key.
     /// With <see cref="ReasonletStoreEntry.ReviewRequired"/>, a new Reasonlet or a new version is stored as <see cref="ReasonletStatus.PendingReview"/>
     /// and its receipt says so; an execution only never changes the parent's status.
     /// Error codes: <see cref="MnemosyneErrorCode.Validation"/> when the entry fails <see cref="ReasonletStoreEntry.Validate"/>,

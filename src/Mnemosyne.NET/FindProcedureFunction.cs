@@ -8,9 +8,10 @@ namespace Mnemosyne.NET;
 /// <summary>The <c>find_procedure</c> tool: recalls procedures for a question and returns them as JSON.</summary>
 /// <remarks>
 /// It is written by hand, with a literal schema and source-generated serialization, so it needs no reflection and is safe under AOT.
+/// A match carries no intent: the intent is text extracted from one user's question, and the users of a shared scope would see each other's.
 /// A failed lookup tells the model only that the tool is unavailable, never why, so no store detail reaches the prompt.
 /// </remarks>
-internal sealed class FindProcedureFunction : AIFunction
+public sealed class FindProcedureFunction : AIFunction
 {
     private const int DefaultTop = 3;
     private const int MaxTop = 5;
@@ -28,14 +29,15 @@ internal sealed class FindProcedureFunction : AIFunction
     /// <summary>Initializes the tool.</summary>
     /// <param name="memory">The memory to recall from.</param>
     /// <param name="scope">The scope every lookup runs in.</param>
-    public FindProcedureFunction(IReasonletMemory memory, ReasonletScope scope)
+    internal FindProcedureFunction(IReasonletMemory memory, ReasonletScope scope)
     {
         _memory = memory;
         _scope = scope;
     }
 
     /// <summary>Gets the matches of every successful lookup, in call order. A lookup that found nothing is an empty list.</summary>
-    internal IReadOnlyList<IReadOnlyList<ReasonletMatch>> Lookups => [.. _lookups];
+    /// <remarks>Each read returns a new snapshot, so the result does not change as later lookups run and is safe to read from any thread.</remarks>
+    public IReadOnlyList<IReadOnlyList<ReasonletMatch>> Lookups => [.. _lookups];
 
     /// <inheritdoc />
     public override string Name => ReasonletTools.FindProcedureName;
@@ -82,7 +84,6 @@ internal sealed class FindProcedureFunction : AIFunction
     private static FindProcedureItem ToItem(ReasonletMatch match) => new(
         match.Reasonlet.Id.ToString(),
         match.Reasonlet.Name,
-        match.Reasonlet.Intent,
         match.Reasonlet.Version,
         match.Score.Similarity,
         match.Score.SuccessRate,

@@ -5,7 +5,7 @@ sidebar_position: 3
 
 # Telemetry
 
-Mnemosyne emits OpenTelemetry traces and metrics for every store operation, every recall, every call to an evaluator or a capture guard, and the `UseReasonlets` chat middleware and its background capture. It uses only the in-box `System.Diagnostics` types, so it adds no dependency and stays native AOT clean. Your host decides whether to collect the signals and where to send them.
+Mnemosyne emits OpenTelemetry traces and metrics for every store operation, every recall, every call to an evaluator or a capture guard, the `UseReasonlets` chat middleware, the Agent Framework context provider and the background capture behind both. It uses only the in-box `System.Diagnostics` types, so it adds no dependency and stays native AOT clean. Your host decides whether to collect the signals and where to send them.
 
 ## Turn it on
 
@@ -159,18 +159,20 @@ A remember without a registered guard starts no `mnemosyne.guard` activity.
 
 A rising `Conflict` count on `erase` or `prune` means concurrent writes are colliding; both are safe to retry. On `reject`, `Conflict` is mostly a reviewer's mistake: the Reasonlet is active, or has versions below it. A rising `Unavailable` count means the database can't serve. On `evaluate`, a rising `Unavailable` or `exception` count means the judge is failing; while it is down, runs are stored with the agent's verdict. A `Validation`, `NotFound`, `Conflict` or `Blocked` outcome on `evaluate` means the evaluator adapter has a bug: the facade throws `InvalidOperationException` for it. On `guard`, a rising `Unavailable` or `exception` count means the guard is failing, and remembers are failing with it; a rising `blocked` count on `mnemosyne.guard.inspections` is the guard doing its work, and the `mnemosyne.guard.detector` tag on the activity says which detector. Any error code from a guard other than `Unavailable` is an adapter bug, and `Blocked` is included: a guard blocks with a verdict, not with an error. The facade throws `InvalidOperationException` for it. [Data lifecycle](data-lifecycle.md) and [the store's errors](postgresql.md#errors) explain when each happens.
 
-## Chat pipeline and capture
+## Chat pipeline, agent provider and capture
 
-The `UseReasonlets` middleware and the background capture behind it emit their own signals on the same source and meter. They are not operations: they carry `mnemosyne.outcome` but no `mnemosyne.operation` tag, and they don't count on `mnemosyne.operations`.
+The `UseReasonlets` middleware, the `ReasonletContextProvider` of `Mnemosyne.NET.AgentFramework` and the background capture behind them emit their own signals on the same source and meter. They are not operations: they carry `mnemosyne.outcome` but no `mnemosyne.operation` tag, and they don't count on `mnemosyne.operations`.
 
 | Signal | Type and unit | Tags | Emitted |
 |---|---|---|---|
-| `mnemosyne.chat.recall` | activity | `mnemosyne.outcome` | once per recall the middleware makes for a new question |
-| `mnemosyne.chat.recalls` | counter, `{recall}` | `mnemosyne.outcome`; `mnemosyne.skip_reason` on a skip; `error.type` on an exception | once per recall, and once per call that skips it |
-| `mnemosyne.capture.queue` | counter, `{item}` | `mnemosyne.outcome`; `error.type` on an exception | once per finished call offered to the capture queue |
+| `mnemosyne.chat.recall` | activity | `mnemosyne.outcome`; `mnemosyne.integration` | once per recall the middleware or the provider makes for a new question |
+| `mnemosyne.chat.recalls` | counter, `{recall}` | `mnemosyne.outcome`; `mnemosyne.integration`; `mnemosyne.skip_reason` on a skip; `error.type` on an exception | once per recall, and once per call that skips it |
+| `mnemosyne.capture.queue` | counter, `{item}` | `mnemosyne.outcome`; `error.type` on an exception | once per finished call or run offered to the capture queue |
 | `mnemosyne.capture.run` | activity | `mnemosyne.outcome`, `mnemosyne.skip_reason` on a skip | once per item the worker processes |
 | `mnemosyne.capture.runs` | counter, `{run}` | `mnemosyne.outcome`; `mnemosyne.skip_reason` on a skip; `error.type` on an exception | once per item the worker processes |
 | `mnemosyne.capture.duration` | histogram, seconds | none | once per item the worker processes, cancelled ones included |
+
+The names keep `chat` for compatibility, but both the activity and the counter belong to every integration. `mnemosyne.integration` says which one made the call: `chat` for the `UseReasonlets` middleware and `agent` for the Agent Framework context provider. Filter or group by it to tell them apart.
 
 The outcomes:
 
@@ -181,6 +183,15 @@ The outcomes:
 | `mnemosyne.capture.runs` | `new_reasonlet`, `new_version` or `execution_only` for a stored capture, an error code's name, `exception`, or `skipped` with the reason `no_question`, `no_tool_calls` or `pending_tool_calls` |
 
 A call without a scope counts as `skipped` with `no_scope` whenever `Recall` or `Capture` is on. A request that doesn't end in a new user question counts as `continuation` when `Recall` is on. A recall cut short by the caller's own cancellation counts nothing, and neither does an item the drain cancels: the queue counts that one as `dropped_shutdown`. A judge call from the chat evaluator passes through the middleware uncounted. A memory that the container fails to resolve counts as `exception` on `mnemosyne.chat.recalls`, once per call that needed it for a recall or for `find_procedure`, and a queue that fails to resolve counts as `exception` on `mnemosyne.capture.queue`.
+
+The agent provider counts the same way, with `mnemosyne.integration` set to `agent`, and these rules:
+
+- A run without a scope counts as `skipped` with `no_scope` whenever `Recall` or `Capture` is on.
+- A run whose last user message has no text, such as an image or a function approval response, counts as `continuation`, and only when `Recall` is on. It is still captured.
+- A memory that fails to resolve counts as `exception`, and so does a scope resolver that throws. A throwing resolver gives the run no scope, and the run goes on without recall and capture.
+- A run can count twice. With `Recall` on, `ExposeFindProcedure` on, no tool named `find_procedure` already offered, a last user message without text, and a memory that fails to resolve, the run counts `continuation` and then `exception`.
+
+The capture side is shared. A host or integration that hands a run to `IReasonletCaptureSink` and sees an exception can count it with `ReasonletCaptures.CountFailed`, which adds `exception` to `mnemosyne.capture.queue`; the provider does this when resolving the sink or offering a run throws. Captures carry a `Provenance.Source`: the chat middleware's is `mnemosyne.chat` by default, set with `ReasonletCaptureOptions.Source`, and the agent provider's is `mnemosyne.agent` by default, set with `ReasonletAgentOptions.Source`.
 
 A timeout, a formatter failure, an error result and an exception mark the `mnemosyne.chat.recall` activity as failed, with `error.type` set as described in [Failures on an activity](#failures-on-an-activity). The memory's own `mnemosyne.recall` activity runs inside it. The worker processes items outside the trace of the chat call that queued them, so each `mnemosyne.capture.run` is a root activity, and the facade's and the store's activities for the remember run inside it.
 

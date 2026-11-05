@@ -5,9 +5,10 @@ using Mnemosyne.NET.Abstractions;
 namespace Mnemosyne.NET;
 
 /// <summary>
-/// The OpenTelemetry signals of the chat middleware's recall: a <c>mnemosyne.chat.recall</c> activity and the
-/// <c>mnemosyne.chat.recalls</c> counter for each recall, and the same counter for each call that skips it. It shares the
-/// recall's source and meter.
+/// The OpenTelemetry signals of an integration's recall, the chat middleware's or an agent's: a <c>mnemosyne.chat.recall</c>
+/// activity and the <c>mnemosyne.chat.recalls</c> counter for each recall, and the same counter for each call that skips
+/// it. It shares the recall's source and meter. Every activity and count carries <c>mnemosyne.integration</c>, the
+/// integration that made the call.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -27,14 +28,9 @@ namespace Mnemosyne.NET;
 /// </remarks>
 internal sealed class ChatTelemetry : IDisposable
 {
-    /// <summary>The skip reason of a call with no per-call scope and no default scope.</summary>
-    internal const string NoScopeReason = "no_scope";
-
-    /// <summary>The skip reason of a call whose last message is not a new user question.</summary>
-    internal const string ContinuationReason = "continuation";
-
     private const string ActivityName = "mnemosyne.chat.recall";
     private const string SkipReasonTag = "mnemosyne.skip_reason";
+    private const string IntegrationTag = "mnemosyne.integration";
     private const string ErrorTypeTag = "error.type";
     private const string SkippedOutcome = "skipped";
     private const string InjectedOutcome = "injected";
@@ -43,21 +39,34 @@ internal sealed class ChatTelemetry : IDisposable
     private const string FormatterFailedOutcome = "formatter_failed";
 
     private static readonly Counter<long> Recalls =
-        RecallTelemetry.Meter.CreateCounter<long>("mnemosyne.chat.recalls", "{recall}", "Chat middleware recalls, by outcome.");
+        RecallTelemetry.Meter.CreateCounter<long>("mnemosyne.chat.recalls", "{recall}", "Recalls of an integration, by outcome.");
 
     private readonly Activity? _activity;
+    private readonly string _integration;
     private string _outcome = RecallTelemetry.ExceptionOutcome;
     private string? _errorType;
     private bool _cancelled;
 
-    private ChatTelemetry(Activity? activity) => _activity = activity;
+    private ChatTelemetry(Activity? activity, string integration)
+    {
+        _activity = activity;
+        _integration = integration;
+    }
 
-    /// <summary>Starts the <c>mnemosyne.chat.recall</c> activity, null when no one listens.</summary>
-    internal static ChatTelemetry Start() => new(RecallTelemetry.Source.StartActivity(ActivityName));
+    /// <summary>
+    /// Starts the <c>mnemosyne.chat.recall</c> activity, null when no one listens, tagged with
+    /// <paramref name="integration"/>.
+    /// </summary>
+    internal static ChatTelemetry Start(string integration)
+    {
+        var activity = RecallTelemetry.Source.StartActivity(ActivityName);
+        activity?.SetTag(IntegrationTag, integration);
+        return new(activity, integration);
+    }
 
-    /// <summary>Counts one call that skipped the recall, tagged with <paramref name="reason"/>.</summary>
-    internal static void Skipped(string reason) =>
-        Recalls.Add(1, new TagList { { RecallTelemetry.OutcomeTag, SkippedOutcome }, { SkipReasonTag, reason } });
+    /// <summary>Counts one call of <paramref name="integration"/> that skipped the recall, tagged with <paramref name="reason"/>.</summary>
+    internal static void Skipped(string reason, string integration) =>
+        Recalls.Add(1, new TagList { { RecallTelemetry.OutcomeTag, SkippedOutcome }, { SkipReasonTag, reason }, { IntegrationTag, integration } });
 
     /// <summary>Reports a match that was injected.</summary>
     internal void Injected() => SetOutcome(InjectedOutcome);
@@ -93,7 +102,7 @@ internal sealed class ChatTelemetry : IDisposable
     {
         if (!_cancelled)
         {
-            var tags = new TagList { { RecallTelemetry.OutcomeTag, _outcome } };
+            var tags = new TagList { { RecallTelemetry.OutcomeTag, _outcome }, { IntegrationTag, _integration } };
             if (_errorType is not null)
             {
                 tags.Add(ErrorTypeTag, _errorType);

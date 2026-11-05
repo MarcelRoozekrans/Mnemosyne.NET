@@ -8,7 +8,7 @@ namespace Mnemosyne.NET;
 public static class ReasonletChatClientBuilderExtensions
 {
     private const string MissingQueue =
-        "UseReasonlets captures by default and needs services.AddReasonletCapture(); call it, or set ReasonletChatOptions.Capture = false.";
+        "UseReasonlets captures by default and needs an IReasonletCaptureSink, which services.AddReasonletCapture() registers; call it, or set ReasonletChatOptions.Capture = false.";
 
     private const string MissingMemory = "UseReasonlets needs an IReasonletMemory; register one, for example with services.AddMnemosyne().";
 
@@ -24,8 +24,8 @@ public static class ReasonletChatClientBuilderExtensions
     /// </para>
     /// <para>
     /// When the pipeline is built, it resolves the registered <see cref="TimeProvider"/> or <see cref="TimeProvider.System"/>,
-    /// and checks that <see cref="IReasonletMemory"/> and, when <see cref="ReasonletChatOptions.Capture"/> is on, the capture
-    /// queue that <c>AddReasonletCapture</c> registers are registered. It resolves the memory and the queue on first use, so
+    /// and checks that <see cref="IReasonletMemory"/> and, when <see cref="ReasonletChatOptions.Capture"/> is on, the <see cref="IReasonletCaptureSink"/>
+    /// that <c>AddReasonletCapture</c> registers are registered. It resolves the memory and the sink on first use, so
     /// a memory whose evaluator judges with this same client, as <c>AddMnemosyneChatEvaluator</c> does with the unkeyed
     /// client, does not form a cycle. A container without <see cref="IServiceProviderIsService"/> cannot be asked, so there
     /// both checks are skipped and the memory and the queue are still resolved on first use: a missing memory then counts as
@@ -75,21 +75,21 @@ public static class ReasonletChatClientBuilderExtensions
 
             var time = services.GetService<TimeProvider>() ?? TimeProvider.System;
             var memory = new Lazy<IReasonletMemory>(services.GetRequiredService<IReasonletMemory>, LazyThreadSafetyMode.PublicationOnly);
-            Lazy<ReasonletCaptureQueue?> queue;
+            Lazy<IReasonletCaptureSink?> queue;
             if (!options.Capture)
             {
-                queue = new Lazy<ReasonletCaptureQueue?>(() => null);
+                queue = new Lazy<IReasonletCaptureSink?>(() => null);
             }
             else
             {
                 // A container that cannot say whether a service is registered skips the check: resolving the queue here
                 // would bring the cycle back, so a missing queue shows on the first call, counted by the hand-off.
-                if (registry is not null && !registry.IsService(typeof(ReasonletCaptureQueue)))
+                if (registry is not null && !registry.IsService(typeof(IReasonletCaptureSink)))
                 {
                     throw new InvalidOperationException(MissingQueue);
                 }
 
-                queue = new Lazy<ReasonletCaptureQueue?>(services.GetRequiredService<ReasonletCaptureQueue>, LazyThreadSafetyMode.PublicationOnly);
+                queue = new Lazy<IReasonletCaptureSink?>(services.GetRequiredService<IReasonletCaptureSink>, LazyThreadSafetyMode.PublicationOnly);
             }
 
             return new ReasonletChatClient(inner, memory, queue, options, time);
