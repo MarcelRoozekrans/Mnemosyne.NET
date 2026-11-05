@@ -92,7 +92,7 @@ Memory failures never break the chat call. An error, a timeout, an exception or 
 
 The middleware puts the exchange in a bounded queue, `ReasonletCaptureOptions.Capacity` items, 256 by default. One worker remembers the items one at a time. A full queue drops the new item and counts it as `dropped_full`.
 
-The worker turns the exchange into a Reasonlet. The parent is the injected recall, else the lookup match whose graph equals the run, else the top match of the first `find_procedure` lookup that found anything. The `find_procedure` calls and their results are taken out of the transcript first. A guide on capture and review is planned for what happens next: the graph, the guard and the review gate.
+The worker turns the exchange into a Reasonlet. The parent is the injected recall, else the lookup match whose graph equals the run, else the top match of the first `find_procedure` lookup that found anything. The `find_procedure` calls and their results are taken out of the transcript first. [Capture, redaction and review](capture-and-review.md) covers what happens next: the graph, the guard and the review gate.
 
 The sample waits for each capture with a listener on the `mnemosyne.capture.runs` counter, so it never sleeps for a fixed time. It checks the outcome of each:
 
@@ -138,6 +138,6 @@ The rest was observed by hand, not checked by the sample. AI.Sentinel's PII dete
 - A call that threw or was cancelled is not captured, and neither is a stream that is not read to the end.
 - A call with no scope passes through untouched.
 - A capture needs a successful tool call. A chat with no tools stores nothing.
-- Agent Framework agents should use the Agent Framework context provider, not `UseReasonlets`. A guide for it is planned.
+- Agent Framework agents should use the [Agent Framework context provider](agent-framework.md), not `UseReasonlets`.
 
 The sample checks its own receipts and exits with code 1 if one differs, and the repository's CI runs it. See [Samples](../samples.md#chat-pipeline) for the output and what CI does with it.

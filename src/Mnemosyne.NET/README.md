@@ -119,9 +119,9 @@ Feedback with `Worked` null keeps an earlier verdict, so a verdict can be change
 
 Register an `ICaptureGuard` and `RememberAsync` asks it before anything else is done with a capture. The guard sees the capture after it validates, and before the intent is resolved, the embedding is made and the judge runs. It answers with a verdict: allow, or block with the name of the detector that fired.
 
-A blocked capture is not stored. The remember fails with the error code `Blocked`. A guard that is down fails closed: if it throws, times out after `MnemosyneOptions.GuardTimeout` or answers `Unavailable`, the remember fails with `Unavailable` and nothing is stored. Only `RememberAsync` is guarded, not `RecordExecutionAsync`. Without a guard, every capture is remembered as before.
+A blocked capture is not stored. The remember fails with the error code `Blocked`. A guard that is down fails closed: if it throws, times out after `MnemosyneOptions.GuardTimeout` or answers `Unavailable`, the remember fails with `Unavailable` and nothing is stored. Only `RememberAsync` is guarded. `RecordExecutionAsync` takes no graph and stores no question, but an optional question and answer reach the evaluator without passing the guard. Without a guard, every capture is remembered as before.
 
-An AI.Sentinel adapter for the guard arrives in a later package.
+The `Mnemosyne.NET.Sentinel` package is a ready-made guard that runs AI.Sentinel's detectors: see [Capture, redaction and review](https://marcelroozekrans.github.io/Mnemosyne.NET/guides/capture-and-review).
 
 ## Human review gate
 
@@ -243,6 +243,9 @@ A skipped recall carries the tag `mnemosyne.skip_reason` with `no_scope` or `con
 - [Versions and lineage](https://marcelroozekrans.github.io/Mnemosyne.NET/concepts/versions): how a capture becomes a new Reasonlet, a new version or a run.
 - [Judging runs with Minos](https://marcelroozekrans.github.io/Mnemosyne.NET/guides/minos-evaluator): a ready-made evaluator, its threshold, failures and privacy.
 - [Judging runs with a chat model](https://marcelroozekrans.github.io/Mnemosyne.NET/guides/chat-evaluator): an evaluator for any chat client, its criteria, reply format and failures.
+- [The chat pipeline](https://marcelroozekrans.github.io/Mnemosyne.NET/guides/chat-pipeline): `UseReasonlets`, recall into the prompt, background capture and `find_procedure`.
+- [Capture, redaction and review](https://marcelroozekrans.github.io/Mnemosyne.NET/guides/capture-and-review): the graph a capture becomes, the guard, the AI.Sentinel adapter and the review gate.
+- [Agent Framework](https://marcelroozekrans.github.io/Mnemosyne.NET/guides/agent-framework): a context provider for Agent Framework agents.
 - [Data lifecycle](https://marcelroozekrans.github.io/Mnemosyne.NET/guides/data-lifecycle): the review gate, erasure and retention.
 - [Telemetry](https://marcelroozekrans.github.io/Mnemosyne.NET/guides/telemetry): the recall, evaluate and guard activities and metrics, the chat middleware's and the background capture's signals, alongside the store's.
 

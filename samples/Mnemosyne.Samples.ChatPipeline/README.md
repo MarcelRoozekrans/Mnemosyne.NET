@@ -52,3 +52,5 @@ The guard blocks at AI.Sentinel's `High` severity by default. Its PII detector r
 `HashingEmbeddingGenerator` lets the sample run offline: it hashes words into 256 buckets, so it sees only shared words. It is deterministic, so the checks are stable, but **it is not a real model**. The second question in act 2 shares most of its words with the first for that reason. The [store-and-recall README](../Mnemosyne.Samples.StoreAndRecall/README.md) shows how to register a real embedding model.
 
 The host tools return fixed strings.
+
+The guides explain the code: [the chat pipeline](https://marcelroozekrans.github.io/Mnemosyne.NET/guides/chat-pipeline) and [capture, redaction and review](https://marcelroozekrans.github.io/Mnemosyne.NET/guides/capture-and-review).
