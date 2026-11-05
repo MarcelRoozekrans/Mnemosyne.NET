@@ -194,7 +194,7 @@ Act 3. Ask "Which invoice was paid with card 4111 1111 1111 1111?" through a cli
 - **Act 2.** Once approved, the Reasonlet is recalled for a differently worded question and offered to the model. The run only adds an execution to it, so there is nothing new to review.
 - **Act 3.** The question holds a card number, which AI.Sentinel's PII detector rates Critical, above the guard's default of `High`. The capture is blocked, so the store never sees it. This tool shape is new, so without the guard it would be a second pending review.
 
-The detector matches the digit pattern of a card number and does not check the Luhn sum, so any 16-digit number blocks.
+The detector matches the digit pattern of a card number and does not check the Luhn sum, so a 16-digit card-like number blocks whether or not its Luhn sum is valid. Numbers of 12, 15 and 17 digits did not block when tried.
 
 The sample checks all of this itself and exits with code 1 if a receipt differs, so a change to capture, review or the guard that broke what this page shows would fail the run.
 

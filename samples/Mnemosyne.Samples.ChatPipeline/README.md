@@ -43,7 +43,7 @@ Act 3. Ask "Which invoice was paid with card 4111 1111 1111 1111?" through a cli
   Capture outcome: Blocked. Pending reviews: 0. Matches for the card question: 0.
 ```
 
-The guard blocks at AI.Sentinel's `High` severity by default. Its PII detector rates a card number Critical. It matches the digit pattern and does not check the Luhn sum, so a 16-digit number blocks whether or not it is a real card number.
+The guard blocks at AI.Sentinel's `High` severity by default. Its PII detector rates a card number Critical. It matches the digit pattern and does not check the Luhn sum, so a 16-digit card-like number blocks whether or not its Luhn sum is valid. Numbers of 12, 15 and 17 digits did not block when tried.
 
 ## The stand-ins
 

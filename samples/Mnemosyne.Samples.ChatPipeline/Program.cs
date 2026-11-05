@@ -13,7 +13,7 @@ using ZeroAlloc.Results;
 // model, so the sample needs no API key. The pipeline is UseReasonlets over UseFunctionInvocation. AI.Sentinel guards
 // what is stored, and the review gate holds each new Reasonlet back until a person approves it.
 // The output reads as a walkthrough in three acts. The sample checks its own receipts and exits 1 if they differ, so
-// what the docs say about the chat pipeline is tested in CI.
+// it fails when what the docs quote about the chat pipeline no longer holds.
 //
 // Needs PostgreSQL 15 or later with pgvector 0.8.0 or later: `docker compose up -d --wait` next to this file starts
 // one. MNEMOSYNE_SAMPLE_PG overrides the connection string. The sample migrates the mnemosyne schema with 256
