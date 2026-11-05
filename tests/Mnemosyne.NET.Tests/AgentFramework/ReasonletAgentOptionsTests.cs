@@ -1,5 +1,6 @@
 using Microsoft.Agents.AI;
 using Mnemosyne.NET.Abstractions;
+using Mnemosyne.NET.Abstractions.Validation;
 using Mnemosyne.NET.AgentFramework;
 using Xunit;
 
@@ -38,6 +39,10 @@ public sealed class ReasonletAgentOptionsTests
         Assert.Null(ReasonletAgentOptions.DefaultScope(new NamedAgent(name), null));
 
     [Fact]
+    public void DefaultScopeRejectsANullAgent() =>
+        Assert.Throws<ArgumentNullException>(() => ReasonletAgentOptions.DefaultScope(null!, null));
+
+    [Fact]
     public void DefaultScopeHasNoSubject() =>
         Assert.Null(ReasonletAgentOptions.DefaultScope(new NamedAgent("support"), null)!.SubjectId);
 
@@ -60,6 +65,7 @@ public sealed class ReasonletAgentOptionsTests
         { new ReasonletAgentOptions { ScopeResolver = null! }, "ScopeResolver" },
         { new ReasonletAgentOptions { RecallTimeout = TimeSpan.Zero }, "RecallTimeout" },
         { new ReasonletAgentOptions { RecallTimeout = TimeSpan.FromSeconds(-2) }, "RecallTimeout" },
+        { new ReasonletAgentOptions { RecallTimeout = TimeoutCheck.Max + TimeSpan.FromMilliseconds(1) }, "RecallTimeout" },
         { new ReasonletAgentOptions { MinSimilarity = 1.5 }, "MinSimilarity" },
         { new ReasonletAgentOptions { MinSimilarity = -0.1 }, "MinSimilarity" },
         { new ReasonletAgentOptions { Source = "" }, "Source" },

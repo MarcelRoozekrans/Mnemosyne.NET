@@ -48,8 +48,12 @@ public sealed class ReasonletAgentOptions
     /// <param name="agent">The agent that is running.</param>
     /// <param name="session">The session of the run, which this resolver ignores.</param>
     /// <returns>The scope, or null when the agent has no name, so memory is skipped.</returns>
-    public static ReasonletAgentScope? DefaultScope(AIAgent agent, AgentSession? session) =>
-        string.IsNullOrWhiteSpace(agent.Name) ? null : new ReasonletAgentScope(new ReasonletScope(agent.Name));
+    /// <exception cref="ArgumentNullException"><paramref name="agent"/> is null.</exception>
+    public static ReasonletAgentScope? DefaultScope(AIAgent agent, AgentSession? session)
+    {
+        ArgumentNullException.ThrowIfNull(agent);
+        return string.IsNullOrWhiteSpace(agent.Name) ? null : new ReasonletAgentScope(new ReasonletScope(agent.Name));
+    }
 
     /// <summary>Validates the options.</summary>
     /// <returns>Success, or a validation failure whose path is the offending property.</returns>
