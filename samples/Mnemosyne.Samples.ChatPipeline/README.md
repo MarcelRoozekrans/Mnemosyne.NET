@@ -24,9 +24,9 @@ The sample migrates the `mnemosyne` schema with 256 dimensions, so give it a dat
 2. Builds each chat client as `UseReasonlets(...)` outside `UseFunctionInvocation(...)`.
 3. Act 1: asks "How do I refund an order?". The scripted model calls `orders_get` and `payments_refund`. The capture is stored as a pending review, and recall for the same question finds nothing, because a pending Reasonlet is never recalled.
 4. Act 2: approves the Reasonlet and asks "How do I refund an order for a customer?". The first call to the model carries the recalled Reasonlet in its system text. The capture only records a run.
-5. Act 3: asks a question with a card number through a client with another tool shape. AI.Sentinel blocks the capture, so nothing is stored. Without the guard, this shape would have become a new pending Reasonlet.
+5. Act 3: asks a question with a card number through a client with another tool shape. AI.Sentinel blocks the capture, so nothing is stored.
 6. Waits for each capture with `CaptureRunWatcher`, which listens to the `mnemosyne.capture.runs` counter, so the sample never sleeps for a fixed time.
-7. Checks every receipt and exits 1 if one differs.
+7. Checks every receipt and exits 1 if one differs. For act 3 it checks the `Blocked` outcome, that no review is pending and that recall finds nothing.
 8. Erases the scope with `EraseAsync`.
 
 The output, without the wiring lines:
@@ -43,7 +43,7 @@ Act 3. Ask "Which invoice was paid with card 4111 1111 1111 1111?" through a cli
   Capture outcome: Blocked. Pending reviews: 0. Matches for the card question: 0.
 ```
 
-The guard blocks at AI.Sentinel's `High` severity by default. Its PII detector rates a card number Critical. It matches the digit pattern and does not check the Luhn sum, so a 16-digit card-like number blocks whether or not its Luhn sum is valid. Numbers of 12, 15 and 17 digits did not block when tried.
+The guard blocks at AI.Sentinel's `High` severity by default. The rest of this paragraph was observed by hand and is not checked by the sample. The PII detector rates a card number Critical, and without the guard this shape would have become a new pending Reasonlet. The detector matches the digit pattern and does not check the Luhn sum: 16-digit numbers blocked whether or not the sum was valid, and numbers of 12, 15 and 17 digits did not block.
 
 ## The stand-ins
 

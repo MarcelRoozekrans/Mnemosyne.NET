@@ -94,7 +94,7 @@ Run 2. Ask "How do I refund an order for a customer?" on a fresh session.
   Capture outcome: execution_only. Runs of the Reasonlet: 2.
 ```
 
-The sample asserts that the system text of the first call contains the name and that no user or assistant message of the run does. That is the point of returning instructions and not a message. It also asserts that the capture outcome is `execution_only`, that recall for the second question returns the same single Reasonlet and that it now has 2 runs.
+The sample asserts that the instructions of the first call contain the name and that no message of any role in the run does. That is the point of returning instructions and not a message. It also asserts that the capture outcome is `execution_only`, that recall for the second question returns the same single Reasonlet and that it now has 2 runs.
 
 ### At the end of a run
 
@@ -102,8 +102,8 @@ With `Capture` on, the provider hands the finished run to the registered `IReaso
 
 The run is a `ReasonletCaptureRun`, the record a sink takes. The provider fills it from what Agent Framework gives the end hook:
 
-- **Messages.** The run's request messages as the agent received them, followed by all the response messages. The injected instructions are not among them, because they were never messages. The provider passes on what Agent Framework calls the run's request messages. If that holds the whole history and not only the new messages, so does the capture. The sample does not check that, and a question is picked as in [From transcript to graph](capture-and-review.md#from-transcript-to-graph), from the last user message with text.
-- **Parent.** The Reasonlet that was suggested to the run, if any. A rerun is then recorded as an execution of it and not as a new Reasonlet. The sample's Run 2 shows this: its capture is `execution_only`, which means the worker saw the Reasonlet as the parent. In the code that is the injected parent, since the run made no lookups.
+- **Messages.** The run's request messages as the agent received them, followed by all the response messages. The injected instructions are not among them, because they were never messages. The provider passes on what Agent Framework calls the run's request messages. It builds on the base `AIContextProvider` with no filter of its own, and Agent Framework 1.24 documents that the default keeps only the external request messages, so earlier history is not captured. The sample does not check that. A question is picked as in [From transcript to graph](capture-and-review.md#from-transcript-to-graph), from the last user message with text.
+- **Parent.** The Reasonlet that was suggested to the run, if any. The provider sets it as the capture's injected parent, and the worker uses the injected parent before it looks at lookups. A parent gives the capture a lineage: if the run's graph differs from the parent's, the capture becomes a `NewVersion` of it and not a `NewReasonlet`. The sample does not check the parent. Its Run 2 is `execution_only`, but a capture without a parent that has the graph a scope already holds is `execution_only` too, so Run 2 would look the same without it.
 - **Lookups.** The matches of the `find_procedure` lookups the model made, if the tool was on.
 - **Duration, source and run id.** The run's duration, `ReasonletAgentOptions.Source`, and the id of the last response message.
 - **Scope and subject.** What the resolver returned at the start.

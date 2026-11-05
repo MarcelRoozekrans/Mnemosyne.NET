@@ -134,7 +134,7 @@ static async Task<int> Walkthrough(IServiceProvider provider, IReasonletMemory m
     Console.WriteLine($"Act 1. Ask \"{RefundQuestion}\" and let the capture run in the background.");
     var reply = await RunAsync(refundClient, RefundQuestion, ct);
     RequireEqual(reply, RefundAnswer, "Act 1: the reply");
-    var outcome1 = await watcher.NextOutcomeAsync(TimeSpan.FromSeconds(30), ct);
+    var outcome1 = await NextOutcomeAsync(watcher, "Act 1", ct);
     RequireEqual(outcome1, "new_reasonlet", "Act 1: the capture outcome");
     var pending = Require(await memory.ListPendingAsync(scope, 10, null, ct), "Act 1: list pending");
     RequireEqual(pending.Count, 1, "Act 1: the pending reviews");
@@ -152,7 +152,7 @@ static async Task<int> Walkthrough(IServiceProvider provider, IReasonletMemory m
     var firstCall = refunds.Requests.Count;
     reply = await RunAsync(refundClient, RefundAgainQuestion, ct);
     RequireEqual(reply, RefundAnswer, "Act 2: the reply");
-    var outcome2 = await watcher.NextOutcomeAsync(TimeSpan.FromSeconds(30), ct);
+    var outcome2 = await NextOutcomeAsync(watcher, "Act 2", ct);
     RequireEqual(outcome2, "execution_only", "Act 2: the capture outcome");
     var injected = refunds.SystemText(firstCall).Contains(name, StringComparison.Ordinal);
     RequireEqual(injected, true, "Act 2: whether the first call carried the recalled Reasonlet");
@@ -169,7 +169,7 @@ static async Task<int> Walkthrough(IServiceProvider provider, IReasonletMemory m
     var invoiceClient = BuildClient(invoices, provider, scope);
     reply = await RunAsync(invoiceClient, CardQuestion, ct);
     RequireEqual(reply, InvoiceAnswer, "Act 3: the reply");
-    var outcome3 = await watcher.NextOutcomeAsync(TimeSpan.FromSeconds(30), ct);
+    var outcome3 = await NextOutcomeAsync(watcher, "Act 3", ct);
     RequireEqual(outcome3, "Blocked", "Act 3: the capture outcome");
     var pending3 = Require(await memory.ListPendingAsync(scope, 10, null, ct), "Act 3: list pending");
     RequireEqual(pending3.Count, 0, "Act 3: the pending reviews");
@@ -179,6 +179,19 @@ static async Task<int> Walkthrough(IServiceProvider provider, IReasonletMemory m
     Console.WriteLine();
 
     return 0;
+}
+
+// Waits for the capture of an act, and names the act when none finishes in time.
+static async Task<string> NextOutcomeAsync(CaptureRunWatcher watcher, string act, CancellationToken ct)
+{
+    try
+    {
+        return await watcher.NextOutcomeAsync(TimeSpan.FromSeconds(30), ct);
+    }
+    catch (TimeoutException ex)
+    {
+        throw new SampleFailure($"{act}: {ex.Message}");
+    }
 }
 
 // The host tools return fixed strings. The names match the scripted calls.

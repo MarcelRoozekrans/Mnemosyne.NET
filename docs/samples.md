@@ -192,11 +192,11 @@ Act 3. Ask "Which invoice was paid with card 4111 1111 1111 1111?" through a cli
 
 - **Act 1.** The capture is a new procedure, so `RequireReview` stores it as pending. A pending Reasonlet is never recalled, so the same question finds no match.
 - **Act 2.** Once approved, the Reasonlet is recalled for a differently worded question and offered to the model. The run only adds an execution to it, so there is nothing new to review.
-- **Act 3.** The question holds a card number, which AI.Sentinel's PII detector rates Critical, above the guard's default of `High`. The capture is blocked, so the store never sees it. This tool shape is new, so without the guard it would be a second pending review.
+- **Act 3.** The question holds a card number. The capture is blocked at the guard's default of `High`, so the store never sees it.
 
-The detector matches the digit pattern of a card number and does not check the Luhn sum, so a 16-digit card-like number blocks whether or not its Luhn sum is valid. Numbers of 12, 15 and 17 digits did not block when tried.
+The sample checks the `Blocked` outcome, that no review is pending and that recall for the question finds nothing. It also checks the other receipts of acts 1 and 2, and exits with code 1 if one differs.
 
-The sample checks all of this itself and exits with code 1 if a receipt differs, so a change to capture, review or the guard that broke what this page shows would fail the run.
+The rest was observed by hand and is not checked. AI.Sentinel's PII detector rates a card number Critical. This tool shape is new, so without the guard it would be a second pending review. The detector matches the digit pattern and does not check the Luhn sum: 16-digit numbers blocked whether or not the sum was valid, and numbers of 12, 15 and 17 digits did not block.
 
 The repository's CI runs the sample on every pull request to `main` and every push to `main`, so a change that broke these receipts would fail CI.
 
@@ -222,7 +222,7 @@ The sample also uses the same offline embedding stand-in as store and recall, so
 1. Registers the PostgreSQL store, an embedding generator, the facade with `AddMnemosyne` and the capture queue. The review gate is off. Then it runs the migrations.
 2. Builds a `ChatClientAgent` with a `ReasonletContextProvider` in its `AIContextProviders`, and runs it twice through a scripted client that plays the model:
    - **Run 1**, "How do I refund an order?": the model calls `orders_get` and `payments_refund`. The capture stores a new Reasonlet, and the first call to the model carried no recalled Reasonlet;
-   - **Run 2**, "How do I refund an order for a customer?" on a fresh session: the provider recalls the Reasonlet and adds it to the run's instructions. The sample checks that the name is in the system text of the first call and in no user or assistant message.
+   - **Run 2**, "How do I refund an order for a customer?" on a fresh session: the provider recalls the Reasonlet and adds it to the run's instructions. The sample checks that the name is in the instructions of the first call and in no message of any role.
 3. After each run, waits for its capture with a listener on the `mnemosyne.capture.runs` counter, so it never sleeps for a fixed time. It checks every reply, outcome and count shown below along the way, and exits with code 1 if not.
 4. Erases the scope, so a run leaves nothing behind.
 
@@ -251,7 +251,7 @@ Run 2. Ask "How do I refund an order for a customer?" on a fresh session.
 ```
 
 - **Run 1.** Nothing is known yet, so the first call carries no recalled Reasonlet. The capture is a new procedure, and it is recallable at once because the review gate is off.
-- **Run 2.** The provider recalls the Reasonlet for a differently worded question and returns it as the run's instructions. The sample finds it in the system text of the first call and in no user or assistant message. The run only adds an execution to the Reasonlet, which now has 2 runs.
+- **Run 2.** The provider recalls the Reasonlet for a differently worded question and returns it as the run's instructions. The sample finds it in the instructions of the first call and in no message of any role. The run only adds an execution to the Reasonlet, which now has 2 runs.
 
 The sample scopes its Reasonlets with a `ScopeResolver` that returns a fixed scope. Without one, the provider uses the agent's name as the scope.
 

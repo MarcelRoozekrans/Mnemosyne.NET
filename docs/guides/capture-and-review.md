@@ -41,7 +41,7 @@ The question and the answer are copied as they are: nothing in the transcript st
 | A parent, and the graph of the parent | `ExecutionOnly`: a run is recorded and nothing new is stored |
 | No parent, and the scope already holds this graph | `ExecutionOnly`, on the Reasonlet that holds it |
 
-The worker counts the kind on `mnemosyne.capture.runs` ([Telemetry](telemetry.md#chat-pipeline-agent-provider-and-capture) lists its outcomes) as `new_reasonlet`, `new_version` or `execution_only`. The sample shows two of them. Act 1 is `new_reasonlet`. Act 2 asks a differently worded question that recalls the Reasonlet from act 1, and the capture is `execution_only`. The worker takes the recalled Reasonlet as the capture's parent, and the run has the parent's graph. [Background capture](chat-pipeline.md#background-capture) explains how the worker picks the parent. The sample does not produce `new_version`.
+The worker counts the kind on `mnemosyne.capture.runs` ([Telemetry](telemetry.md#chat-pipeline-agent-provider-and-capture) lists its outcomes) as `new_reasonlet`, `new_version` or `execution_only`. The sample shows two of them. Act 1 is `new_reasonlet`. Act 2 asks a differently worded question that recalls the Reasonlet from act 1, and the capture is `execution_only`. The worker takes the recalled Reasonlet as the capture's parent, and the run has the parent's graph. The outcome would be the same without the parent, since the scope already holds that graph. [Background capture](chat-pipeline.md#background-capture) explains how the worker picks the parent. The sample does not produce `new_version`.
 
 ## The capture guard
 

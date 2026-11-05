@@ -149,13 +149,13 @@ static async Task<int> Walkthrough(IServiceProvider provider, IReasonletMemory m
     RequireEqual(reply, RefundAnswer, "Run 2: the reply");
     var outcome2 = await NextOutcomeAsync(watcher, "Run 2", ct);
     RequireEqual(outcome2, "execution_only", "Run 2: the capture outcome");
-    RequireEqual(scripted.SystemText(firstCall).Contains(name, StringComparison.Ordinal), true, "Run 2: whether the first call carried the recalled Reasonlet in its instructions");
+    var instructions = scripted.Options[firstCall]?.Instructions ?? string.Empty;
+    RequireEqual(instructions.Contains(name, StringComparison.Ordinal), true, "Run 2: whether the first call carried the recalled Reasonlet in its instructions");
     var asMessage = scripted.Requests
         .Skip(firstCall)
         .SelectMany(request => request)
-        .Where(message => message.Role == ChatRole.User || message.Role == ChatRole.Assistant)
         .Any(message => message.Text.Contains(name, StringComparison.Ordinal));
-    RequireEqual(asMessage, false, "Run 2: whether a user or assistant message carried the Reasonlet");
+    RequireEqual(asMessage, false, "Run 2: whether a message of any role carried the Reasonlet");
     var again = Require(await memory.RecallAsync(new ReasonletQuery { Scope = scope, Question = RefundAgainQuestion, Top = 3 }, ct), "Run 2: recall");
     RequireEqual(again.Count, 1, "Run 2: the matches for the second question");
     RequireEqual(again[0].Reasonlet.Name, name, "Run 2: the name of the match");

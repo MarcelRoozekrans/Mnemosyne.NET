@@ -24,7 +24,7 @@ The sample migrates the `mnemosyne` schema with 256 dimensions, so give it a dat
 2. Runs `MigrateAsync`.
 3. Builds the agent with the two host tools in its `ChatOptions.Tools` and a `ReasonletContextProvider`. The provider's `ScopeResolver` returns a fixed scope, so the sample can erase it. The default resolver would use the agent's name.
 4. Run 1: asks "How do I refund an order?". The scripted model calls `orders_get` and `payments_refund`. The capture stores a new Reasonlet. The first call to the model carried no recalled Reasonlet, since nothing was known yet.
-5. Run 2: asks "How do I refund an order for a customer?" on a fresh session. The provider recalls the Reasonlet and adds it to the run's instructions. The sample checks that the Reasonlet's name is in the system text of the first call, and that no user or assistant message of the run holds it. The capture only records an execution, so the Reasonlet now has 2 runs.
+5. Run 2: asks "How do I refund an order for a customer?" on a fresh session. The provider recalls the Reasonlet and adds it to the run's instructions. The sample checks that the Reasonlet's name is in the instructions of the first call, and that no message of any role in the run holds it. The capture only records an execution, so the Reasonlet now has 2 runs.
 6. After each run, waits for its capture with `CaptureRunWatcher`, which listens to the `mnemosyne.capture.runs` counter, so the sample never sleeps for a fixed time. It checks every receipt along the way and exits 1 if one differs.
 7. Erases the scope with `EraseAsync`, whatever happened above.
 
