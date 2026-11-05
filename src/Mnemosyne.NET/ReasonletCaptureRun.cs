@@ -42,7 +42,16 @@ public sealed record ReasonletCaptureRun
     public ReasonletId? InjectedParent { get; init; }
 
     /// <summary>The matches each <c>find_procedure</c> lookup of the run returned, in call order.</summary>
-    public IReadOnlyList<IReadOnlyList<ReasonletMatch>> Lookups { get; init; } = [];
+    /// <exception cref="ArgumentNullException">The value is null.</exception>
+    public IReadOnlyList<IReadOnlyList<ReasonletMatch>> Lookups
+    {
+        get;
+        init
+        {
+            ArgumentNullException.ThrowIfNull(value);
+            field = value;
+        }
+    } = [];
 
     /// <summary>How long the run took.</summary>
     public TimeSpan Duration { get; init; }

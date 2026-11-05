@@ -359,6 +359,10 @@ public sealed class ReasonletCaptureQueueTests
         Assert.Throws<ArgumentNullException>(() => new ReasonletCaptureRun(new ReasonletScope("scope"), null!));
 
     [Fact]
+    public void ARunRejectsNullLookups() =>
+        Assert.Throws<ArgumentNullException>(() => new ReasonletCaptureRun(new ReasonletScope("scope"), []) { Lookups = null! });
+
+    [Fact]
     public async Task QueueIsTheSinkIntegrationsSee()
     {
         await using var queue = Queue(CaptureTestData.Memory());
