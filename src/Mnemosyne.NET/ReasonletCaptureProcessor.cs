@@ -18,8 +18,7 @@ namespace Mnemosyne.NET;
 /// </para>
 /// </remarks>
 /// <param name="memory">The memory to remember into.</param>
-/// <param name="options">The capture options, for the provenance source.</param>
-internal sealed class ReasonletCaptureProcessor(IReasonletMemory memory, ReasonletCaptureOptions options)
+internal sealed class ReasonletCaptureProcessor(IReasonletMemory memory)
 {
     /// <summary>Remembers one item, and counts, times and traces it.</summary>
     /// <param name="item">The finished call.</param>
@@ -40,7 +39,7 @@ internal sealed class ReasonletCaptureProcessor(IReasonletMemory memory, Reasonl
             var details = new TranscriptCaptureDetails
             {
                 Scope = item.Scope,
-                Provenance = new ReasonletProvenance { Source = options.Source, RunId = item.ResponseId, SubjectId = item.SubjectId },
+                Provenance = new ReasonletProvenance { Source = item.Source, RunId = item.ResponseId, SubjectId = item.SubjectId },
                 Outcome = new ReasonletOutcome(Succeeded(messages, item.FinishReason), item.Duration, null),
             };
             var built = ReasonletTranscript.ToCapture(messages, details);

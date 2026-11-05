@@ -127,7 +127,7 @@ public sealed class UseReasonletsTests
     public async Task WithoutIsServiceTheQueueIsResolvedOnFirstUseOnly()
     {
         var memory = CaptureTestData.Memory();
-        var queue = new ReasonletCaptureQueue(new ReasonletCaptureProcessor(memory, new ReasonletCaptureOptions()), new ReasonletCaptureOptions());
+        var queue = new ReasonletCaptureQueue(new ReasonletCaptureProcessor(memory), new ReasonletCaptureOptions());
         await using var _ = queue;
         var provider = new MinimalProvider { [typeof(IReasonletMemory)] = () => memory, [typeof(ReasonletCaptureQueue)] = () => queue };
 

@@ -119,7 +119,7 @@ public sealed class CaptureTelemetryTests
         using var capture = new TelemetryCapture();
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(
-            async () => await new ReasonletCaptureProcessor(memory, new ReasonletCaptureOptions()).ProcessAsync(CaptureTestData.Item(), cts.Token));
+            async () => await new ReasonletCaptureProcessor(memory).ProcessAsync(CaptureTestData.Item(), cts.Token));
 
         var activity = Single(capture);
         Assert.NotEqual(ActivityStatusCode.Error, activity.Status);
@@ -204,7 +204,7 @@ public sealed class CaptureTelemetryTests
     }
 
     private static async Task Process(FakeReasonletMemory memory, ReasonletCaptureItem item) =>
-        await new ReasonletCaptureProcessor(memory, new ReasonletCaptureOptions()).ProcessAsync(item, Ct);
+        await new ReasonletCaptureProcessor(memory).ProcessAsync(item, Ct);
 
     private static Activity Single(TelemetryCapture capture)
     {

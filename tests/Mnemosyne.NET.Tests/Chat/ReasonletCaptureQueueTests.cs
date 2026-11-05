@@ -270,10 +270,116 @@ public sealed class ReasonletCaptureQueueTests
         Assert.Equal("q1", (await gate.EnteredAsync()).Question);
     }
 
-    private static ReasonletCaptureQueue Queue(FakeReasonletMemory memory, int capacity = 256, TimeSpan? drainTimeout = null)
+    [Fact]
+    public async Task TryCaptureDecidesPendingAtHandOff()
     {
-        var options = new ReasonletCaptureOptions { Capacity = capacity, DrainTimeout = drainTimeout ?? TimeSpan.FromSeconds(30) };
-        return new ReasonletCaptureQueue(new ReasonletCaptureProcessor(memory, options), options);
+        // An outer function invocation layer marks the call informational after the hand-off, while the run may still wait
+        // in the queue; the hand-off keeps what was true then.
+        var call = new FunctionCallContent("c1", "orders.get");
+        var memory = CaptureTestData.Memory();
+        await using var queue = Queue(memory);
+        using var runs = new RunCounter();
+
+        Assert.True(queue.TryCapture(Run([new(ChatRole.User, CaptureTestData.Question), new(ChatRole.Assistant, [call])])));
+        call.InformationalOnly = true;
+        await queue.DrainAsync(Ct);
+
+        Assert.Equal(["skipped/pending_tool_calls"], runs.Seen);
+        Assert.Empty(memory.Captures);
+    }
+
+    [Fact]
+    public async Task TryCaptureOnAFullQueueReturnsFalseAndCounts()
+    {
+        var gate = new Gate();
+        await using var queue = Queue(gate.Memory, capacity: 1);
+        Assert.True(queue.TryCapture(Run(Messages("q1"))));
+        await gate.EnteredAsync();
+        Assert.True(queue.TryCapture(Run(Messages("q2"))));
+        using var telemetry = new TelemetryCapture();
+
+        Assert.False(queue.TryCapture(Run(Messages("q3"))));
+
+        Assert.Equal([CaptureTelemetry.DroppedFullOutcome], Outcomes(telemetry));
+        gate.Open();
+    }
+
+    [Fact]
+    public async Task TryCaptureAfterDisposeReturnsFalse()
+    {
+        var queue = Queue(CaptureTestData.Memory());
+        await queue.DisposeAsync();
+        using var telemetry = new TelemetryCapture();
+
+        Assert.False(queue.TryCapture(Run(Messages("q1"))));
+
+        Assert.Equal([CaptureTelemetry.DroppedShutdownOutcome], Outcomes(telemetry));
+    }
+
+    [Fact]
+    public async Task RunSourceReachesProvenance()
+    {
+        var memory = CaptureTestData.Memory();
+        await using var queue = Queue(memory, source: "from-options");
+
+        Assert.True(queue.TryCapture(Run(Messages("q1")) with { Source = "x" }));
+        Assert.True(queue.TryCapture(Run(Messages("q2"))));
+        await queue.DrainAsync(Ct);
+
+        Assert.Equal(["x", "from-options"], memory.Captures.Select(capture => capture.Provenance.Source));
+    }
+
+    [Fact]
+    public async Task TryCaptureCarriesTheRunsFieldsToTheCapture()
+    {
+        var memory = CaptureTestData.Memory();
+        await using var queue = Queue(memory);
+        var run = Run(Messages("q1")) with { SubjectId = "s", RunId = "r", Duration = TimeSpan.FromSeconds(2), FinishReason = ChatFinishReason.Length };
+
+        Assert.True(queue.TryCapture(run));
+        await queue.DrainAsync(Ct);
+
+        var capture = Assert.Single(memory.Captures);
+        Assert.Equal("s", capture.Provenance.SubjectId);
+        Assert.Equal("r", capture.Provenance.RunId);
+        Assert.Equal(TimeSpan.FromSeconds(2), capture.Outcome.Duration);
+        Assert.False(capture.Outcome.Success);
+    }
+
+    [Fact]
+    public async Task TryCaptureRejectsANullRun()
+    {
+        await using var queue = Queue(CaptureTestData.Memory());
+
+        Assert.Throws<ArgumentNullException>(() => queue.TryCapture(null!));
+    }
+
+    [Fact]
+    public void ARunRejectsNullMessages() =>
+        Assert.Throws<ArgumentNullException>(() => new ReasonletCaptureRun(new ReasonletScope("scope"), null!));
+
+    [Fact]
+    public async Task QueueIsTheSinkIntegrationsSee()
+    {
+        await using var queue = Queue(CaptureTestData.Memory());
+
+        Assert.IsAssignableFrom<IReasonletCaptureSink>(queue);
+    }
+
+    private static ReasonletCaptureRun Run(IReadOnlyList<ChatMessage> messages) => new(new ReasonletScope("scope"), messages);
+
+    private static ChatMessage[] Messages(string question) => [new ChatMessage(ChatRole.User, question), .. CaptureTestData.Refund().Skip(1)];
+
+    private static ReasonletCaptureQueue Queue(FakeReasonletMemory memory, int capacity = 256, TimeSpan? drainTimeout = null, string? source = null)
+    {
+        var options = new ReasonletCaptureOptions
+        {
+            Capacity = capacity,
+            DrainTimeout = drainTimeout ?? TimeSpan.FromSeconds(30),
+            Source = source ?? new ReasonletCaptureOptions().Source,
+        };
+
+        return new ReasonletCaptureQueue(new ReasonletCaptureProcessor(memory), options);
     }
 
     /// <summary>The refund item, asked as <paramref name="question"/> so the order of the captures shows.</summary>

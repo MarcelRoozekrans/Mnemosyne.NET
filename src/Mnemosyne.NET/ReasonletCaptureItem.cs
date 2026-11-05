@@ -20,6 +20,7 @@ namespace Mnemosyne.NET;
 /// function invocation layer outside the middleware marks the calls it invokes as informational only afterwards, while the
 /// item may still wait in the queue.
 /// </param>
+/// <param name="Source">The source recorded in the provenance, already resolved against the capture options.</param>
 internal sealed record ReasonletCaptureItem(
     ReasonletScope Scope,
     string? SubjectId,
@@ -29,4 +30,5 @@ internal sealed record ReasonletCaptureItem(
     TimeSpan Duration,
     string? ResponseId,
     ChatFinishReason? FinishReason,
-    bool EndsWithPendingCall);
+    bool EndsWithPendingCall,
+    string Source);

@@ -24,7 +24,7 @@ public sealed class ReasonletChatClientTests : IAsyncDisposable
     private readonly ReasonletCaptureQueue _queue;
 
     public ReasonletChatClientTests() =>
-        _queue = new ReasonletCaptureQueue(new ReasonletCaptureProcessor(_store, new ReasonletCaptureOptions()), new ReasonletCaptureOptions());
+        _queue = new ReasonletCaptureQueue(new ReasonletCaptureProcessor(_store), new ReasonletCaptureOptions());
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
@@ -401,7 +401,7 @@ public sealed class ReasonletChatClientTests : IAsyncDisposable
     }
 
     [Fact]
-    public void CaptureItemLeavesTheInjectOut()
+    public void CaptureRunLeavesTheInjectOut()
     {
         // The processor ignores system messages ahead of the question, so only the item itself shows the inject is left out.
         ChatMessage q = new(ChatRole.User, Question);
@@ -412,7 +412,7 @@ public sealed class ReasonletChatClientTests : IAsyncDisposable
         var call = new ReasonletChatClient.PreparedCall(new ReasonletCallScope(PerCall, "s"), [q], [inject, q], null, parent, lookup);
         var response = new ChatResponse(answer) { ResponseId = "r", FinishReason = ChatFinishReason.Stop };
 
-        var item = ReasonletChatClient.CaptureItem(call, response, TimeSpan.FromSeconds(3));
+        var item = ReasonletChatClient.CaptureRun(call, response, TimeSpan.FromSeconds(3));
 
         Assert.Equal([q, answer], item.Messages);
         Assert.Equal(PerCall, item.Scope);
@@ -420,27 +420,9 @@ public sealed class ReasonletChatClientTests : IAsyncDisposable
         Assert.Equal(parent, item.InjectedParent);
         Assert.Empty(item.Lookups);
         Assert.Equal(TimeSpan.FromSeconds(3), item.Duration);
-        Assert.Equal("r", item.ResponseId);
+        Assert.Equal("r", item.RunId);
+        Assert.Null(item.Source);
         Assert.Equal(ChatFinishReason.Stop, item.FinishReason);
-    }
-
-    [Fact]
-    public async Task APendingCallIsDecidedAtHandOff()
-    {
-        // An outer function invocation layer marks the call informational after the hand-off, while the item may still
-        // wait in the queue; the item keeps what was true when it was handed off.
-        var call = new FunctionCallContent("c1", "orders.get");
-        var prepared = new ReasonletChatClient.PreparedCall(
-            new ReasonletCallScope(PerCall, null), [new(ChatRole.User, Question)], [new(ChatRole.User, Question)], null, null, null);
-        var item = ReasonletChatClient.CaptureItem(prepared, new ChatResponse(new ChatMessage(ChatRole.Assistant, [call])), TimeSpan.Zero);
-        call.InformationalOnly = true;
-        using var runs = new RunCounter();
-
-        await new ReasonletCaptureProcessor(_store, new ReasonletCaptureOptions()).ProcessAsync(item, Ct);
-
-        Assert.True(item.EndsWithPendingCall);
-        Assert.Equal(["skipped/pending_tool_calls"], runs.Seen);
-        Assert.Empty(_store.Captures);
     }
 
     [Fact]

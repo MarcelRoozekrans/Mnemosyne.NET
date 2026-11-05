@@ -210,33 +210,28 @@ internal sealed class ReasonletChatClient : DelegatingChatClient
             }
 
             // A full or closed queue counts the drop itself; the call goes on either way.
-            queue.TryEnqueue(CaptureItem(call, response(), duration));
+            queue.TryCapture(CaptureRun(call, response(), duration));
         }
         catch (Exception ex)
         {
-            CaptureTelemetry.QueueFailed(ex);
+            ReasonletCaptures.CountFailed(ex);
         }
     }
 
     /// <summary>
-    /// Builds the capture item of a call that returned: the caller's messages without the suggestion, then the response's,
-    /// with the injected parent, the tool's lookups, the duration, the response's id and finish reason, and whether it ends on
-    /// a call nobody answered, decided now.
+    /// Builds the run of a call that returned: the caller's messages without the suggestion, then the response's, with the
+    /// injected parent, the tool's lookups, the duration, and the response's id and finish reason.
     /// </summary>
-    internal static ReasonletCaptureItem CaptureItem(PreparedCall call, ChatResponse response, TimeSpan duration)
-    {
-        List<ChatMessage> messages = [.. call.Request, .. response.Messages];
-        return new(
-            call.Scope.Scope,
-            call.Scope.SubjectId,
-            messages,
-            call.Parent,
-            call.Lookup?.Lookups ?? [],
-            duration,
-            response.ResponseId,
-            response.FinishReason,
-            ReasonletCaptureProcessor.EndsWithPendingCall(messages));
-    }
+    internal static ReasonletCaptureRun CaptureRun(PreparedCall call, ChatResponse response, TimeSpan duration) =>
+        new(call.Scope.Scope, [.. call.Request, .. response.Messages])
+        {
+            SubjectId = call.Scope.SubjectId,
+            InjectedParent = call.Parent,
+            Lookups = call.Lookup?.Lookups ?? [],
+            Duration = duration,
+            RunId = response.ResponseId,
+            FinishReason = response.FinishReason,
+        };
 
     /// <summary>Copies the request with the suggestion as a system message after the leading system messages.</summary>
     private static List<ChatMessage> Inject(IReadOnlyList<ChatMessage> request, string text)

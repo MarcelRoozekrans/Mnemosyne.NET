@@ -13,8 +13,7 @@ public sealed class ReasonletCaptureProcessorTests
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
-    private static ReasonletCaptureProcessor Processor(FakeReasonletMemory memory, string source = "test.source") =>
-        new(memory, new ReasonletCaptureOptions { Source = source });
+    private static ReasonletCaptureProcessor Processor(FakeReasonletMemory memory) => new(memory);
 
     [Fact]
     public async Task NewRunWithoutParentIsRememberedWithoutParent()

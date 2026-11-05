@@ -21,10 +21,11 @@ namespace Mnemosyne.NET;
 /// There is one drain: a later call waits for it, and its token can cut it short too.
 /// </para>
 /// </remarks>
-internal sealed class ReasonletCaptureQueue : IAsyncDisposable, IDisposable
+internal sealed class ReasonletCaptureQueue : IReasonletCaptureSink, IAsyncDisposable, IDisposable
 {
     private readonly ReasonletCaptureProcessor _processor;
     private readonly TimeSpan _drainTimeout;
+    private readonly string _source;
     private readonly Channel<ReasonletCaptureItem> _channel;
 
     // Not disposed: it has no timer, and a drain token that fires after disposal would otherwise cancel a disposed source.
@@ -45,6 +46,7 @@ internal sealed class ReasonletCaptureQueue : IAsyncDisposable, IDisposable
     {
         _processor = processor;
         _drainTimeout = options.DrainTimeout;
+        _source = options.Source;
         _channel = Channel.CreateBounded<ReasonletCaptureItem>(new BoundedChannelOptions(options.Capacity)
         {
             SingleReader = true,
@@ -52,6 +54,23 @@ internal sealed class ReasonletCaptureQueue : IAsyncDisposable, IDisposable
         });
         _reader = new Lazy<Task>(StartReader);
         _drain = new Lazy<Task>(DrainCoreAsync);
+    }
+
+    /// <inheritdoc />
+    public bool TryCapture(ReasonletCaptureRun run)
+    {
+        ArgumentNullException.ThrowIfNull(run);
+        return TryEnqueue(new ReasonletCaptureItem(
+            run.Scope,
+            run.SubjectId,
+            run.Messages,
+            run.InjectedParent,
+            run.Lookups,
+            run.Duration,
+            run.RunId,
+            run.FinishReason,
+            ReasonletCaptureProcessor.EndsWithPendingCall(run.Messages),
+            run.Source ?? _source));
     }
 
     /// <summary>Offers one item without waiting, and counts the outcome.</summary>
