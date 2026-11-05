@@ -22,6 +22,7 @@
     <Compile Include="..\Mnemosyne.NET.PostgreSql.Tests\TelemetryCapture.cs" Link="PostgreSql\TelemetryCapture.cs" />
     <!-- The sample's hashing embedding generator, compiled in rather than referenced: the sample is an Exe. -->
     <Compile Include="..\..\samples\Shared\HashingEmbeddingGenerator.cs" Link="Samples\HashingEmbeddingGenerator.cs" />
+    <Compile Include="..\..\samples\Shared\ScriptedChatClient.cs" Link="Samples\ScriptedChatClient.cs" />
   </ItemGroup>
 
   <ItemGroup>
