@@ -64,7 +64,7 @@ Semantic and LLM-escalating detectors can be slow. The facade stops waiting for 
 
 ## A pipeline for the guard
 
-Set `PipelineName` to give the guard its own pipeline, so it can run fewer detectors than the host's chat client does. AI.Sentinel 4.1.1 needed the host to register the default pipeline as well, and this has not been re-checked against 4.2.0: the shared detector pool resolves the unnamed `SentinelOptions`, and a host that registers only a named pipeline fails at resolution.
+Set `PipelineName` to give the guard its own pipeline, so it can run fewer detectors than the host's chat client does. AI.Sentinel 4.2.0 needs the host to register the default pipeline as well. Checked with a host that registers only the named pipeline: resolving the guard throws `InvalidOperationException`, "No service for type 'AI.Sentinel.SentinelOptions' has been registered". AI.Sentinel's own README gives a wider reason for the same rule, the shared audit store, forwarders, alert sink and tool-call guard that the default call wires.
 
 AI.Sentinel's own README says to register the default pipeline first, so put that call before the named one.
 

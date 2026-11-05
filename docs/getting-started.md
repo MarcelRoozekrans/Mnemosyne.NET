@@ -242,7 +242,7 @@ docker rm -f mnemosyne-pg
 Once the quickstart runs, pick how your agent will use memory:
 
 - **A chat client.** [The chat pipeline](guides/chat-pipeline.md) adds `UseReasonlets` to an `IChatClient`, so each call recalls a procedure and each finished exchange is captured in the background. [The chat pipeline sample](samples.md#chat-pipeline) runs it.
-- **Capture control.** [Capture, redaction and review](guides/capture-and-review.md) covers the guard that can block a capture, the AI.Sentinel adapter and the review gate. [The chat pipeline sample](samples.md#chat-pipeline) shows all three.
+- **Capture control.** [Capture, redaction and review](guides/capture-and-review.md) covers the guard that can block a capture, the AI.Sentinel adapter and the review gate. Running [the same sample](samples.md#chat-pipeline) shows all three.
 - **An Agent Framework agent.** [Agent Framework](guides/agent-framework.md) adds a context provider to the agent, which does for a run what the chat pipeline does for a call. [The Agent Framework sample](samples.md#agent-framework) runs it.
 
 ## Next steps
