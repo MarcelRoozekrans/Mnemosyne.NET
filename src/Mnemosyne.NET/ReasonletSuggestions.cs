@@ -45,6 +45,7 @@ public static class ReasonletSuggestions
     /// <param name="integration">The integration that calls, tagged on every signal as <c>mnemosyne.integration</c>.</param>
     /// <param name="ct">The caller's cancellation.</param>
     /// <returns>The match's id and text, or null when nothing is to be suggested.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="memory"/>, <paramref name="question"/>, <paramref name="options"/> or <paramref name="integration"/> is null.</exception>
     /// <exception cref="OperationCanceledException"><paramref name="ct"/> is cancelled.</exception>
     public static async ValueTask<ReasonletSuggestion?> RecallAsync(
         IReasonletMemory memory, ReasonletScope scope, string question, ReasonletSuggestionOptions options, string integration, CancellationToken ct)
@@ -126,6 +127,7 @@ public static class ReasonletSuggestions
     /// </summary>
     /// <param name="reason">Why the recall was skipped, such as <see cref="NoScopeReason"/> or <see cref="ContinuationReason"/>.</param>
     /// <param name="integration">The integration that skipped, tagged as <c>mnemosyne.integration</c>.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="reason"/> or <paramref name="integration"/> is null.</exception>
     public static void CountSkipped(string reason, string integration)
     {
         ArgumentNullException.ThrowIfNull(reason);
@@ -141,6 +143,7 @@ public static class ReasonletSuggestions
     /// </summary>
     /// <param name="exception">The exception that stopped the recall.</param>
     /// <param name="integration">The integration whose recall failed, tagged as <c>mnemosyne.integration</c>.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="exception"/> or <paramref name="integration"/> is null.</exception>
     public static void CountFailed(Exception exception, string integration)
     {
         ArgumentNullException.ThrowIfNull(exception);
