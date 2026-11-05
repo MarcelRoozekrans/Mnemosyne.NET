@@ -84,4 +84,39 @@ public sealed class CaptureRunWatcherTests
 
         Assert.Equal("No capture finished within 00:00:00.0500000.", error.Message);
     }
+
+    [Fact]
+    public async Task AFreshCallAfterATimeoutStillGetsTheNextOutcome()
+    {
+        using var watcher = new CaptureRunWatcher();
+        await using var provider = Provider(CaptureTestData.Memory());
+        await Assert.ThrowsAsync<TimeoutException>(() => watcher.NextOutcomeAsync(TimeSpan.FromMilliseconds(50), Ct));
+
+        Assert.True(Capture(provider));
+
+        Assert.Equal("new_reasonlet", await watcher.NextOutcomeAsync(Guard, Ct));
+    }
+
+    [Fact]
+    public async Task CancellingTheTokenThrowsOperationCanceled()
+    {
+        using var watcher = new CaptureRunWatcher();
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(Ct);
+        var wait = watcher.NextOutcomeAsync(Guard, cts.Token);
+
+        await cts.CancelAsync();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => wait);
+    }
+
+    [Fact]
+    public async Task DisposingReleasesAPendingWaitAsObjectDisposed()
+    {
+        var watcher = new CaptureRunWatcher();
+        var wait = watcher.NextOutcomeAsync(Guard, Ct);
+
+        watcher.Dispose();
+
+        await Assert.ThrowsAsync<ObjectDisposedException>(() => wait);
+    }
 }

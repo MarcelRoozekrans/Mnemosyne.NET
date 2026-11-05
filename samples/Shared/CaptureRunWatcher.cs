@@ -41,20 +41,32 @@ public sealed class CaptureRunWatcher : IDisposable
     /// <param name="timeout">How long to wait.</param>
     /// <param name="ct">Cancels the wait.</param>
     /// <exception cref="TimeoutException">No capture finished within <paramref name="timeout"/>.</exception>
+    /// <exception cref="ObjectDisposedException">The watcher is disposed, or was while waiting.</exception>
     public async Task<string> NextOutcomeAsync(TimeSpan timeout, CancellationToken ct)
     {
+        // The timeout cancels the read itself, so an abandoned read cannot swallow the next outcome.
+        using var timer = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        timer.CancelAfter(timeout);
         try
         {
-            return await _outcomes.Reader.ReadAsync(ct).AsTask().WaitAsync(timeout, ct);
+            return await _outcomes.Reader.ReadAsync(timer.Token);
         }
-        catch (TimeoutException)
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         {
             throw new TimeoutException($"No capture finished within {timeout}.");
         }
+        catch (ChannelClosedException)
+        {
+            throw new ObjectDisposedException(nameof(CaptureRunWatcher));
+        }
     }
 
-    /// <summary>Stops listening.</summary>
-    public void Dispose() => _listener.Dispose();
+    /// <summary>Stops listening. A wait still pending throws <see cref="ObjectDisposedException"/>.</summary>
+    public void Dispose()
+    {
+        _listener.Dispose();
+        _outcomes.Writer.TryComplete();
+    }
 
     private void OnRun(Instrument instrument, long measurement, ReadOnlySpan<KeyValuePair<string, object?>> tags, object? state)
     {
