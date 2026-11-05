@@ -289,6 +289,21 @@ public sealed class ReasonletCaptureQueueTests
     }
 
     [Fact]
+    public async Task TryCaptureCopiesTheMessagesAtHandOff()
+    {
+        var memory = CaptureTestData.Memory();
+        await using var queue = Queue(memory);
+        var messages = new List<ChatMessage>(Messages("q1"));
+
+        Assert.True(queue.TryCapture(Run(messages)));
+        messages.Clear();
+        messages.Add(new ChatMessage(ChatRole.User, "other"));
+        await queue.DrainAsync(Ct);
+
+        Assert.Equal("q1", Assert.Single(memory.Captures).Question);
+    }
+
+    [Fact]
     public async Task TryCaptureOnAFullQueueReturnsFalseAndCounts()
     {
         var gate = new Gate();

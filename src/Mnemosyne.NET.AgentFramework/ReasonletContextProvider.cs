@@ -72,7 +72,7 @@ public sealed class ReasonletContextProvider : AIContextProvider
     private readonly ConditionalWeakTable<AgentSession, AgentRunState> _runs = new();
 
     /// <summary>Creates the provider for one agent.</summary>
-    /// <param name="services">The services to resolve <see cref="IReasonletMemory"/> and <see cref="TimeProvider"/> from.</param>
+    /// <param name="services">The services to resolve <see cref="IReasonletMemory"/>, <see cref="IReasonletCaptureSink"/> and <see cref="TimeProvider"/> from.</param>
     /// <param name="options">The agent's settings, or null for the defaults.</param>
     /// <exception cref="ArgumentNullException"><paramref name="services"/> is null.</exception>
     /// <exception cref="ArgumentException">The options are invalid.</exception>

@@ -42,7 +42,7 @@ internal sealed class ReasonletChatClient : DelegatingChatClient
     // middleware, as the chat evaluator does when it judges with the host's unkeyed client. A resolution that throws is
     // not cached, so a later call tries again.
     private readonly Lazy<IReasonletMemory> _memory;
-    private readonly Lazy<ReasonletCaptureQueue?> _queue;
+    private readonly Lazy<IReasonletCaptureSink?> _queue;
     private readonly ReasonletChatOptions _options;
     private readonly ReasonletSuggestionOptions _suggestions;
     private readonly TimeProvider _time;
@@ -53,8 +53,8 @@ internal sealed class ReasonletChatClient : DelegatingChatClient
     /// <param name="queue">The capture queue, or null when nothing is captured.</param>
     /// <param name="options">The validated settings.</param>
     /// <param name="time">The clock for the recall timeout and the call's duration.</param>
-    public ReasonletChatClient(IChatClient inner, IReasonletMemory memory, ReasonletCaptureQueue? queue, ReasonletChatOptions options, TimeProvider time)
-        : this(inner, new Lazy<IReasonletMemory>(memory), new Lazy<ReasonletCaptureQueue?>(queue), options, time)
+    public ReasonletChatClient(IChatClient inner, IReasonletMemory memory, IReasonletCaptureSink? queue, ReasonletChatOptions options, TimeProvider time)
+        : this(inner, new Lazy<IReasonletMemory>(memory), new Lazy<IReasonletCaptureSink?>(queue), options, time)
     {
     }
 
@@ -69,7 +69,7 @@ internal sealed class ReasonletChatClient : DelegatingChatClient
     /// <param name="options">The validated settings.</param>
     /// <param name="time">The clock for the recall timeout and the call's duration.</param>
     public ReasonletChatClient(
-        IChatClient inner, Lazy<IReasonletMemory> memory, Lazy<ReasonletCaptureQueue?> queue, ReasonletChatOptions options, TimeProvider time)
+        IChatClient inner, Lazy<IReasonletMemory> memory, Lazy<IReasonletCaptureSink?> queue, ReasonletChatOptions options, TimeProvider time)
         : base(inner)
     {
         _memory = memory;

@@ -29,10 +29,10 @@ public static class ReasonletSuggestions
     /// <summary>The integration name of the agent context provider.</summary>
     public const string AgentIntegration = "agent";
 
-    /// <summary>The skip reason of a call with no per-call scope and no default scope.</summary>
+    /// <summary>The skip reason of a call that has no scope to recall in.</summary>
     public const string NoScopeReason = "no_scope";
 
-    /// <summary>The skip reason of a call whose last message is not a new user question.</summary>
+    /// <summary>The skip reason of a call that is not a new user question, such as the continuation of a tool loop.</summary>
     public const string ContinuationReason = "continuation";
 
     /// <summary>
@@ -46,6 +46,7 @@ public static class ReasonletSuggestions
     /// <param name="ct">The caller's cancellation.</param>
     /// <returns>The match's id and text, or null when nothing is to be suggested.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="memory"/>, <paramref name="question"/>, <paramref name="options"/> or <paramref name="integration"/> is null.</exception>
+    /// <exception cref="ArgumentException"><paramref name="options"/> is invalid.</exception>
     /// <exception cref="OperationCanceledException"><paramref name="ct"/> is cancelled.</exception>
     public static async ValueTask<ReasonletSuggestion?> RecallAsync(
         IReasonletMemory memory, ReasonletScope scope, string question, ReasonletSuggestionOptions options, string integration, CancellationToken ct)
@@ -54,6 +55,12 @@ public static class ReasonletSuggestions
         ArgumentNullException.ThrowIfNull(question);
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(integration);
+        var validation = options.Validate();
+        if (validation.IsFailure)
+        {
+            throw new ArgumentException(validation.Error.Message, nameof(options));
+        }
+
         using var telemetry = ChatTelemetry.Start(integration);
         var timeout = options.RecallTimeout;
         using var timer = timeout == Timeout.InfiniteTimeSpan ? null : new CancellationTokenSource(timeout, options.TimeProvider);

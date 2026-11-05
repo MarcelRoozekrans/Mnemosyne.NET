@@ -50,6 +50,22 @@ public sealed class ReasonletSuggestionsTests
     }
 
     [Fact]
+    public async Task InvalidOptionsThrowAnArgumentException()
+    {
+        var timeout = await Assert.ThrowsAsync<ArgumentException>(
+            async () => await RecallAsync(new ReasonletSuggestionOptions { RecallTimeout = TimeSpan.FromSeconds(-2) }));
+        var clock = await Assert.ThrowsAsync<ArgumentException>(
+            async () => await RecallAsync(new ReasonletSuggestionOptions { TimeProvider = null! }));
+        var floor = await Assert.ThrowsAsync<ArgumentException>(
+            async () => await RecallAsync(new ReasonletSuggestionOptions { MinSimilarity = 2 }));
+
+        Assert.Equal("options", timeout.ParamName);
+        Assert.Equal("options", clock.ParamName);
+        Assert.Equal("options", floor.ParamName);
+        Assert.Empty(_memory.Queries);
+    }
+
+    [Fact]
     public async Task NoMatchSuggestsNothing()
     {
         using var telemetry = new TelemetryCapture();

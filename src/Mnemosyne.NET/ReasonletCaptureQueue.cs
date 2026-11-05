@@ -60,16 +60,19 @@ internal sealed class ReasonletCaptureQueue : IReasonletCaptureSink, IAsyncDispo
     public bool TryCapture(ReasonletCaptureRun run)
     {
         ArgumentNullException.ThrowIfNull(run);
+
+        // A copy, so a caller that changes its own list after this returns cannot race the worker that reads it later.
+        var messages = run.Messages.ToArray();
         return TryEnqueue(new ReasonletCaptureItem(
             run.Scope,
             run.SubjectId,
-            run.Messages,
+            messages,
             run.InjectedParent,
             run.Lookups,
             run.Duration,
             run.RunId,
             run.FinishReason,
-            ReasonletCaptureProcessor.EndsWithPendingCall(run.Messages),
+            ReasonletCaptureProcessor.EndsWithPendingCall(messages),
             run.Source ?? _source));
     }
 

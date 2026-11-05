@@ -39,7 +39,7 @@ internal sealed class ChatTelemetry : IDisposable
     private const string FormatterFailedOutcome = "formatter_failed";
 
     private static readonly Counter<long> Recalls =
-        RecallTelemetry.Meter.CreateCounter<long>("mnemosyne.chat.recalls", "{recall}", "Chat middleware recalls, by outcome.");
+        RecallTelemetry.Meter.CreateCounter<long>("mnemosyne.chat.recalls", "{recall}", "Recalls of an integration, by outcome.");
 
     private readonly Activity? _activity;
     private readonly string _integration;
