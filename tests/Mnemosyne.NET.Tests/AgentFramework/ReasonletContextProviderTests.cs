@@ -397,6 +397,24 @@ public sealed class ReasonletContextProviderTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task CancellationWhileResolvingTheMemoryPropagatesAndCountsNothing()
+    {
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+        var services = new ServiceCollection();
+        services.AddSingleton<IReasonletMemory>(_ => throw new OperationCanceledException(cts.Token));
+        await using var container = services.BuildServiceProvider();
+        var provider = new ReasonletContextProvider(container);
+        var agent = Agent(FakeAgentChatClient.Answering(), provider);
+        using var telemetry = new TelemetryCapture();
+
+        await Assert.ThrowsAsync<OperationCanceledException>(async () =>
+            await provider.ProvideAsync(agent, null, [new(ChatRole.User, CaptureTestData.Question)], null, cts.Token));
+
+        Assert.Empty(telemetry.Of(Recalls));
+    }
+
+    [Fact]
     public async Task MissingMemoryIsCountedAndTheRunGoesOn()
     {
         var client = FakeAgentChatClient.ToolLoop();

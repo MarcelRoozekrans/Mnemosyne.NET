@@ -325,6 +325,14 @@ public sealed class ReasonletContextProviderCaptureTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task ARunWithoutRequestMessagesCapturesTheResponseOnly()
+    {
+        await Provider().StoreAsync(Stub.Agent, null, null, [new(ChatRole.Assistant, "a")], Ct);
+
+        Assert.Equal("a", Assert.Single(Assert.Single(_sink.Runs).Messages).Text);
+    }
+
+    [Fact]
     public async Task ARunWithoutAnyResponseHasNoRunId()
     {
         await Provider().StoreAsync(Stub.Agent, null, [new(ChatRole.User, "q")], null, Ct);
