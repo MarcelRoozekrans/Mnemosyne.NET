@@ -1,4 +1,5 @@
 using AI.Sentinel;
+using Microsoft.Agents.AI;
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
 using Microsoft.Extensions.AI;
@@ -6,6 +7,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Minos;
 using Mnemosyne.NET;
 using Mnemosyne.NET.Abstractions;
+using Mnemosyne.NET.AgentFramework;
 using Mnemosyne.NET.Minos;
 using Mnemosyne.NET.PostgreSql;
 using Mnemosyne.NET.Sentinel;
@@ -90,6 +92,14 @@ var pipeline = await ReasonletsPipelineSmoke(read.Value);
 if (pipeline != 0)
 {
     return pipeline;
+}
+
+// The Agent Framework context provider as a host wires it: a ChatClientAgent with ReasonletContextProvider, run once
+// with RunAsync and once with RunStreamingAsync under native AOT against an in-memory stub. Needs no database.
+var agent = await AgentSmoke(read.Value);
+if (agent != 0)
+{
+    return agent;
 }
 
 // The PostgreSQL half needs PostgreSQL 15 or later with pgvector 0.8.0 or later; CI starts one and sets
@@ -834,6 +844,63 @@ static async Task<int> ReasonletsPipelineSmoke(ReasonletGraph graph)
     return 0;
 }
 
+// The agent context provider under native AOT. The stub calls find_procedure and a second tool, then answers; it is run
+// through RunAsync and RunStreamingAsync. Disposing the provider drains the capture queue, so the stub memory has seen
+// both remembers by then.
+static async Task<int> AgentSmoke(ReasonletGraph graph)
+{
+    var memory = new RecordingMemory(graph);
+    var services = new ServiceCollection();
+    services.AddSingleton<IReasonletMemory>(memory);
+    services.AddReasonletCapture();
+    var provider = services.BuildServiceProvider();
+    var stub = new AgentStubClient();
+    var agent = new ChatClientAgent(stub, new ChatClientAgentOptions
+    {
+        Name = "aot-agent",
+        ChatOptions = new ChatOptions { Tools = [new EchoTool()] },
+        AIContextProviders = [new ReasonletContextProvider(provider, new ReasonletAgentOptions { ExposeFindProcedure = true })],
+    });
+
+    string text;
+    try
+    {
+        text = (await agent.RunAsync("Refund order 7")).Text;
+        await foreach (var update in agent.RunStreamingAsync("Refund order 8"))
+        {
+            _ = update;
+        }
+    }
+    catch (Exception ex)
+    {
+        Console.Error.WriteLine($"The agent run threw: {ex}");
+        await provider.DisposeAsync();
+        return 50;
+    }
+
+    await provider.DisposeAsync();
+    if (!string.Equals(text, "Done.", StringComparison.Ordinal))
+    {
+        Console.Error.WriteLine($"The agent returned the wrong answer: {text}");
+        return 50;
+    }
+
+    if (!stub.SawSuggestion)
+    {
+        Console.Error.WriteLine("The stub never saw the recalled suggestion in Instructions.");
+        return 51;
+    }
+
+    if (memory.Remembers != 2 || memory.Captured is not { } captured
+        || !string.Equals(captured.Provenance.Source, "mnemosyne.agent", StringComparison.Ordinal))
+    {
+        Console.Error.WriteLine($"Expected two captured agent runs, saw {memory.Remembers}.");
+        return 52;
+    }
+
+    return 0;
+}
+
 // Reads a run's verdict inputs and its effective success with a plain reader, which needs no reflection.
 static async Task<(bool Agent, bool? Evaluated, string? Evaluator, double? Score, bool? Feedback, bool Success)?> ReadVerdictAsync(
     NpgsqlDataSource dataSource, ExecutionId execution, CancellationToken ct)
@@ -1069,6 +1136,54 @@ internal sealed class ScriptedToolClient : IChatClient
 
     public IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(IEnumerable<ChatMessage> messages, ChatOptions? options = null, CancellationToken cancellationToken = default) =>
         throw new NotSupportedException();
+
+    public object? GetService(Type serviceType, object? serviceKey = null) => null;
+
+    public void Dispose()
+    {
+    }
+}
+
+/// <summary>
+/// A chat client under a <c>ChatClientAgent</c>: it calls find_procedure and echo together, then answers once it sees their
+/// results. It records whether any request carried instructions.
+/// </summary>
+internal sealed class AgentStubClient : IChatClient
+{
+    private int _suggestions;
+
+    public bool SawSuggestion => Volatile.Read(ref _suggestions) > 0;
+
+    public Task<ChatResponse> GetResponseAsync(IEnumerable<ChatMessage> messages, ChatOptions? options = null, CancellationToken cancellationToken = default)
+    {
+        if (!string.IsNullOrEmpty(options?.Instructions) && options.Instructions.Contains("refund-order", StringComparison.Ordinal))
+        {
+            Interlocked.Increment(ref _suggestions);
+        }
+
+        var answered = messages.SelectMany(message => message.Contents).OfType<FunctionResultContent>().Any();
+        if (!answered)
+        {
+            return Task.FromResult(new ChatResponse(new ChatMessage(
+                ChatRole.Assistant,
+                [
+                    new FunctionCallContent("c1", ReasonletTools.FindProcedureName, new Dictionary<string, object?> { ["question"] = "refund an order" }),
+                    new FunctionCallContent("c2", "echo", new Dictionary<string, object?>()),
+                ])));
+        }
+
+        return Task.FromResult(new ChatResponse(new ChatMessage(ChatRole.Assistant, "Done.")));
+    }
+
+    public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
+        IEnumerable<ChatMessage> messages, ChatOptions? options = null, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        var response = await GetResponseAsync(messages, options, cancellationToken);
+        foreach (var update in response.ToChatResponseUpdates())
+        {
+            yield return update;
+        }
+    }
 
     public object? GetService(Type serviceType, object? serviceKey = null) => null;
 
