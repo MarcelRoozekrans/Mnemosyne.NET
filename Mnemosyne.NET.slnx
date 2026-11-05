@@ -15,5 +15,6 @@
   <Folder Name="/samples/">
     <Project Path="samples/Mnemosyne.Samples.StoreAndRecall/Mnemosyne.Samples.StoreAndRecall.csproj" />
     <Project Path="samples/Mnemosyne.Samples.Evaluation/Mnemosyne.Samples.Evaluation.csproj" />
+    <Project Path="samples/Mnemosyne.Samples.ChatPipeline/Mnemosyne.Samples.ChatPipeline.csproj" />
   </Folder>
 </Solution>

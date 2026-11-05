@@ -147,3 +147,66 @@ The sample checks all of this itself, and the repository's CI runs it. If a chan
 A word check is not how to judge real answers. In an application, implement `IReasonletEvaluator` over whatever decides whether an answer worked. The [custom evaluator guide](guides/custom-evaluator.md) shows the contract.
 
 The sample also uses the same offline embedding stand-in as store and recall, so [the same caveat applies](#the-embedding-generator-is-a-stand-in).
+
+## Chat pipeline
+
+[`samples/Mnemosyne.Samples.ChatPipeline`](https://github.com/MarcelRoozekrans/Mnemosyne.NET/tree/main/samples/Mnemosyne.Samples.ChatPipeline) is a console app that shows `UseReasonlets` with the review gate and AI.Sentinel. It needs only Docker and the .NET 10 SDK. It needs no API key and no model.
+
+### What it does
+
+1. Registers the PostgreSQL store, an embedding generator, AI.Sentinel with `AddMnemosyneSentinel`, the facade with `RequireReview = true` and the capture queue, and runs the migrations. Each chat client is `UseReasonlets` outside `UseFunctionInvocation`.
+2. Asks three questions through a scripted client that plays the model:
+   - **Act 1**, "How do I refund an order?": the model calls `orders_get` and `payments_refund`. The capture is stored as a pending review, and recall for the same question finds nothing;
+   - **Act 2**, "How do I refund an order for a customer?", after a person approves the Reasonlet: the first call to the model carries the recalled Reasonlet in its system text;
+   - **Act 3**, a question with a card number, through a client with another tool shape: AI.Sentinel blocks the capture.
+3. Waits for each capture to finish with a listener on the `mnemosyne.capture.runs` counter, so it never sleeps for a fixed time.
+4. Checks every reply, outcome and count shown below, and exits with code 1 if not.
+5. Erases the scope, so a run leaves nothing behind.
+
+### Run it
+
+Clone the repository, then from the sample's folder:
+
+```bash
+cd samples/Mnemosyne.Samples.ChatPipeline
+docker compose up -d --wait
+dotnet run
+docker compose down
+```
+
+The database listens on port 5434, so it can run next to the other samples' databases. To use another server, set the `MNEMOSYNE_SAMPLE_PG` environment variable to its connection string. The server needs PostgreSQL 15 or later with pgvector 0.8.0 or later.
+
+### The output
+
+```text
+Act 1. Ask "How do I refund an order?" and let the capture run in the background.
+  Capture outcome: new_reasonlet. Pending reviews: 1 ("orders_get → payments_refund"). Matches for the same question: 0.
+
+Act 2. A person approves the Reasonlet. Then ask "How do I refund an order for a customer?".
+  The first call to the model carried the recalled Reasonlet "orders_get → payments_refund" in its system text.
+  Capture outcome: execution_only. Pending reviews: 0.
+
+Act 3. Ask "Which invoice was paid with card 4111 1111 1111 1111?" through a client with a different tool shape (invoices_get).
+  Capture outcome: Blocked. Pending reviews: 0. Matches for the card question: 0.
+```
+
+- **Act 1.** The capture is a new procedure, so `RequireReview` stores it as pending. A pending Reasonlet is never recalled, so the same question finds no match.
+- **Act 2.** Once approved, the Reasonlet is recalled for a differently worded question and offered to the model. The run only adds an execution to it, so there is nothing new to review.
+- **Act 3.** The question holds a card number, which AI.Sentinel's PII detector rates Critical, above the guard's default of `High`. The capture is blocked, so the store never sees it. This tool shape is new, so without the guard it would be a second pending review.
+
+The detector matches the digit pattern of a card number and does not check the Luhn sum, so any 16-digit number blocks.
+
+The sample checks all of this itself and exits with code 1 if a receipt differs, so a change to capture, review or the guard that broke what this page shows would fail the run.
+
+### The model is a stand-in
+
+`ScriptedChatClient` is not a model. It replays a fixed script of tool calls and an answer. In an application, register a real chat model through Microsoft.Extensions.AI and build the pipeline on it, for example with an Ollama or OpenAI `IChatClient`:
+
+```csharp
+IChatClient client = new ChatClientBuilder(realClient)
+    .UseReasonlets(new ReasonletChatOptions { DefaultScope = new ReasonletScope("support") })
+    .UseFunctionInvocation()
+    .Build(provider);
+```
+
+The sample also uses the same offline embedding stand-in as store and recall, so [the same caveat applies](#the-embedding-generator-is-a-stand-in).
