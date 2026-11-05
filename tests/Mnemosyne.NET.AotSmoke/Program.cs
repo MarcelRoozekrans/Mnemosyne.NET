@@ -885,9 +885,9 @@ static async Task<int> AgentSmoke(ReasonletGraph graph)
         return 50;
     }
 
-    if (!stub.SawSuggestion)
+    if (stub.RunsWithSuggestion != 2)
     {
-        Console.Error.WriteLine("The stub never saw the recalled suggestion in Instructions.");
+        Console.Error.WriteLine($"Expected the recalled suggestion in Instructions on both runs, saw it on {stub.RunsWithSuggestion}.");
         return 51;
     }
 
@@ -1150,15 +1150,30 @@ internal sealed class ScriptedToolClient : IChatClient
 /// </summary>
 internal sealed class AgentStubClient : IChatClient
 {
-    private int _suggestions;
+    private readonly HashSet<string> _runsWithSuggestion = [];
+    private readonly Lock _gate = new();
 
-    public bool SawSuggestion => Volatile.Read(ref _suggestions) > 0;
+    /// <summary>Gets how many distinct runs, told apart by their user question, had the suggestion in Instructions.</summary>
+    public int RunsWithSuggestion
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _runsWithSuggestion.Count;
+            }
+        }
+    }
 
     public Task<ChatResponse> GetResponseAsync(IEnumerable<ChatMessage> messages, ChatOptions? options = null, CancellationToken cancellationToken = default)
     {
         if (!string.IsNullOrEmpty(options?.Instructions) && options.Instructions.Contains("refund-order", StringComparison.Ordinal))
         {
-            Interlocked.Increment(ref _suggestions);
+            var question = messages.LastOrDefault(message => message.Role == ChatRole.User)?.Text ?? string.Empty;
+            lock (_gate)
+            {
+                _runsWithSuggestion.Add(question);
+            }
         }
 
         var answered = messages.SelectMany(message => message.Contents).OfType<FunctionResultContent>().Any();

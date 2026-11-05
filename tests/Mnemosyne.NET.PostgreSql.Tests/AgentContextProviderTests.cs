@@ -46,6 +46,7 @@ public sealed class AgentContextProviderTests(PgVectorFixture fixture) : IClassF
         await RunAsync(scope, requireReview: false, model, Refund, Refund);
 
         // Requests: run 1 has three inner calls, run 2 starts at the fourth.
+        Assert.Equal(6, model.Instructions.Count);
         Assert.All(model.Instructions.Take(3), instructions => Assert.True(string.IsNullOrEmpty(instructions)));
         Assert.All(model.Instructions.Skip(3), instructions => Assert.False(string.IsNullOrEmpty(instructions)));
         Assert.Equal(1L, await CountAsync(scope));
@@ -58,9 +59,14 @@ public sealed class AgentContextProviderTests(PgVectorFixture fixture) : IClassF
     {
         var first = PgVectorFixture.NewScope();
         var second = PgVectorFixture.NewScope();
+        var secondModel = new ScriptedModel();
 
         await RunAsync(first, requireReview: false, new ScriptedModel(), Refund);
-        await RunAsync(second, requireReview: false, new ScriptedModel(), Refund);
+        await RunAsync(second, requireReview: false, secondModel, Refund);
+
+        // Nothing of the first scope was recalled into the second agent's run.
+        Assert.Equal(3, secondModel.Instructions.Count);
+        Assert.All(secondModel.Instructions, instructions => Assert.True(string.IsNullOrEmpty(instructions)));
 
         // The same shape and question in another scope is stored again, never recalled across scopes.
         Assert.Equal(1L, await CountAsync(first));
