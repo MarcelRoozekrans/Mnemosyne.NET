@@ -136,6 +136,7 @@ static async Task<int> Walkthrough(IServiceProvider provider, IReasonletMemory m
     RequireEqual(found.Count, 1, "Run 1: the matches for the same question");
     var name = found[0].Reasonlet.Name;
     RequireEqual(found[0].Evidence.Runs, 1, "Run 1: the runs of the Reasonlet");
+    // The name exists only now, but SystemText(0) was recorded when the first call was made, so it still shows what that call carried.
     RequireEqual(scripted.SystemText(0).Contains(name, StringComparison.Ordinal), false, "Run 1: whether the first call carried a recalled Reasonlet");
     Console.WriteLine($"  Capture outcome: {outcome1}. Matches for the same question: {found.Count} (\"{name}\", {found[0].Evidence.Runs} run).");
     Console.WriteLine();

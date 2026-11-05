@@ -217,13 +217,12 @@ The sample also uses the same offline embedding stand-in as store and recall, so
 
 ### What it does
 
-1. Registers the PostgreSQL store, an embedding generator, the facade with `AddMnemosyne` and the capture queue, and runs the migrations. The review gate is off. The agent is a `ChatClientAgent` with a `ReasonletContextProvider` in its `AIContextProviders`.
-2. Runs the agent twice through a scripted client that plays the model:
+1. Registers the PostgreSQL store, an embedding generator, the facade with `AddMnemosyne` and the capture queue. The review gate is off. Then it runs the migrations.
+2. Builds a `ChatClientAgent` with a `ReasonletContextProvider` in its `AIContextProviders`, and runs it twice through a scripted client that plays the model:
    - **Run 1**, "How do I refund an order?": the model calls `orders_get` and `payments_refund`. The capture stores a new Reasonlet, and the first call to the model carried no recalled Reasonlet;
    - **Run 2**, "How do I refund an order for a customer?" on a fresh session: the provider recalls the Reasonlet and adds it to the run's instructions. The sample checks that the name is in the system text of the first call and in no user or assistant message.
-3. Waits for each capture to finish with a listener on the `mnemosyne.capture.runs` counter, so it never sleeps for a fixed time.
-4. Checks every reply, outcome and count shown below, and exits with code 1 if not.
-5. Erases the scope, so a run leaves nothing behind.
+3. After each run, waits for its capture with a listener on the `mnemosyne.capture.runs` counter, so it never sleeps for a fixed time. It checks every reply, outcome and count shown below along the way, and exits with code 1 if not.
+4. Erases the scope, so a run leaves nothing behind.
 
 ### Run it
 
@@ -254,7 +253,7 @@ Run 2. Ask "How do I refund an order for a customer?" on a fresh session.
 
 The sample scopes its Reasonlets with a `ScopeResolver` that returns a fixed scope. Without one, the provider uses the agent's name as the scope.
 
-The sample checks all of this itself and exits with code 1 if a receipt differs, so a change to the provider that broke what this page shows would fail the run.
+The sample checks all of this itself and exits with code 1 if a receipt differs. What it asserts about the provider is the recall, which must find the Reasonlet for the second question, and the instructions, which must carry its name on the first call and in no message. A change to the provider that broke either would fail the run.
 
 ### The model is a stand-in
 
