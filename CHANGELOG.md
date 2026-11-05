@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.1](https://github.com/MarcelRoozekrans/Mnemosyne.NET/compare/v0.6.0...v0.6.1) (2026-11-04)
+
+
+### Bug Fixes
+
+* follow-ups from the ci-baseline adoption ([#51](https://github.com/MarcelRoozekrans/Mnemosyne.NET/issues/51)) ([4e41b18](https://github.com/MarcelRoozekrans/Mnemosyne.NET/commit/4e41b181139dcc7875b32b25d267360c3765116a))
+
 ## [0.6.0](https://github.com/MarcelRoozekrans/Mnemosyne.NET/compare/v0.5.0...v0.6.0) (2026-11-04)
 
 
