@@ -67,8 +67,21 @@ public sealed class ScriptedChatClientTests
         await client.GetResponseAsync(messages, cancellationToken: Ct);
         messages.Add(new ChatMessage(ChatRole.User, "later"));
 
-        Assert.Single(Assert.Single(client.Requests));
+        var request = Assert.Single(client.Requests);
+        Assert.Equal("Refund A-1", Assert.Single(request).Text);
         Assert.Single(client.Options);
+    }
+
+    [Fact]
+    public async Task OptionsAreClonedWhenTheCallIsMade()
+    {
+        using var client = TwoCalls();
+        var options = new ChatOptions { Instructions = "B" };
+
+        await client.GetResponseAsync([new ChatMessage(ChatRole.User, "Hi")], options, Ct);
+        options.Instructions = "changed";
+
+        Assert.Equal("B", client.SystemText(0));
     }
 
     [Fact]
@@ -115,5 +128,41 @@ public sealed class ScriptedChatClientTests
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(
             () => client.GetResponseAsync([new ChatMessage(ChatRole.User, "Hi")], cancellationToken: cts.Token));
+    }
+
+    [Fact]
+    public async Task StreamingAnAnswerReplaysTheAnswer()
+    {
+        using var client = TwoCalls("All done.");
+        var messages = new List<ChatMessage>
+        {
+            new(ChatRole.User, "Refund A-1"),
+            new(ChatRole.Tool, [new FunctionResultContent("call-1", "ok")]),
+        };
+
+        var updates = new List<ChatResponseUpdate>();
+        await foreach (var update in client.GetStreamingResponseAsync(messages, cancellationToken: Ct))
+        {
+            updates.Add(update);
+        }
+
+        var streamed = updates.ToChatResponse();
+        Assert.Equal("All done.", streamed.Text);
+        Assert.DoesNotContain(streamed.Messages.SelectMany(m => m.Contents), c => c is FunctionCallContent);
+    }
+
+    [Fact]
+    public async Task ACancelledTokenThrowsWhileStreaming()
+    {
+        using var client = TwoCalls();
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
+        {
+            await foreach (var _ in client.GetStreamingResponseAsync([new ChatMessage(ChatRole.User, "Hi")], cancellationToken: cts.Token))
+            {
+            }
+        });
     }
 }
