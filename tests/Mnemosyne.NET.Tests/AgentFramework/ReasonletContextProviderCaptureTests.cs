@@ -297,6 +297,34 @@ public sealed class ReasonletContextProviderCaptureTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task CancellationFromTheResolverWithoutStatePropagates()
+    {
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+        var provider = Provider(new ReasonletAgentOptions { ScopeResolver = (_, _) => throw new OperationCanceledException(cts.Token) });
+
+        await Assert.ThrowsAsync<OperationCanceledException>(async () => await provider.StoreAsync(
+            Stub.Agent, null, [new(ChatRole.User, "q")], [new(ChatRole.Assistant, "a")], cts.Token));
+        Assert.Empty(_sink.Runs);
+    }
+
+    [Fact]
+    public async Task TwoRunsOnOneSessionCaptureOnlyTheirOwnTurn()
+    {
+        var agent = Agent(FakeAgentChatClient.Answering(), Provider());
+        var session = await agent.CreateSessionAsync(Ct);
+
+        await agent.RunAsync("first question", session, cancellationToken: Ct);
+        await agent.RunAsync("second question", session, cancellationToken: Ct);
+
+        Assert.Equal(2, _sink.Runs.Count);
+        var second = _sink.Runs[1];
+        Assert.Equal("second question", second.Messages[0].Text);
+        Assert.Equal([ChatRole.User, ChatRole.Assistant], second.Messages.Select(m => m.Role));
+        Assert.DoesNotContain(second.Messages, message => message.Text.Contains("first question", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task ARunWithoutAnyResponseHasNoRunId()
     {
         await Provider().StoreAsync(Stub.Agent, null, [new(ChatRole.User, "q")], null, Ct);

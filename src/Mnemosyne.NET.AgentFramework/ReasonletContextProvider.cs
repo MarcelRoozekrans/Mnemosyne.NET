@@ -190,9 +190,9 @@ public sealed class ReasonletContextProvider : AIContextProvider
 
         // Taken off the session, so that the run's end is handed off once and the next run starts fresh.
         AgentRunState? state = null;
-        if (session is not null && _runs.TryGetValue(session, out state))
+        if (session is not null)
         {
-            _runs.Remove(session);
+            _runs.Remove(session, out state);
         }
 
         // Without state the start of the run is out of reach, such as for a run without a session. The start already counted
