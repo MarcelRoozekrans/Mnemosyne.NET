@@ -45,6 +45,16 @@ namespace Mnemosyne.NET.AgentFramework;
 /// registered <see cref="TimeProvider"/>, or uses <see cref="TimeProvider.System"/>, when it is built.
 /// </para>
 /// <para>
+/// After a successful run, with <see cref="ReasonletAgentOptions.Capture"/> on, the provider hands the run to the
+/// registered <see cref="IReasonletCaptureSink"/> in the background: the run's new request messages, as the agent sent them
+/// and without the injected instructions, followed by the response messages, with the recalled procedure as the parent, the
+/// lookups of the <c>find_procedure</c> tool, the run's duration and <see cref="ReasonletAgentOptions.Source"/>. A failed run
+/// is not captured, because Agent Framework does not call the hook with a failure. The sink is resolved on the first capture,
+/// not when the provider is built; a sink that cannot be resolved or that throws is counted on the capture queue's failure
+/// counter, and a sink that is full or shut down counts that itself. None of these fails the run. A run that has no stored
+/// state, such as one without a session, asks the scope resolver again and is captured with no parent and no lookups.
+/// </para>
+/// <para>
 /// Memory never breaks or stops a run. Only the caller's own cancellation propagates. Every signal carries
 /// <c>mnemosyne.integration = agent</c>, and none carries the scope, the subject, the question, the suggested text, a tool
 /// or argument name, or an exception message.
@@ -56,6 +66,7 @@ public sealed class ReasonletContextProvider : AIContextProvider
     private readonly ReasonletSuggestionOptions _suggestions;
     private readonly TimeProvider _time;
     private readonly Lazy<IReasonletMemory> _memory;
+    private readonly Lazy<IReasonletCaptureSink> _sink;
 
     // Keyed on the session, which both hooks of one run receive, so that concurrent runs on other sessions never see it.
     private readonly ConditionalWeakTable<AgentSession, AgentRunState> _runs = new();
@@ -89,6 +100,7 @@ public sealed class ReasonletContextProvider : AIContextProvider
         // Resolved on the first run, not here: the memory can depend on the agent's own chat client, and a failure is not
         // cached, so the next run tries again.
         _memory = new Lazy<IReasonletMemory>(services.GetRequiredService<IReasonletMemory>, LazyThreadSafetyMode.PublicationOnly);
+        _sink = new Lazy<IReasonletCaptureSink>(services.GetRequiredService<IReasonletCaptureSink>, LazyThreadSafetyMode.PublicationOnly);
     }
 
     /// <summary>Gets no keys: the provider keeps nothing in the session's state bag.</summary>
@@ -103,6 +115,17 @@ public sealed class ReasonletContextProvider : AIContextProvider
     {
         ArgumentNullException.ThrowIfNull(context);
         return ProvideAsync(context.Agent, context.Session, context.AIContext.Messages, context.AIContext.Tools, cancellationToken);
+    }
+
+    /// <summary>Hands the finished run to the capture sink, as the options say.</summary>
+    /// <param name="context">The run's agent, session, request messages and response messages.</param>
+    /// <param name="cancellationToken">The caller's cancellation.</param>
+    /// <returns>A task that completes when the run has been handed off or skipped.</returns>
+    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> is cancelled.</exception>
+    protected override ValueTask StoreAIContextAsync(InvokedContext context, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        return StoreAsync(context.Agent, context.Session, context.RequestMessages, context.ResponseMessages, cancellationToken);
     }
 
     /// <summary>Gets the number of sessions that hold a run's state; for tests.</summary>
@@ -151,6 +174,80 @@ public sealed class ReasonletContextProvider : AIContextProvider
         }
 
         return new AIContext { Instructions = suggestion?.Text, Tools = lookup is null ? null : [lookup] };
+    }
+
+    /// <summary>
+    /// The steps after a run, on what <see cref="StoreAIContextAsync"/> reads from its context: the agent, the session, which
+    /// the type allows to be null, and the run's request and response messages.
+    /// </summary>
+    internal ValueTask StoreAsync(
+        AIAgent agent, AgentSession? session, IEnumerable<ChatMessage>? request, IEnumerable<ChatMessage>? response, CancellationToken cancellationToken)
+    {
+        if (!_options.Capture)
+        {
+            return ValueTask.CompletedTask;
+        }
+
+        // Taken off the session, so that the run's end is handed off once and the next run starts fresh.
+        AgentRunState? state = null;
+        if (session is not null && _runs.TryGetValue(session, out state))
+        {
+            _runs.Remove(session);
+        }
+
+        // Without state the start of the run is out of reach, such as for a run without a session. The start already counted
+        // a missing scope or a failing resolver for this run, so asking again counts nothing.
+        var scope = state?.Scope ?? ResolveScopeQuietly(agent, session, cancellationToken);
+        if (scope is null)
+        {
+            return ValueTask.CompletedTask;
+        }
+
+        var messages = new List<ChatMessage>();
+        messages.AddRange(request ?? []);
+        var responses = response?.ToList() ?? [];
+        messages.AddRange(responses);
+
+        var run = new ReasonletCaptureRun(scope.Scope, messages)
+        {
+            SubjectId = scope.SubjectId,
+            InjectedParent = state?.Parent,
+            Lookups = state?.Lookup?.Lookups ?? [],
+            Duration = state is null ? TimeSpan.Zero : _time.GetElapsedTime(state.StartTimestamp),
+            RunId = responses.Count > 0 ? responses[^1].MessageId : null,
+            Source = _options.Source,
+        };
+        HandOff(run, cancellationToken);
+        return ValueTask.CompletedTask;
+    }
+
+    /// <summary>
+    /// Hands the run to the sink. A sink that cannot be resolved or that throws is counted; a sink that refuses the run
+    /// counts that itself. The caller's own cancellation propagates.
+    /// </summary>
+    private void HandOff(ReasonletCaptureRun run, CancellationToken ct)
+    {
+        try
+        {
+            _ = _sink.Value.TryCapture(run);
+        }
+        catch (Exception ex) when (!(ex is OperationCanceledException && ct.IsCancellationRequested))
+        {
+            ReasonletCaptures.CountFailed(ex);
+        }
+    }
+
+    /// <summary>The resolver's scope for a run whose start left no state; a resolver that throws gives none, uncounted.</summary>
+    private ReasonletAgentScope? ResolveScopeQuietly(AIAgent agent, AgentSession? session, CancellationToken ct)
+    {
+        try
+        {
+            return _options.ScopeResolver(agent, session);
+        }
+        catch (Exception ex) when (!(ex is OperationCanceledException && ct.IsCancellationRequested))
+        {
+            return null;
+        }
     }
 
     /// <summary>

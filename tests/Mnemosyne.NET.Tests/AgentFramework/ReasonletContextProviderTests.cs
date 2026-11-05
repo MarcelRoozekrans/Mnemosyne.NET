@@ -530,23 +530,23 @@ public sealed class ReasonletContextProviderTests : IAsyncDisposable
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public async Task ARunOnASessionLeavesItsStateWhenCaptureIsOn(bool capture)
+    public async Task TheStartOfARunOnASessionLeavesItsStateWhenCaptureIsOn(bool capture)
     {
         var match = CaptureTestData.Match();
         _memory.Returns(match);
         var provider = Provider(new ReasonletAgentOptions { ExposeFindProcedure = true, Capture = capture });
-        var client = FakeAgentChatClient.Answering();
-        var agent = Agent(client, provider);
+        var agent = Agent(FakeAgentChatClient.Answering(), provider);
         var session = await agent.CreateSessionAsync(Ct);
 
-        await agent.RunAsync(CaptureTestData.Question, session, cancellationToken: Ct);
+        // The start hook alone: the end of a whole run takes the state away again.
+        var context = await provider.ProvideAsync(agent, session, [new(ChatRole.User, CaptureTestData.Question)], null, Ct);
 
         Assert.Equal(capture, provider.TryGetRunState(session, out var state));
         if (capture)
         {
             Assert.Equal(new ReasonletAgentScope(new ReasonletScope("support")), state!.Scope);
             Assert.Equal(match.Reasonlet.Id, state.Parent);
-            Assert.Same(Assert.Single(client.Options)!.Tools!.OfType<FindProcedureFunction>().Single(), state.Lookup);
+            Assert.Same(Assert.Single(context.Tools!), state.Lookup);
         }
     }
 
@@ -560,11 +560,12 @@ public sealed class ReasonletContextProviderTests : IAsyncDisposable
         });
         var agent = Agent(FakeAgentChatClient.Answering(), provider);
         var session = await agent.CreateSessionAsync(Ct);
-        await agent.RunAsync(CaptureTestData.Question, session, cancellationToken: Ct);
+        IEnumerable<ChatMessage> messages = [new(ChatRole.User, CaptureTestData.Question)];
+        await provider.ProvideAsync(agent, session, messages, null, Ct);
         Assert.True(provider.TryGetRunState(session, out _));
         unnamed = true;
 
-        await agent.RunAsync(CaptureTestData.Question, session, cancellationToken: Ct);
+        await provider.ProvideAsync(agent, session, messages, null, Ct);
 
         Assert.False(provider.TryGetRunState(session, out _));
     }
