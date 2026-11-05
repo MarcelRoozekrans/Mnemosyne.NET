@@ -31,7 +31,7 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
     private const string MigrationResourcePrefix = "Mnemosyne.NET.PostgreSql.Migrations.";
 
     /// <summary>The schema version this store needs, which the newest migration records in <c>mnemosyne.settings</c>.</summary>
-    private const int SchemaVersion = 4;
+    private const int SchemaVersion = 5;
 
     /// <summary>The most rows one prune transaction deletes, so no batch holds its locks for long.</summary>
     internal const int PruneBatchSize = 1000;
@@ -170,6 +170,12 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
     /// with a concurrent erase of its lineage answers <see cref="MnemosyneErrorCode.Conflict"/>.
     /// </para>
     /// <para>
+    /// An entry without a parent first takes a transaction-scoped advisory lock on its scope and content hash, before any
+    /// row lock, then looks for a Reasonlet of the scope with that hash and locks it <c>FOR NO KEY UPDATE</c>. When there
+    /// is one, the entry is an execution only of it: an Active Reasonlet before a pending one, then the newest. When there
+    /// is none, it is a new Reasonlet. The advisory lock makes concurrent parentless remembers of one shape insert it once.
+    /// </para>
+    /// <para>
     /// The embedding must have <see cref="MnemosynePostgreSqlOptions.Dimensions"/> values and a nonzero, finite norm,
     /// or the entry is a <see cref="MnemosyneErrorCode.Validation"/> failure: cosine similarity is undefined otherwise.
     /// </para>
@@ -239,9 +245,23 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
         ReasonletReceipt receipt;
         if (capture.ParentId is not { } parentId)
         {
-            receipt = await InsertReasonletAsync(
-                reasonlets, executions, entry, hash, LineageVersions.Initial, null, ReasonletCaptureKind.NewReasonlet, transaction, ct)
-                .ConfigureAwait(false);
+            // A parentless repeat of a shape the scope holds is an execution of it, not another Reasonlet. The advisory
+            // lock on the scope and hash comes before any row lock, so two parentless remembers of one shape run one
+            // after the other and the second sees the first's row; no unique index can do this, because one hash may
+            // sit on several rows.
+            var scope = capture.Scope.Value;
+            await reasonlets.LockContentHashAsync(scope, hash, transaction, ct).ConfigureAwait(false);
+            if (await reasonlets.LockHashMatchAsync(scope, hash, transaction, ct).ConfigureAwait(false) is { } match)
+            {
+                receipt = await RecordExecutionOnlyAsync(
+                    executions, entry, match.Id, match.Version, match.Status, transaction, ct).ConfigureAwait(false);
+            }
+            else
+            {
+                receipt = await InsertReasonletAsync(
+                    reasonlets, executions, entry, hash, LineageVersions.Initial, null, ReasonletCaptureKind.NewReasonlet, transaction, ct)
+                    .ConfigureAwait(false);
+            }
         }
         else
         {
@@ -253,10 +273,8 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
 
             if (string.Equals(parent.ContentHash, hash, StringComparison.Ordinal))
             {
-                var execution = await InsertExecutionAsync(executions, parent.Id, capture, entry.Evaluation, transaction, ct).ConfigureAwait(false);
-                var (source, success) = Verdict(capture.Outcome, entry.Evaluation);
-                receipt = new ReasonletReceipt(
-                    new ReasonletId(parent.Id), parent.Version, execution, ReasonletCaptureKind.ExecutionOnly, (ReasonletStatus)parent.Status, source, success);
+                receipt = await RecordExecutionOnlyAsync(
+                    executions, entry, parent.Id, parent.Version, parent.Status, transaction, ct).ConfigureAwait(false);
             }
             else
             {
@@ -264,7 +282,8 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
                 // scope. Every lock is taken going up the tree: the parent FOR NO KEY UPDATE, then each ancestor between
                 // the parent and the top FOR KEY SHARE, bottom-up, then the top FOR NO KEY UPDATE. When the parent is the
                 // top, the top lock is a re-lock. A transaction only ever waits for a row above every row it holds, so
-                // remembers cannot deadlock one another.
+                // remembers cannot deadlock one another. The parentless path's advisory lock does not change this: it is
+                // taken before any row lock, and never on this path, so no remember waits for it while holding a row.
                 var scope = capture.Scope.Value;
                 var path = FollowToTop(parent.Id, await reasonlets.WalkUpAsync(scope, parent.Id, transaction, ct).ConfigureAwait(false));
 
@@ -325,6 +344,26 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
         }
 
         return [.. path];
+    }
+
+    /// <summary>
+    /// Records the capture as an execution of a Reasonlet this transaction holds locked, and answers the execution-only
+    /// receipt with the Reasonlet's version and status, which an execution never changes.
+    /// </summary>
+    private static async Task<ReasonletReceipt> RecordExecutionOnlyAsync(
+        ExecutionRepository executions,
+        ReasonletStoreEntry entry,
+        Guid reasonletId,
+        string version,
+        short status,
+        IAsyncDbTransaction transaction,
+        CancellationToken ct)
+    {
+        var capture = entry.Capture;
+        var execution = await InsertExecutionAsync(executions, reasonletId, capture, entry.Evaluation, transaction, ct).ConfigureAwait(false);
+        var (source, success) = Verdict(capture.Outcome, entry.Evaluation);
+        return new ReasonletReceipt(
+            new ReasonletId(reasonletId), version, execution, ReasonletCaptureKind.ExecutionOnly, (ReasonletStatus)status, source, success);
     }
 
     private static async Task<ReasonletReceipt> InsertReasonletAsync(

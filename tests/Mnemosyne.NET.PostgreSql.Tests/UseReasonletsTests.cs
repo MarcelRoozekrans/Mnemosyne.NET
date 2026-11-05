@@ -77,12 +77,16 @@ public sealed class UseReasonletsTests(PgVectorFixture fixture) : IClassFixture<
 
         Assert.All(model.Requests, request => Assert.DoesNotContain(request, m => m.Text.StartsWith(Injected, StringComparison.Ordinal)));
 
-        // Nothing was recalled, so the second run carries no parent and is stored as another pending Reasonlet.
-        Assert.Equal(2L, await Entries.ScalarAsync<long>(
+        // Nothing was recalled, so the second run carries no parent. Its shape is the stored pending one, so it is
+        // recorded as a second execution of that Reasonlet rather than stored again.
+        Assert.Equal(1L, await Entries.ScalarAsync<long>(
             fixture.DataSource,
             "SELECT count(*) FROM mnemosyne.reasonlets WHERE scope = $1 AND status = $2",
             scope.Value,
             (short)ReasonletStatus.PendingReview));
+        Assert.Equal(1L, await CountAsync(scope));
+        Assert.Equal(2L, await Entries.ScalarAsync<long>(
+            fixture.DataSource, "SELECT count(*) FROM mnemosyne.reasonlet_executions WHERE scope = $1", scope.Value));
     }
 
     /// <summary>The model calls orders.get, then payments.refund, then answers.</summary>

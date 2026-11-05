@@ -18,7 +18,8 @@ By default a capture is stored as `Active` and can be recalled at once. Set `Mne
 
 | Capture | Stored as | Receipt status |
 |---|---|---|
-| No `ParentId` | a new Reasonlet, `PendingReview` | `PendingReview` |
+| No `ParentId` and the graph of a Reasonlet already in the scope | a run on that Reasonlet; its status is unchanged | that Reasonlet's status |
+| No `ParentId` and a graph new to the scope | a new Reasonlet, `PendingReview` | `PendingReview` |
 | `ParentId` and the same graph as the parent | a run on the parent; the parent's status is unchanged | the parent's status |
 | `ParentId` and a different graph | a new version, `PendingReview`, whatever the parent's status | `PendingReview` |
 

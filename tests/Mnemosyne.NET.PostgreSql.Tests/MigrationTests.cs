@@ -27,7 +27,7 @@ public sealed class MigrationTests(PgVectorFixture fixture) : IClassFixture<PgVe
         Assert.Contains("m='16'", index, StringComparison.Ordinal);
         Assert.Contains("ef_construction='64'", index, StringComparison.Ordinal);
         Assert.Equal(
-            "dimensions=3,hnsw_ef_construction=64,hnsw_m=16,min_binary_schema=3,schema_version=4",
+            "dimensions=3,hnsw_ef_construction=64,hnsw_m=16,min_binary_schema=3,schema_version=5",
             string.Join(",", await RowsAsync(fixture.DataSource, "SELECT key || '=' || value FROM mnemosyne.settings ORDER BY key")));
     }
 
@@ -157,6 +157,7 @@ public sealed class MigrationTests(PgVectorFixture fixture) : IClassFixture<PgVe
                 "reasonlet_executions: USING btree (scope, id)",
                 "reasonlet_executions: USING btree (scope, reasonlet_id)",
                 "reasonlet_executions: USING btree (scope, subject_id)",
+                "reasonlets: USING btree (scope, content_hash)",
                 "reasonlets: USING btree (scope, id)",
                 "reasonlets: USING btree (scope, id) WHERE (status = 2)",
                 "reasonlets: USING btree (scope, parent_id)",
@@ -360,7 +361,20 @@ public sealed class MigrationTests(PgVectorFixture fixture) : IClassFixture<PgVe
     }
 
     [Fact]
-    public async Task ADatabaseAtMigration0003MigratesToFourKeepingTheMinimumBinary()
+    public async Task MigrationAddsTheScopeContentHashIndex()
+    {
+        Assert.True((await fixture.CreateStore().MigrateAsync(Ct)).IsSuccess);
+
+        var definition = await ScalarAsync<string>(
+            fixture.DataSource, "SELECT indexdef FROM pg_indexes WHERE schemaname = 'mnemosyne' AND indexname = 'reasonlets_scope_content_hash'");
+
+        Assert.Contains("(scope, content_hash)", definition, StringComparison.Ordinal);
+        Assert.DoesNotContain("UNIQUE", definition, StringComparison.Ordinal);
+        Assert.Equal("5", await ScalarAsync<string>(fixture.DataSource, "SELECT value FROM mnemosyne.settings WHERE key = 'schema_version'"));
+    }
+
+    [Fact]
+    public async Task ADatabaseAtMigration0003MigratesToTheLatestKeepingTheMinimumBinary()
     {
         var dataSource = await fixture.CreateEmptyDatabaseAsync();
         await using (var connection = (await dataSource.OpenConnectionAsync(Ct)).AsAsync())
@@ -383,11 +397,13 @@ public sealed class MigrationTests(PgVectorFixture fixture) : IClassFixture<PgVe
 
         Assert.True((await store.MigrateAsync(Ct)).IsSuccess);
 
-        Assert.Equal("1,2,3,4", string.Join(",", await RowsAsync(dataSource, "SELECT version::text FROM __zaorm_migrations ORDER BY version")));
-        Assert.Equal("4", (await RowsAsync(dataSource, "SELECT value FROM mnemosyne.settings WHERE key = 'schema_version'"))[0]);
+        Assert.Equal("1,2,3,4,5", string.Join(",", await RowsAsync(dataSource, "SELECT version::text FROM __zaorm_migrations ORDER BY version")));
+        Assert.Equal("5", (await RowsAsync(dataSource, "SELECT value FROM mnemosyne.settings WHERE key = 'schema_version'"))[0]);
         Assert.Equal("3", (await RowsAsync(dataSource, "SELECT value FROM mnemosyne.settings WHERE key = 'min_binary_schema'"))[0]);
         Assert.Equal(1, await ScalarAsync<long>(
             dataSource, "SELECT count(*) FROM pg_indexes WHERE schemaname = 'mnemosyne' AND indexname = 'reasonlets_pending'"));
+        Assert.Equal(1, await ScalarAsync<long>(
+            dataSource, "SELECT count(*) FROM pg_indexes WHERE schemaname = 'mnemosyne' AND indexname = 'reasonlets_scope_content_hash'"));
     }
 
     [Fact]
@@ -480,8 +496,8 @@ public sealed class MigrationTests(PgVectorFixture fixture) : IClassFixture<PgVe
                 + "coalesce(evaluator, '-'), coalesce(feedback_worked::text, '-')) FROM mnemosyne.reasonlet_executions ORDER BY executed_at"));
         Assert.Equal(metricsBefore, await RowsAsync(dataSource, "SELECT concat_ws('|', runs, successes, last_success_at, last_executed_at) FROM mnemosyne.reasonlet_metrics"));
         Assert.Equal("0.1|0.2|0.3", (await RowsAsync(dataSource, "SELECT concat_ws('|', utility, correctness, reusability) FROM mnemosyne.reasonlet_feedback"))[0]);
-        Assert.Equal("1,2,3,4", string.Join(",", await RowsAsync(dataSource, "SELECT version::text FROM __zaorm_migrations ORDER BY version")));
-        Assert.Equal("4", (await RowsAsync(dataSource, "SELECT value FROM mnemosyne.settings WHERE key = 'schema_version'"))[0]);
+        Assert.Equal("1,2,3,4,5", string.Join(",", await RowsAsync(dataSource, "SELECT version::text FROM __zaorm_migrations ORDER BY version")));
+        Assert.Equal("5", (await RowsAsync(dataSource, "SELECT value FROM mnemosyne.settings WHERE key = 'schema_version'"))[0]);
         Assert.Equal("0|0", (await RowsAsync(dataSource, "SELECT concat_ws('|', judged_runs, judged_successes) FROM mnemosyne.reasonlet_metrics"))[0]);
 
         // The upgraded store works: a verdict on the old failed run raises the counter and makes the run judged.
@@ -567,9 +583,9 @@ public sealed class MigrationTests(PgVectorFixture fixture) : IClassFixture<PgVe
             WHERE (m.judged_runs, m.judged_successes) <> (a.judged_runs, a.judged_successes)
             """));
         Assert.Equal(
-            "dimensions=3,hnsw_ef_construction=64,hnsw_m=16,min_binary_schema=3,schema_version=4",
+            "dimensions=3,hnsw_ef_construction=64,hnsw_m=16,min_binary_schema=3,schema_version=5",
             string.Join(",", await RowsAsync(dataSource, "SELECT key || '=' || value FROM mnemosyne.settings ORDER BY key")));
-        Assert.Equal("1,2,3,4", string.Join(",", await RowsAsync(dataSource, "SELECT version::text FROM __zaorm_migrations ORDER BY version")));
+        Assert.Equal("1,2,3,4,5", string.Join(",", await RowsAsync(dataSource, "SELECT version::text FROM __zaorm_migrations ORDER BY version")));
 
         // The upgraded store keeps the counters: a verdict that agrees with the agent's failure makes its run judged.
         Assert.True((await store.AppendFeedbackAsync(
@@ -582,7 +598,7 @@ public sealed class MigrationTests(PgVectorFixture fixture) : IClassFixture<PgVe
     {
         var dataSource = await fixture.CreateEmptyDatabaseAsync();
         Assert.True((await new ReasonletPostgreSqlStore(dataSource, new MnemosynePostgreSqlOptions { Dimensions = 3 }).MigrateAsync(Ct)).IsSuccess);
-        await Entries.ExecuteAsync(dataSource, "UPDATE mnemosyne.settings SET value = '5' WHERE key = 'min_binary_schema'");
+        await Entries.ExecuteAsync(dataSource, "UPDATE mnemosyne.settings SET value = '6' WHERE key = 'min_binary_schema'");
         var store = new ReasonletPostgreSqlStore(dataSource, new MnemosynePostgreSqlOptions { Dimensions = 3 });
         var scope = PgVectorFixture.NewScope();
 
@@ -662,7 +678,7 @@ public sealed class MigrationTests(PgVectorFixture fixture) : IClassFixture<PgVe
     {
         Assert.Equal(MnemosyneErrorCode.Unavailable, error.Code);
         Assert.Equal(
-            "binary too old for the database: the database needs a binary of schema 5 or later, and this one is schema 4; upgrade Mnemosyne.NET.PostgreSql",
+            "binary too old for the database: the database needs a binary of schema 6 or later, and this one is schema 5; upgrade Mnemosyne.NET.PostgreSql",
             error.Message);
     }
 
