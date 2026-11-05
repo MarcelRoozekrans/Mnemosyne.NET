@@ -4,30 +4,23 @@
 
 ## Current Position
 - **Milestone:** 3, Off-the-shelf integrations. Active since 2026-10-30. Design: `docs/superpowers/specs/2026-10-30-milestone-3-design.md`.
-- **Phase:** 3.6, the Agent Framework AIContextProvider. **Complete** on branch `feat/phase-3.6-agent-framework-context-provider`. PR #54 against main is open and waits for Marcel to merge it.
-  - All 9 plan tasks are done, each with a task review and a fix round for its findings, Minors included. An Opus whole-branch review followed, then one fix wave with a scoped re-review. The pre-push review passed: `docs/superpowers/reviews/pre-push-review-2026-11-05-1123.md`.
-  - main at 0.6.1 is merged into the branch. Unit 1565, PostgreSQL 313, the AOT smoke publishes without warnings and exits 0, the pack gives 6 nupkg, and the docsite builds.
-  - #45 and #47 close with the PR. #46 is closed with a comment linking `docs/guides/chat-evaluator.md`. #55 is filed for the duplicated PostgreSQL test helpers.
-- **Next phase:** 3.7, integration docs and samples. It is pending, with no design yet.
-- **Previous phase:** 3.5 merged as PR #48 and was released in 0.6.0.
+- **Phase:** 3.7, integration docs and samples. **Active**, on branch `feat/phase-3.7-integration-docs-samples`, cut from `main` at 727b534. Design approved, plan written, execution not started.
+  - Design: `docs/superpowers/specs/2026-11-05-phase-3.7-integration-docs-samples-design.md`. Plan: `docs/superpowers/plans/2026-11-05-phase-3.7-integration-docs-samples.md`, 9 tasks.
+  - Marcel chose subagent-driven execution on 2026-11-05.
+- **Previous phase:** 3.6 merged as PR #54 (727b534) and is in release-please PR #56 (0.7.0), which is open.
 
-## Decisions taken during 3.6 execution
-All of these are in the spec's 2026-11-05 amendments.
-- **`ReasonletCaptureRun`** is the public capture record, because `ReasonletRun` is already the Abstractions execution record.
-- **Public counting entry points:** `ReasonletSuggestions.CountFailed` and `ReasonletCaptures.CountFailed`. With them the provider counts on the core's instruments without `InternalsVisibleTo` from the core.
-- **Agent tests** live in `tests/Mnemosyne.NET.Tests/AgentFramework`.
-- **Testing through internal methods:**
-  - The provider's hooks hand off to internal methods that the tests call directly.
-  - This covers a null session without the experimental (MAAI001) `InvokingContext` constructor.
-- **A run without stored state** is captured with no parent and no lookups. The end hook counts nothing for a missing scope.
-- **`UseReasonlets` resolves `IReasonletCaptureSink`,** not the concrete queue.
-- **`TryCapture` copies the message list** when the run is handed over.
-- **Capture contents:** a capture holds only this run's request messages (the base filter keeps only the caller's own input) plus all response messages. Earlier history is not captured.
+## Decisions taken during 3.7 brainstorming
+- **Scripted fake chat client** for the new samples, not a real model: offline, self-checking, gated in CI like the first two samples.
+- **Two samples:** a chat pipeline sample (UseReasonlets, review gate, real AI.Sentinel adapter blocking a card number) and an Agent Framework sample.
+- **Three guides** in `docs/guides`: chat-pipeline (7), capture-and-review (8), agent-framework (9).
+- **Capture watcher, not a store poll.** The samples learn that a background capture finished from the `mnemosyne.capture.runs` counter, because a blocked or execution-only capture leaves nothing in the store to poll. This replaces the bounded poll that the design doc still mentions in one sentence; amend the design if it matters.
+- **No API change in this phase.** A needed change is filed as an issue.
 
 ## Open Decisions
 - Rulings from phase 3.2 that are still open:
   - a remember call cancelled before it starts emits `mnemosyne.guard` with outcome `exception`;
   - `Abandon` takes `Task?`.
+- Unverified: that AI.Sentinel's PII detector blocks a Luhn-valid card number offline. Task 3 step 1 of the plan confirms it before the sample is written.
 
 ## Blockers
 - None.
@@ -35,10 +28,10 @@ All of these are in the spec's 2026-11-05 amendments.
 ## Notes
 - **Thalos:** the Thalos `IAgentContextProviderSource` adapter and the Daedalus wiring are PRs in those repos after 3.6 is released. Thalos.NET.Sentinel still pins AI.Sentinel 2.3.1 (MarcelRoozekrans/Thalos.NET#457).
 - **AI.Sentinel#550:** still open. Once it lands, map an incomplete scan to `Unavailable`.
-- **Git trap:** `push.default` is `upstream`, so push with an explicit `branch:branch` refspec.
+- **Git trap:** `push.default` is `upstream` and this branch tracks `origin/main`, so push with an explicit `branch:branch` refspec.
 - **Tests:** the repo refuses `dotnet test --filter`. Build first, then run the test exe with `-class <FQN>`.
+- **Docker:** the samples need Docker and PostgreSQL with pgvector. `docker` is installed in the dev environment.
 
 ## Recommended Next Step
-1. PR #54 is green on every check at ebc7847, both codecov checks included. Marcel merges.
-2. After the merge, check that the PR's `feat:` and `fix:` entries appear in the release-please PR.
-3. Start phase 3.7, integration docs and samples: run `start-next-phase`, which brainstorms its design.
+1. Resume with `resume-work`, then run `superpowers:subagent-driven-development` on the plan, starting at Task 1. Create the ledger first.
+2. When all 9 tasks are done: whole-branch review, pre-push review, push with the explicit refspec, open the PR, wait for codecov, then `complete-phase`.
