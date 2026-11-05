@@ -1,58 +1,44 @@
-# Session State — 2026-11-04
+# Session State — 2026-11-05
 
-**Date:** 2026-11-04
+**Date:** 2026-11-05
 
 ## Current Position
 - **Milestone:** 3, Off-the-shelf integrations. Active since 2026-10-30. Design: `docs/superpowers/specs/2026-10-30-milestone-3-design.md`.
-- **Phase:** 3.5, UseReasonlets middleware and the find_procedure tool. **Complete** on branch `feat/phase-3.5-reasonlets-find-procedure`, cut from `main` at 87e89f2. PR #48 against main is open, with every check green including both codecov checks; it waits for Marcel to merge it.
-  - All 9 plan tasks are done, each with a task review. A whole-branch review, one fix wave and a scoped re-review followed, and the pre-push review passed.
-  - Unit 1444, integration 301, and the AOT smoke publishes without warnings and exits 0.
-- **Previous phase:** 3.4, the AI.Sentinel adapter, merged as PR #30 on 2026-10-31 and released in 0.5.0 (#31).
+- **Phase:** 3.6, the Agent Framework AIContextProvider. **Active** on branch `feat/phase-3.6-agent-framework-context-provider`, cut from `main` at 0731a61 and pushed.
+  - Design approved 2026-11-05: `docs/superpowers/specs/2026-11-05-phase-3.6-agent-context-provider-design.md`. It carries an amendment for the public recall step.
+  - Plan approved 2026-11-05: `docs/superpowers/plans/2026-11-05-phase-3.6-agent-context-provider.md`, with 9 tasks.
+  - Marcel chose **subagent-driven** execution. No plan task has started.
+- **Previous phase:** 3.5 merged as PR #48 on 2026-11-04 and was released in 0.6.0 (#49). The changelog lists it.
 
-## Decisions taken during 3.5 execution
-- **Unanswered tool calls are not captured.** A response that ends on a `FunctionCallContent` with no result, or on an `InputRequestContent` approval request, is skipped with skip reason `pending_tool_calls`.
-  - This holds in every pipeline order and for host-driven tool loops, so each run is captured once with its full shape.
-  - The spec's claim that the inside order skips with `NoToolCalls` was wrong, and the spec now carries an amendment dated 2026-11-04.
-  - Whether a call is pending is decided at hand-off, because `FunctionInvokingChatClient` sets `InformationalOnly` after the middleware returns.
-- **Lazy resolution.** `UseReasonlets` resolves the memory and the capture queue on the first call, which breaks the DI cycle that hung startup when the chat evaluator judges with the same client.
-  - The chat evaluator marks its judge calls with an internal key, and the middleware passes those calls through untouched.
-  - A memory or queue that fails to resolve is counted, and the call goes on.
-- **Automatic captures are named after their tool shape.** No question text reaches another user's injected message.
-- **The capture queue is also `IDisposable`.** A synchronous `ServiceProvider.Dispose` drains it instead of throwing.
-- **`no_scope` is counted** whenever Recall or Capture is on.
-- **Follow-ups that need a decision:**
-  - #45: a parentless capture of a stored shape creates a duplicate Reasonlet;
-  - #46: judge calls from other libraries go through `UseReasonlets`;
-  - #47: extracted intent can carry question text into `find_procedure` results.
-
-## Decisions taken during 3.4 execution
-- **ZeroAlloc analyzer switch.** `ZeroAllocAuthorizationDisableBundledAnalyzer=true` is set in the Sentinel csproj.
-  - The bundled ZeroAlloc.Authorization generator reaches the project transitively, even though AI.Sentinel excludes Analyzers.
-  - Without the switch, it would put a public `GeneratedAuthorizationRegistration` into the package's API, where it would collide with the host's own registration.
-  - Tracked upstream as ZeroAlloc-Net/ZeroAlloc.Authorization#181. Remove the switch only when the fix stops the type from being emitted into libraries that have no policies.
-- **Named pipelines need the default pipeline.** AI.Sentinel 4.1.1 requires the host to register the default pipeline as well as any named one. The README says so, and the test registers both.
-- **A throwing detector does not fail closed.** AI.Sentinel 4.1.1 skips a detector that throws and counts it as clean, so the guard allows the capture.
-  - This is documented in the README and the XML remarks, and pinned by `AThrowingDetectorIsSkippedAndTheCaptureIsAllowed`.
-  - Upstream fix: MarcelRoozekrans/AI.Sentinel#550. Once it lands, map an incomplete scan to `Unavailable` and flip that test.
-- **Medium-severity PII.** AI.Sentinel rates email, phone and date of birth as Medium. With the default threshold of High, they are stored. This is documented, and tests cover both thresholds.
+## Decisions taken in the 3.6 brainstorm (all in the spec)
+- **Unit of capture: one agent run is one procedure.** Thalos and Daedalus were checked: one turn is one run, with no tool approvals and no clarifying questions. Thalos also makes a fresh Agent Framework session every turn. Joining runs is a documented limit.
+- **Default scope is per agent (`agent.Name`), with no default subject.** The host's `ScopeResolver` can override it, and the Thalos adapter will map the owner.
+- **Approach A: a public core API.** It is made of `ReasonletRun`, `IReasonletCaptureSink`, a public `FindProcedureFunction` with `Lookups`, and the public recall step `ReasonletSuggestions`. `UseReasonlets` moves onto the same API, and the provider is thin.
+- **#45:** the store deduplicates parentless captures by content hash, with an advisory lock and migration `0005` (index on scope and content hash).
+- **#47:** `find_procedure` drops `intent` from its output.
+- **#46:** stays internal and documented. Close it at PR time with a comment that links `docs/guides/chat-evaluator.md`.
+- **Agent Framework facts, from a probe against 1.27:**
+  - the run-end hook sees the whole tool loop for normal and streamed runs;
+  - both hooks get the same session object;
+  - an abandoned stream never reaches the run-end hook, and a failed run is skipped by the base class.
+- **Versions:** the package floor is `Microsoft.Agents.AI.Abstractions` 1.24.0, held there in Renovate. It targets net10.0 only.
 
 ## Open Decisions
 - Rulings from phase 3.2 that are still open:
-  - a remember call that is cancelled before it starts emits `mnemosyne.guard` with outcome `exception`;
+  - a remember call cancelled before it starts emits `mnemosyne.guard` with outcome `exception`;
   - `Abandon` takes `Task?`.
-
-## Resolved Decisions
-- **AI.Sentinel#550 timing:** Marcel chose to ship 3.4 with the documented gap. It shipped in 0.5.0. #550 was still open on 2026-11-03 (AI.Sentinel 4.2.0 does not fix it); the follow-up is still to map an incomplete scan to `Unavailable` once #550 lands.
 
 ## Blockers
 - None.
 
 ## Notes
-- **Thalos:** Thalos.NET.Sentinel still pins AI.Sentinel 2.3.1. Its move to 4.x is MarcelRoozekrans/Thalos.NET#457, and it is needed before Daedalus wires both adapters.
-- **Release:** 0.5.0 is released (349fd1a on main) and includes phase 3.4.
+- **Thalos:** Thalos.NET.Sentinel still pins AI.Sentinel 2.3.1; its move to 4.x is MarcelRoozekrans/Thalos.NET#457. The Thalos `IAgentContextProviderSource` adapter and the Daedalus wiring are PRs in those repos after 3.6 is released.
+- **AI.Sentinel#550:** still open. Once it lands, map an incomplete scan to `Unavailable`.
 - **Git trap:** `push.default` is `upstream`, so push with an explicit `branch:branch` refspec.
 - **Tests:** the repo refuses `dotnet test --filter`. Build first, then run the test exe with `-class <FQN>`.
 
 ## Recommended Next Step
-1. Marcel merges PR #48. After the merge, check that its `feat:` and `fix:` commits appear in the release-please PR.
-2. Start phase 3.6, the Agent Framework AIContextProvider: brainstorm its design. It builds on the same recall, capture queue and processor. Decide #45-#47 first or alongside it, since 3.6 inherits all three.
+1. On branch `feat/phase-3.6-agent-framework-context-provider`, run `superpowers:subagent-driven-development` on `docs/superpowers/plans/2026-11-05-phase-3.6-agent-context-provider.md`, starting at Task 1.
+   - Sonnet implementers, except Tasks 4 and 6, which are marked opus.
+   - Finish with an Opus whole-branch review, then `pre-push-review`.
+2. Open the PR against main, with `Closes #45` and `Closes #47`. Comment on and close #46. Wait for every check, both codecov checks included. Marcel merges.
