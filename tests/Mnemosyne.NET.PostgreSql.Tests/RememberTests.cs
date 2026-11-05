@@ -251,17 +251,24 @@ public sealed class RememberTests(PgVectorFixture fixture) : IClassFixture<PgVec
     [Fact]
     public async Task ConcurrentParentlessCapturesOfOneShapeInsertOnce()
     {
-        // Each caller holds its own pooled connection. The barrier releases all eight together, after every one is
-        // running, so their lookups race: without the advisory lock each would miss and insert its own row.
+        // Each caller holds its own pooled connection. The gate opens when the last caller has started, and releases
+        // all eight together, so their lookups race: without the advisory lock each would miss and insert its own row.
+        // The callers await the gate rather than block on it, so they hold no pool thread while they wait.
         const int Callers = 8;
         var store = await MigratedStoreAsync();
         var scope = PgVectorFixture.NewScope();
-        using var start = new Barrier(Callers);
+        var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var started = 0;
 
         var tasks = Enumerable.Range(0, Callers).Select(_ => Task.Run(
             async () =>
             {
-                start.SignalAndWait(Ct);
+                if (Interlocked.Increment(ref started) == Callers)
+                {
+                    gate.SetResult();
+                }
+
+                await gate.Task.WaitAsync(Ct);
                 return await store.RememberAsync(Entries.Entry(scope), Ct);
             },
             Ct)).ToArray();
