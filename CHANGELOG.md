@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.8.0](https://github.com/MarcelRoozekrans/Mnemosyne.NET/compare/v0.7.0...v0.8.0) (2026-11-06)
+
+
+### ⚠ BREAKING CHANGES
+
+* ReasonletCandidate, ReasonletMatch and ReasonletEvidence are init-only records without a positional constructor or Deconstruct, and LineageId is a required member, so a store or selector outside this repo that builds them must set it.
+* ReasonletReceipt, ReasonletRunReceipt, ReasonletReview and ReasonletStoreEntry are init-only records without a positional constructor or Deconstruct. ReasonletPromptFormatter and the generated Sentinel service registration are internal.
+
+### Features
+
+* report the lineage of each recalled Reasonlet, phase 4.2 ([df0fcf2](https://github.com/MarcelRoozekrans/Mnemosyne.NET/commit/df0fcf2b795407d585f4b37f1b448c29f49087ae))
+
+
+### Continuous Integration
+
+* run BenchmarkDotNet benchmarks for ranking, middleware and search in CI, phase 4.3 ([df0fcf2](https://github.com/MarcelRoozekrans/Mnemosyne.NET/commit/df0fcf2b795407d585f4b37f1b448c29f49087ae))
+
 ## [0.7.0](https://github.com/MarcelRoozekrans/Mnemosyne.NET/compare/v0.6.1...v0.7.0) (2026-11-05)
 
 
