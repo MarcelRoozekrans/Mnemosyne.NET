@@ -138,7 +138,16 @@ public class CaptureAndQueryTests
     {
         var id = ReasonletId.New();
         var exec = ExecutionId.New();
-        var r = new ReasonletReceipt(id, "1.0.0", exec, ReasonletCaptureKind.NewVersion, ReasonletStatus.Active, ReasonletVerdictSource.Evaluator, true);
+        var r = new ReasonletReceipt
+        {
+            Id = id,
+            Version = "1.0.0",
+            Execution = exec,
+            Kind = ReasonletCaptureKind.NewVersion,
+            Status = ReasonletStatus.Active,
+            Source = ReasonletVerdictSource.Evaluator,
+            Success = true,
+        };
         Assert.Equal(id, r.Id);
         Assert.Equal("1.0.0", r.Version);
         Assert.Equal(exec, r.Execution);
@@ -152,9 +161,33 @@ public class CaptureAndQueryTests
     public void RunReceipt_CarriesValues()
     {
         var exec = ExecutionId.New();
-        var r = new ReasonletRunReceipt(exec, ReasonletVerdictSource.Agent, false);
+        var r = new ReasonletRunReceipt
+        {
+            Execution = exec,
+            Source = ReasonletVerdictSource.Agent,
+            Success = false,
+        };
         Assert.Equal(exec, r.Execution);
         Assert.Equal(ReasonletVerdictSource.Agent, r.Source);
         Assert.False(r.Success);
+    }
+
+    [Fact]
+    public void RunReceipt_WithCopiesTheOtherMembers()
+    {
+        var exec = ExecutionId.New();
+        var r = new ReasonletRunReceipt
+        {
+            Execution = exec,
+            Source = ReasonletVerdictSource.Agent,
+            Success = false,
+        };
+
+        var judged = r with { Source = ReasonletVerdictSource.Evaluator };
+
+        Assert.Equal(exec, judged.Execution);
+        Assert.Equal(ReasonletVerdictSource.Evaluator, judged.Source);
+        Assert.False(judged.Success);
+        Assert.Equal(ReasonletVerdictSource.Agent, r.Source);
     }
 }

@@ -91,6 +91,20 @@ public sealed class FindProcedureFunctionTests
     }
 
     [Fact]
+    public async Task TheResultCarriesTheLineageIdOfEachItem()
+    {
+        var memory = new FakeReasonletMemory();
+        var match = Match();
+        memory.Returns(match);
+        var function = ReasonletTools.CreateFindProcedure(memory, Scope);
+
+        var result = await function.InvokeAsync(Args(("question", "refund")), CancellationToken.None);
+
+        var item = Assert.Single(Assert.IsType<JsonElement>(result).EnumerateArray());
+        Assert.Equal(match.LineageId.ToString(), item.GetProperty("lineageId").GetString());
+    }
+
+    [Fact]
     public async Task NoMatchesReturnsAnEmptyArray()
     {
         var function = ReasonletTools.CreateFindProcedure(new FakeReasonletMemory(), Scope);
@@ -317,8 +331,9 @@ public sealed class FindProcedureFunctionTests
             Edges = [new ReasonletEdge { From = "a", To = "b" }],
             SchemaVersion = ReasonletGraph.CurrentSchemaVersion,
         };
-        return new ReasonletMatch(
-            new ReasonletDefinition
+        return new ReasonletMatch
+        {
+            Reasonlet = new ReasonletDefinition
             {
                 Id = ReasonletId.New(),
                 Scope = Scope,
@@ -330,8 +345,10 @@ public sealed class FindProcedureFunctionTests
                 Status = ReasonletStatus.Active,
                 CreatedAt = DateTimeOffset.UnixEpoch,
             },
-            new ReasonletScore(Similarity: 0.82, SuccessRate: 0.75, Freshness: 1, Total: 0.8),
-            new ReasonletEvidence(Runs: 11, JudgedRuns: 11, UsesParentPrior: false));
+            Score = new ReasonletScore(Similarity: 0.82, SuccessRate: 0.75, Freshness: 1, Total: 0.8),
+            Evidence = new ReasonletEvidence { Runs = 11, JudgedRuns = 11, UsesParentPrior = false },
+            LineageId = ReasonletId.New(),
+        };
     }
 
     private static ReasonletNode Node(string id, string tool, string arguments) =>

@@ -118,6 +118,32 @@ internal sealed partial class ReasonletRepository(IAsyncDbConnection connection)
     public partial Task<List<ParentLinkRow>> WalkUpAsync(string scope, Guid id, IAsyncDbTransaction transaction, CancellationToken ct);
 
     /// <summary>
+    /// Finds the top of the lineage of each of the Reasonlets in the scope, in one walk up <c>parent_id</c> from all of
+    /// them: a row per Reasonlet that reaches a top, giving the Reasonlet it started from and the top. A Reasonlet that
+    /// is not in the scope has no row, and neither has one in a <c>parent_id</c> cycle, which only hand-written SQL can
+    /// create: no row of a cycle has a null parent, so the caller falls back to the Reasonlet's own id.
+    /// </summary>
+    /// <remarks>
+    /// <c>UNION</c> rather than <c>UNION ALL</c> drops a row the walk has already returned, so a cycle ends the walk after
+    /// one lap, and the step is the <c>LATERAL</c> subquery with <c>LIMIT 1</c> that <see cref="WalkUpAsync"/> uses, one
+    /// primary-key probe per step. The walk is linear in the sum of the depths of the lineages it starts from.
+    /// </remarks>
+    [Query("""
+        WITH RECURSIVE up (start_id, id, parent_id) AS (
+            SELECT id, id, parent_id FROM mnemosyne.reasonlets WHERE scope = @scope AND id = ANY(@ids)
+            UNION
+            SELECT up.start_id, p.id, p.parent_id
+            FROM up CROSS JOIN LATERAL (
+                SELECT r.id, r.parent_id FROM mnemosyne.reasonlets r
+                WHERE r.id = up.parent_id AND r.scope = @scope
+                LIMIT 1
+            ) p
+        )
+        SELECT start_id, id FROM up WHERE parent_id IS NULL
+        """)]
+    public partial Task<List<LineageRootRow>> ResolveLineageRootsAsync(string scope, Guid[] ids, IAsyncDbTransaction transaction, CancellationToken ct);
+
+    /// <summary>
     /// Takes <c>FOR KEY SHARE</c> on the ancestors in their scope until the transaction ends, one after another in the
     /// order given, and answers how many it locked: fewer than given when a concurrent erase deleted one after the
     /// walk read it. The lock blocks a <c>DELETE</c> of an ancestor, so an erase cannot cut the path to the top while

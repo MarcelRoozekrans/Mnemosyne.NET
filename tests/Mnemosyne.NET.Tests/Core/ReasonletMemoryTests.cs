@@ -21,7 +21,13 @@ public sealed class ReasonletMemoryTests
         new(_store, _selector, _generator, extractor, evaluator, options ?? new MnemosyneOptions(), clock);
 
     private static ReasonletCandidate Candidate(double similarity = 0.9) =>
-        new(TestData.Definition(), similarity, new ReasonletMetrics(0, 0, null, DateTimeOffset.UnixEpoch));
+        new()
+        {
+            LineageId = ReasonletId.New(),
+            Reasonlet = TestData.Definition(),
+            Similarity = similarity,
+            Metrics = new ReasonletMetrics(0, 0, null, DateTimeOffset.UnixEpoch),
+        };
 
     private static MnemosyneError Unavailable() => new(MnemosyneErrorCode.Unavailable, "down", "detail");
 
@@ -144,7 +150,16 @@ public sealed class ReasonletMemoryTests
     {
         var candidates = new[] { Candidate(0.9), Candidate(0.8) };
         _store.SearchResult = Result<IReadOnlyList<ReasonletCandidate>, MnemosyneError>.Success(candidates);
-        var matches = new List<ReasonletMatch> { new(candidates[1].Reasonlet, new ReasonletScore(0.8, 1, 1, 0.9), new ReasonletEvidence(1, 0, false)) };
+        var matches = new List<ReasonletMatch>
+        {
+            new()
+            {
+                LineageId = ReasonletId.New(),
+                Reasonlet = candidates[1].Reasonlet,
+                Score = new ReasonletScore(0.8, 1, 1, 0.9),
+                Evidence = new ReasonletEvidence { Runs = 1, JudgedRuns = 0, UsesParentPrior = false },
+            },
+        };
         _selector.Result = Result<IReadOnlyList<ReasonletMatch>, MnemosyneError>.Success(matches);
         var query = TestData.Query();
 
@@ -683,7 +698,12 @@ public sealed class ReasonletMemoryTests
         using var cts = new CancellationTokenSource();
         var run = Run();
 
-        var receipt = new ReasonletRunReceipt(ExecutionId.New(), ReasonletVerdictSource.Agent, false);
+        var receipt = new ReasonletRunReceipt
+        {
+            Execution = ExecutionId.New(),
+            Source = ReasonletVerdictSource.Agent,
+            Success = false,
+        };
         _store.ExecutionResult = receipt;
 
         var result = await Memory().RecordExecutionAsync(run, cts.Token);
@@ -697,7 +717,12 @@ public sealed class ReasonletMemoryTests
     {
         var result = await Memory().RecordExecutionAsync(Run() with { Question = "question", Answer = AnswerSentinel }, CancellationToken.None);
 
-        Assert.Equal(new ReasonletRunReceipt(FakeStore.ExecutionIdentifier, ReasonletVerdictSource.Agent, false), result.Value);
+        Assert.Equal(new ReasonletRunReceipt
+        {
+            Execution = FakeStore.ExecutionIdentifier,
+            Source = ReasonletVerdictSource.Agent,
+            Success = false,
+        }, result.Value);
     }
 
     [Fact]
@@ -843,7 +868,12 @@ public sealed class ReasonletMemoryTests
         var result = await Memory(evaluator: evaluator).RecordExecutionAsync(run, cts.Token);
 
         // The judge says it worked, though the agent said it did not, and the receipt carries the judge's verdict.
-        Assert.Equal(new ReasonletRunReceipt(FakeStore.ExecutionIdentifier, ReasonletVerdictSource.Evaluator, true), result.Value);
+        Assert.Equal(new ReasonletRunReceipt
+        {
+            Execution = FakeStore.ExecutionIdentifier,
+            Source = ReasonletVerdictSource.Evaluator,
+            Success = true,
+        }, result.Value);
         Assert.Equal((run.Scope, run.Id, cts.Token), _store.Got);
         var request = Assert.Single(evaluator.Requests);
         Assert.Same(definition.Graph, request.Graph);

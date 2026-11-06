@@ -436,7 +436,7 @@ public sealed class RememberTests(PgVectorFixture fixture) : IClassFixture<PgVec
         // A 4,000-deep chain. Walks that carry their path, or one lock statement per ancestor, take seconds here.
         var store = await MigratedStoreAsync();
         var scope = PgVectorFixture.NewScope();
-        var leaf = await ChainAsync(scope, 4000);
+        var (_, leaf) = await Chains.InsertAsync(fixture.DataSource, scope, 4000);
 
         var started = System.Diagnostics.Stopwatch.StartNew();
         var next = (await store.RememberAsync(Entries.Entry(scope, Entries.Graph("next"), new ReasonletId(leaf)), Ct)).Value;
@@ -823,27 +823,6 @@ public sealed class RememberTests(PgVectorFixture fixture) : IClassFixture<PgVec
         {
             await transaction.RollbackAsync(Ct);
         }
-    }
-
-    /// <summary>Inserts a chain of the given depth in the scope, versions 1.0 down to 1.(depth - 1), and returns its leaf.</summary>
-    private async Task<Guid> ChainAsync(ReasonletScope scope, int depth)
-    {
-        var leaf = Guid.CreateVersion7();
-        await Entries.ExecuteAsync(
-            fixture.DataSource,
-            $$"""
-            DO $$
-            DECLARE previous uuid; current uuid;
-            BEGIN
-                FOR i IN 0..{{depth - 1}} LOOP
-                    current := CASE WHEN i = {{depth - 1}} THEN '{{leaf}}'::uuid ELSE gen_random_uuid() END;
-                    INSERT INTO mnemosyne.reasonlets (id, scope, name, intent, version, graph, content_hash, parent_id, status, source, created_at, embedding)
-                    VALUES (current, '{{scope.Value}}', 'n', 'i', '1.' || i, '{}', repeat('0', 64), previous, 1, 's', now(), '[1,0,0]');
-                    previous := current;
-                END LOOP;
-            END $$
-            """);
-        return leaf;
     }
 
     /// <summary>

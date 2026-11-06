@@ -173,8 +173,9 @@ static async Task<int> PostgreSqlSmoke(string connectionString, ReasonletGraph g
     var scope = new ReasonletScope($"aot-smoke-{Guid.NewGuid():N}");
     var outcome = new ReasonletOutcome(true, TimeSpan.FromMilliseconds(5), 0.5);
     var embedding = new float[] { 1f, 0f, 0f };
-    var entry = new ReasonletStoreEntry(
-        new ReasonletCapture
+    var entry = new ReasonletStoreEntry
+    {
+        Capture = new ReasonletCapture
         {
             Scope = scope,
             Question = "How do I search?",
@@ -182,9 +183,10 @@ static async Task<int> PostgreSqlSmoke(string connectionString, ReasonletGraph g
             Outcome = outcome,
             Provenance = new ReasonletProvenance { Source = "aot-smoke", SubjectId = "smoke-subject" },
         },
-        "aot-smoke",
-        "AOT smoke",
-        embedding);
+        Intent = "aot-smoke",
+        Name = "AOT smoke",
+        Embedding = embedding,
+    };
 
     var remembered = await store.RememberAsync(entry, ct);
     if (remembered.IsFailure)
@@ -400,9 +402,16 @@ static async Task<int> FacadeSmoke(NpgsqlDataSource dataSource, ReasonletGraph g
         return 25;
     }
 
+    // The remembered Reasonlet is a root, so its lineage is its own id. This is the native-AOT run of the lineage query.
+    if (recalled.Value[0].LineageId != recalled.Value[0].Reasonlet.Id)
+    {
+        Console.Error.WriteLine($"Recall reported lineage {recalled.Value[0].LineageId} for a root with id {recalled.Value[0].Reasonlet.Id}");
+        return 26;
+    }
+
     // The evidence travels with every match: the remember is one run, judged by the agent alone, and there is no parent.
     if (recalled.Value[0].Evidence.Runs < 1
-        || recalled.Value[0].Evidence != new ReasonletEvidence(1, 0, false))
+        || recalled.Value[0].Evidence != new ReasonletEvidence { Runs = 1, JudgedRuns = 0, UsesParentPrior = false })
     {
         Console.Error.WriteLine($"Recall carried the wrong evidence: {recalled.Value[0].Evidence}");
         return 25;
@@ -1045,14 +1054,16 @@ internal sealed class RecordingMemory(ReasonletGraph graph) : IReasonletMemory
     {
         Captured = capture;
         Interlocked.Increment(ref _remembers);
-        return ValueTask.FromResult<Result<ReasonletReceipt, MnemosyneError>>(new ReasonletReceipt(
-            MatchId,
-            "1.1",
-            ExecutionId.New(),
-            ReasonletCaptureKind.NewVersion,
-            ReasonletStatus.Active,
-            ReasonletVerdictSource.Agent,
-            true));
+        return ValueTask.FromResult<Result<ReasonletReceipt, MnemosyneError>>(new ReasonletReceipt
+        {
+            Id = MatchId,
+            Version = "1.1",
+            Execution = ExecutionId.New(),
+            Kind = ReasonletCaptureKind.NewVersion,
+            Status = ReasonletStatus.Active,
+            Source = ReasonletVerdictSource.Agent,
+            Success = true,
+        });
     }
 
     public ValueTask<Result<IReadOnlyList<ReasonletMatch>, MnemosyneError>> RecallAsync(ReasonletQuery query, CancellationToken ct)
@@ -1060,8 +1071,9 @@ internal sealed class RecordingMemory(ReasonletGraph graph) : IReasonletMemory
         Interlocked.Increment(ref _recalls);
         IReadOnlyList<ReasonletMatch> matches =
         [
-            new ReasonletMatch(
-                new ReasonletDefinition
+            new ReasonletMatch
+            {
+                Reasonlet = new ReasonletDefinition
                 {
                     Id = MatchId,
                     Scope = query.Scope,
@@ -1073,8 +1085,10 @@ internal sealed class RecordingMemory(ReasonletGraph graph) : IReasonletMemory
                     Status = ReasonletStatus.Active,
                     CreatedAt = DateTimeOffset.UnixEpoch,
                 },
-                new ReasonletScore(0.9, 0.8, 1, 0.9),
-                new ReasonletEvidence(3, 0, false)),
+                Score = new ReasonletScore(0.9, 0.8, 1, 0.9),
+                Evidence = new ReasonletEvidence { Runs = 3, JudgedRuns = 0, UsesParentPrior = false },
+                LineageId = MatchId,
+            },
         ];
         return ValueTask.FromResult<Result<IReadOnlyList<ReasonletMatch>, MnemosyneError>>(Result<IReadOnlyList<ReasonletMatch>, MnemosyneError>.Success(matches));
     }

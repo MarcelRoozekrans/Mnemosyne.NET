@@ -77,51 +77,119 @@ public class GraphAndDefinitionTests
 
     [Fact]
     public void Candidate_InvalidParentMetrics_ReportsNestedPath() =>
-        AssertInvalid(new ReasonletCandidate(TestData.Definition(), 0.5, default, new ReasonletMetrics(1, 2, null, default)).Validate(), "ParentMetrics.Successes");
+        AssertInvalid(new ReasonletCandidate
+        {
+            LineageId = ReasonletId.New(),
+            Reasonlet = TestData.Definition(),
+            Similarity = 0.5,
+            Metrics = default,
+            ParentMetrics = new ReasonletMetrics(1, 2, null, default),
+        }.Validate(), "ParentMetrics.Successes");
 
     [Fact]
     public void Candidate_ValidParentMetrics_Passes() =>
-        Assert.True(new ReasonletCandidate(TestData.Definition(), 0.5, default, new ReasonletMetrics(2, 1, null, default)).Validate().IsSuccess);
+        Assert.True(new ReasonletCandidate
+        {
+            LineageId = ReasonletId.New(),
+            Reasonlet = TestData.Definition(),
+            Similarity = 0.5,
+            Metrics = default,
+            ParentMetrics = new ReasonletMetrics(2, 1, null, default),
+        }.Validate().IsSuccess);
 
     [Fact]
     public void Candidate_Valid_Passes() =>
-        Assert.True(new ReasonletCandidate(TestData.Definition(), 0.5, default).Validate().IsSuccess);
+        Assert.True(new ReasonletCandidate
+        {
+            LineageId = ReasonletId.New(),
+            Reasonlet = TestData.Definition(),
+            Similarity = 0.5,
+            Metrics = default,
+        }.Validate().IsSuccess);
 
     [Fact]
     public void Candidate_SimilarityAboveOne_Fails() =>
-        AssertInvalid(new ReasonletCandidate(TestData.Definition(), 1.2, default).Validate(), "Similarity");
+        AssertInvalid(new ReasonletCandidate
+        {
+            LineageId = ReasonletId.New(),
+            Reasonlet = TestData.Definition(),
+            Similarity = 1.2,
+            Metrics = default,
+        }.Validate(), "Similarity");
 
     [Fact]
     public void Candidate_NullReasonlet_Fails() =>
-        AssertInvalid(new ReasonletCandidate(null!, 0.5, default).Validate(), "Reasonlet");
+        AssertInvalid(new ReasonletCandidate
+        {
+            LineageId = ReasonletId.New(),
+            Reasonlet = null!,
+            Similarity = 0.5,
+            Metrics = default,
+        }.Validate(), "Reasonlet");
 
     [Fact]
     public void Candidate_BadMetrics_ReportsNestedPath() =>
-        AssertInvalid(new ReasonletCandidate(TestData.Definition(), 0.5, new ReasonletMetrics(-1, 0, null, default)).Validate(), "Metrics.Runs");
+        AssertInvalid(new ReasonletCandidate
+        {
+            LineageId = ReasonletId.New(),
+            Reasonlet = TestData.Definition(),
+            Similarity = 0.5,
+            Metrics = new ReasonletMetrics(-1, 0, null, default),
+        }.Validate(), "Metrics.Runs");
 
     [Fact]
     public void Match_Valid_Passes() =>
-        Assert.True(new ReasonletMatch(TestData.Definition(), default, default).Validate().IsSuccess);
+        Assert.True(new ReasonletMatch
+        {
+            LineageId = ReasonletId.New(),
+            Reasonlet = TestData.Definition(),
+            Score = default,
+            Evidence = default,
+        }.Validate().IsSuccess);
 
     [Fact]
     public void Match_NullReasonlet_Fails() =>
-        AssertInvalid(new ReasonletMatch(null!, default, default).Validate(), "Reasonlet");
+        AssertInvalid(new ReasonletMatch
+        {
+            LineageId = ReasonletId.New(),
+            Reasonlet = null!,
+            Score = default,
+            Evidence = default,
+        }.Validate(), "Reasonlet");
 
     [Fact]
     public void Match_BadScore_ReportsNestedPath() =>
-        AssertInvalid(new ReasonletMatch(TestData.Definition(), new ReasonletScore(2, 0, 0, 0), default).Validate(), "Score.Similarity");
+        AssertInvalid(new ReasonletMatch
+        {
+            LineageId = ReasonletId.New(),
+            Reasonlet = TestData.Definition(),
+            Score = new ReasonletScore(2, 0, 0, 0),
+            Evidence = default,
+        }.Validate(), "Score.Similarity");
 
     [Fact]
     public void Match_BadEvidence_ReportsNestedPath() =>
         AssertInvalid(
-            new ReasonletMatch(TestData.Definition(), default, new ReasonletEvidence(1, 2, false)).Validate(),
+            new ReasonletMatch
+            {
+                LineageId = ReasonletId.New(),
+                Reasonlet = TestData.Definition(),
+                Score = default,
+                Evidence = new ReasonletEvidence { Runs = 1, JudgedRuns = 2, UsesParentPrior = false },
+            }.Validate(),
             "Evidence.JudgedRuns");
 
     [Fact]
     public void Match_CarriesItsEvidence()
     {
-        var evidence = new ReasonletEvidence(7, 3, true);
-        Assert.Equal(evidence, new ReasonletMatch(TestData.Definition(), default, evidence).Evidence);
+        var evidence = new ReasonletEvidence { Runs = 7, JudgedRuns = 3, UsesParentPrior = true };
+        Assert.Equal(evidence, new ReasonletMatch
+        {
+            LineageId = ReasonletId.New(),
+            Reasonlet = TestData.Definition(),
+            Score = default,
+            Evidence = evidence,
+        }.Evidence);
     }
 
     [Fact]
@@ -151,12 +219,24 @@ public class GraphAndDefinitionTests
     [Fact]
     public void Candidate_InvalidDefinition_ReportsNestedPath() =>
         AssertInvalid(
-            new ReasonletCandidate(TestData.Definition() with { Version = "" }, 0.5, default).Validate(),
+            new ReasonletCandidate
+            {
+                LineageId = ReasonletId.New(),
+                Reasonlet = TestData.Definition() with { Version = "" },
+                Similarity = 0.5,
+                Metrics = default,
+            }.Validate(),
             "Reasonlet.Version");
 
     [Fact]
     public void Match_InvalidDefinition_ReportsNestedPath() =>
         AssertInvalid(
-            new ReasonletMatch(TestData.Definition() with { Version = "" }, default, default).Validate(),
+            new ReasonletMatch
+            {
+                LineageId = ReasonletId.New(),
+                Reasonlet = TestData.Definition() with { Version = "" },
+                Score = default,
+                Evidence = default,
+            }.Validate(),
             "Reasonlet.Version");
 }

@@ -1,0 +1,38 @@
+#nullable enable
+Mnemosyne.NET.AgentFramework.ReasonletAgentOptions
+Mnemosyne.NET.AgentFramework.ReasonletAgentOptions.Capture.get -> bool
+Mnemosyne.NET.AgentFramework.ReasonletAgentOptions.Capture.init -> void
+Mnemosyne.NET.AgentFramework.ReasonletAgentOptions.ExposeFindProcedure.get -> bool
+Mnemosyne.NET.AgentFramework.ReasonletAgentOptions.ExposeFindProcedure.init -> void
+Mnemosyne.NET.AgentFramework.ReasonletAgentOptions.Formatter.get -> System.Func<Mnemosyne.NET.Abstractions.ReasonletMatch!, string!>?
+Mnemosyne.NET.AgentFramework.ReasonletAgentOptions.Formatter.init -> void
+Mnemosyne.NET.AgentFramework.ReasonletAgentOptions.MinSimilarity.get -> double?
+Mnemosyne.NET.AgentFramework.ReasonletAgentOptions.MinSimilarity.init -> void
+Mnemosyne.NET.AgentFramework.ReasonletAgentOptions.ReasonletAgentOptions() -> void
+Mnemosyne.NET.AgentFramework.ReasonletAgentOptions.Recall.get -> bool
+Mnemosyne.NET.AgentFramework.ReasonletAgentOptions.Recall.init -> void
+Mnemosyne.NET.AgentFramework.ReasonletAgentOptions.RecallTimeout.get -> System.TimeSpan
+Mnemosyne.NET.AgentFramework.ReasonletAgentOptions.RecallTimeout.init -> void
+Mnemosyne.NET.AgentFramework.ReasonletAgentOptions.ScopeResolver.get -> System.Func<Microsoft.Agents.AI.AIAgent!, Microsoft.Agents.AI.AgentSession?, Mnemosyne.NET.AgentFramework.ReasonletAgentScope?>!
+Mnemosyne.NET.AgentFramework.ReasonletAgentOptions.ScopeResolver.init -> void
+Mnemosyne.NET.AgentFramework.ReasonletAgentOptions.Source.get -> string!
+Mnemosyne.NET.AgentFramework.ReasonletAgentOptions.Source.init -> void
+Mnemosyne.NET.AgentFramework.ReasonletAgentOptions.Validate() -> ZeroAlloc.Results.UnitResult<Mnemosyne.NET.Abstractions.MnemosyneError>
+Mnemosyne.NET.AgentFramework.ReasonletAgentScope
+Mnemosyne.NET.AgentFramework.ReasonletAgentScope.<Clone>$() -> Mnemosyne.NET.AgentFramework.ReasonletAgentScope!
+Mnemosyne.NET.AgentFramework.ReasonletAgentScope.Deconstruct(out Mnemosyne.NET.Abstractions.ReasonletScope Scope, out string? SubjectId) -> void
+Mnemosyne.NET.AgentFramework.ReasonletAgentScope.Equals(Mnemosyne.NET.AgentFramework.ReasonletAgentScope? other) -> bool
+Mnemosyne.NET.AgentFramework.ReasonletAgentScope.ReasonletAgentScope(Mnemosyne.NET.Abstractions.ReasonletScope Scope, string? SubjectId = null) -> void
+Mnemosyne.NET.AgentFramework.ReasonletAgentScope.Scope.get -> Mnemosyne.NET.Abstractions.ReasonletScope
+Mnemosyne.NET.AgentFramework.ReasonletAgentScope.Scope.init -> void
+Mnemosyne.NET.AgentFramework.ReasonletAgentScope.SubjectId.get -> string?
+Mnemosyne.NET.AgentFramework.ReasonletAgentScope.SubjectId.init -> void
+Mnemosyne.NET.AgentFramework.ReasonletContextProvider
+Mnemosyne.NET.AgentFramework.ReasonletContextProvider.ReasonletContextProvider(System.IServiceProvider! services, Mnemosyne.NET.AgentFramework.ReasonletAgentOptions? options = null) -> void
+override Mnemosyne.NET.AgentFramework.ReasonletAgentScope.Equals(object? obj) -> bool
+override Mnemosyne.NET.AgentFramework.ReasonletAgentScope.GetHashCode() -> int
+override Mnemosyne.NET.AgentFramework.ReasonletAgentScope.ToString() -> string!
+override Mnemosyne.NET.AgentFramework.ReasonletContextProvider.StateKeys.get -> System.Collections.Generic.IReadOnlyList<string!>!
+static Mnemosyne.NET.AgentFramework.ReasonletAgentOptions.DefaultScope(Microsoft.Agents.AI.AIAgent! agent, Microsoft.Agents.AI.AgentSession? session) -> Mnemosyne.NET.AgentFramework.ReasonletAgentScope?
+static Mnemosyne.NET.AgentFramework.ReasonletAgentScope.operator !=(Mnemosyne.NET.AgentFramework.ReasonletAgentScope? left, Mnemosyne.NET.AgentFramework.ReasonletAgentScope? right) -> bool
+static Mnemosyne.NET.AgentFramework.ReasonletAgentScope.operator ==(Mnemosyne.NET.AgentFramework.ReasonletAgentScope? left, Mnemosyne.NET.AgentFramework.ReasonletAgentScope? right) -> bool

@@ -27,9 +27,11 @@ namespace Mnemosyne.NET.Sentinel;
 /// </para>
 /// <para>
 /// Known limitation: only an exception from the pipeline itself, or a timeout through the facade's guard timeout, fails
-/// closed as <c>Unavailable</c>. AI.Sentinel 4.1.1 catches an exception from a single detector, skips that detector, calls
+/// closed as <c>Unavailable</c>. AI.Sentinel 4.2.0 catches an exception from a single detector, skips that detector, calls
 /// <see cref="SentinelOptions.OnDetectorFailure"/> and counts its result as clean. The pipeline result carries no failure
-/// signal, so a capture can be stored without that control. This is tracked upstream as AI.Sentinel#550.
+/// signal, so a capture can be stored without that control. Upstream fixed this in a release that adds
+/// <c>PipelineResult.Failures</c> and <c>IsComplete</c>. AI.Sentinel 4.2.0 does not have those members, and the guard does
+/// not read them. Adopting the fix is tracked in Mnemosyne.NET#58.
 /// </para>
 /// </remarks>
 public sealed class SentinelCaptureGuard : ICaptureGuard

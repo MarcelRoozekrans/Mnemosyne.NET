@@ -116,8 +116,9 @@ public sealed class ReasonletPromptFormatterTests
         return ReasonletTranscript.ToGraph(messages).Value;
     }
 
-    private static ReasonletMatch Match(ReasonletGraph graph) => new(
-        new ReasonletDefinition
+    private static ReasonletMatch Match(ReasonletGraph graph) => new()
+    {
+        Reasonlet = new ReasonletDefinition
         {
             Id = ReasonletId.New(),
             Scope = new ReasonletScope("support"),
@@ -129,8 +130,10 @@ public sealed class ReasonletPromptFormatterTests
             Status = ReasonletStatus.Active,
             CreatedAt = DateTimeOffset.UnixEpoch,
         },
-        new ReasonletScore(Similarity: 0.82, SuccessRate: 0.82, Freshness: 1, Total: 0.8),
-        new ReasonletEvidence(Runs: 11, JudgedRuns: 11, UsesParentPrior: false));
+        Score = new ReasonletScore(Similarity: 0.82, SuccessRate: 0.82, Freshness: 1, Total: 0.8),
+        Evidence = new ReasonletEvidence { Runs = 11, JudgedRuns = 11, UsesParentPrior = false },
+        LineageId = ReasonletId.New(),
+    };
 
     private static ReasonletGraph Graph(ReasonletNode[] nodes, ReasonletEdge[] edges) =>
         new() { Nodes = nodes, Edges = edges, SchemaVersion = ReasonletGraph.CurrentSchemaVersion };

@@ -47,7 +47,7 @@ flowchart LR
 2. **Recall.** For a new question, Mnemosyne finds the stored procedures that match it and ranks them by similarity, track record and freshness. Every match carries its score breakdown, so you can see why it ranked where it did.
 3. **Learn.** The agent records each run of a recalled procedure. When it improves a procedure, it remembers the improved one as a new version. The new version starts from its parent's track record when that record is better than neutral, so an improvement on a proven procedure isn't ranked as unproven.
 
-**Forget** is not a step in the loop: you erase or prune when you need to. You can erase everything for a tenant, or everything that belongs to one person, through `IReasonletMemory`. Pruning procedures nobody uses any more is `PruneAsync` on the store, not on `IReasonletMemory`, because it is an administrative job the host schedules. [Data lifecycle](guides/data-lifecycle.md) covers both.
+**Forget** is not a step in the loop: you erase or prune when you need to. You can erase everything for a tenant, or everything that belongs to one person, through `IReasonletMemory`. Pruning procedures nobody uses any more is `PruneAsync` on the store, not on `IReasonletMemory`, because it is an administrative job the host schedules. [Data lifecycle](guides/data-lifecycle.md) covers both, and [Data protection](guides/data-protection.md) maps them to the duties of a deployer under the GDPR.
 
 ## When to use it
 
@@ -83,9 +83,12 @@ Most applications reference `Mnemosyne.NET` and `Mnemosyne.NET.PostgreSql`, and 
 ## Where to go next
 
 - [Getting started](getting-started.md) wires Mnemosyne into a console app, then remembers, recalls and records a run.
+- [Overview](concepts/overview.md) maps the six packages and follows one call through them.
 - [Reasonlets](concepts/reasonlets.md) explains what is stored.
 - [Ranking](concepts/ranking.md) explains how recall orders its matches.
+- [Compatibility](concepts/compatibility.md) says what stays stable across releases: the public API and the graph format.
 - [The chat pipeline](guides/chat-pipeline.md) adds recall and background capture to a chat client.
 - [Capture, redaction and review](guides/capture-and-review.md) covers the capture guard, the AI.Sentinel adapter and the review gate.
 - [Agent Framework](guides/agent-framework.md) adds memory to an Agent Framework agent.
+- [Daedalus and Thalos](guides/daedalus-and-thalos.md) lists what an application that hosts agents wires, in order.
 - [Samples](samples.md) has a complete program you can run with only Docker and the .NET SDK.

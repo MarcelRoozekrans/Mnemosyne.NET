@@ -1,0 +1,25 @@
+#nullable enable
+Mnemosyne.NET.PostgreSql.MnemosynePostgreSqlOptions
+Mnemosyne.NET.PostgreSql.MnemosynePostgreSqlOptions.Dimensions.get -> int
+Mnemosyne.NET.PostgreSql.MnemosynePostgreSqlOptions.Dimensions.init -> void
+Mnemosyne.NET.PostgreSql.MnemosynePostgreSqlOptions.HnswEfConstruction.get -> int
+Mnemosyne.NET.PostgreSql.MnemosynePostgreSqlOptions.HnswEfConstruction.init -> void
+Mnemosyne.NET.PostgreSql.MnemosynePostgreSqlOptions.HnswM.get -> int
+Mnemosyne.NET.PostgreSql.MnemosynePostgreSqlOptions.HnswM.init -> void
+Mnemosyne.NET.PostgreSql.MnemosynePostgreSqlOptions.MnemosynePostgreSqlOptions() -> void
+Mnemosyne.NET.PostgreSql.ReasonletPostgreSqlStore
+Mnemosyne.NET.PostgreSql.ReasonletPostgreSqlStore.AppendExecutionAsync(Mnemosyne.NET.Abstractions.ReasonletScope scope, Mnemosyne.NET.Abstractions.ReasonletId id, Mnemosyne.NET.Abstractions.ReasonletOutcome outcome, Mnemosyne.NET.Abstractions.ReasonletProvenance! provenance, Mnemosyne.NET.Abstractions.ReasonletEvaluation? evaluation, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<ZeroAlloc.Results.Result<Mnemosyne.NET.Abstractions.ReasonletRunReceipt!, Mnemosyne.NET.Abstractions.MnemosyneError>>
+Mnemosyne.NET.PostgreSql.ReasonletPostgreSqlStore.AppendFeedbackAsync(Mnemosyne.NET.Abstractions.ReasonletScope scope, Mnemosyne.NET.Abstractions.ExecutionId execution, Mnemosyne.NET.Abstractions.ReasonletFeedback feedback, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<ZeroAlloc.Results.UnitResult<Mnemosyne.NET.Abstractions.MnemosyneError>>
+Mnemosyne.NET.PostgreSql.ReasonletPostgreSqlStore.ApproveAsync(Mnemosyne.NET.Abstractions.ReasonletScope scope, Mnemosyne.NET.Abstractions.ReasonletId id, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<ZeroAlloc.Results.UnitResult<Mnemosyne.NET.Abstractions.MnemosyneError>>
+Mnemosyne.NET.PostgreSql.ReasonletPostgreSqlStore.Dimensions.get -> int
+Mnemosyne.NET.PostgreSql.ReasonletPostgreSqlStore.EraseAsync(Mnemosyne.NET.Abstractions.ReasonletErasure! erasure, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<ZeroAlloc.Results.Result<Mnemosyne.NET.Abstractions.ReasonletErasureResult!, Mnemosyne.NET.Abstractions.MnemosyneError>>
+Mnemosyne.NET.PostgreSql.ReasonletPostgreSqlStore.GetAsync(Mnemosyne.NET.Abstractions.ReasonletScope scope, Mnemosyne.NET.Abstractions.ReasonletId id, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<ZeroAlloc.Results.Result<Mnemosyne.NET.Abstractions.ReasonletDefinition!, Mnemosyne.NET.Abstractions.MnemosyneError>>
+Mnemosyne.NET.PostgreSql.ReasonletPostgreSqlStore.ListPendingAsync(Mnemosyne.NET.Abstractions.ReasonletScope scope, int limit, Mnemosyne.NET.Abstractions.ReasonletId? after, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<ZeroAlloc.Results.Result<System.Collections.Generic.IReadOnlyList<Mnemosyne.NET.Abstractions.ReasonletReview!>!, Mnemosyne.NET.Abstractions.MnemosyneError>>
+Mnemosyne.NET.PostgreSql.ReasonletPostgreSqlStore.MigrateAsync(System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<ZeroAlloc.Results.UnitResult<Mnemosyne.NET.Abstractions.MnemosyneError>>
+Mnemosyne.NET.PostgreSql.ReasonletPostgreSqlStore.PruneAsync(Mnemosyne.NET.Abstractions.ReasonletRetention! retention, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<ZeroAlloc.Results.Result<Mnemosyne.NET.Abstractions.ReasonletPruneResult!, Mnemosyne.NET.Abstractions.MnemosyneError>>
+Mnemosyne.NET.PostgreSql.ReasonletPostgreSqlStore.ReasonletPostgreSqlStore(Npgsql.NpgsqlDataSource! dataSource, Mnemosyne.NET.PostgreSql.MnemosynePostgreSqlOptions! options) -> void
+Mnemosyne.NET.PostgreSql.ReasonletPostgreSqlStore.RejectAsync(Mnemosyne.NET.Abstractions.ReasonletScope scope, Mnemosyne.NET.Abstractions.ReasonletId id, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<ZeroAlloc.Results.UnitResult<Mnemosyne.NET.Abstractions.MnemosyneError>>
+Mnemosyne.NET.PostgreSql.ReasonletPostgreSqlStore.RememberAsync(Mnemosyne.NET.Abstractions.ReasonletStoreEntry! entry, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<ZeroAlloc.Results.Result<Mnemosyne.NET.Abstractions.ReasonletReceipt!, Mnemosyne.NET.Abstractions.MnemosyneError>>
+Mnemosyne.NET.PostgreSql.ReasonletPostgreSqlStore.SearchAsync(Mnemosyne.NET.Abstractions.ReasonletScope scope, System.ReadOnlyMemory<float> embedding, string? intent, int limit, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<ZeroAlloc.Results.Result<System.Collections.Generic.IReadOnlyList<Mnemosyne.NET.Abstractions.ReasonletCandidate!>!, Mnemosyne.NET.Abstractions.MnemosyneError>>
+Mnemosyne.NET.PostgreSql.ServiceCollectionExtensions
+static Mnemosyne.NET.PostgreSql.ServiceCollectionExtensions.AddMnemosynePostgreSql(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, Mnemosyne.NET.PostgreSql.MnemosynePostgreSqlOptions! options) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!

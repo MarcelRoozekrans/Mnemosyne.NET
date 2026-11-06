@@ -9,7 +9,16 @@ namespace Mnemosyne.NET.Tests.Core;
 internal sealed class FakeStore : IReasonletStore
 {
     public static readonly ReasonletReceipt Receipt =
-        new(ReasonletId.New(), "1.0", ExecutionId.New(), ReasonletCaptureKind.NewReasonlet, ReasonletStatus.Active, ReasonletVerdictSource.Agent, true);
+        new ReasonletReceipt
+        {
+            Id = ReasonletId.New(),
+            Version = "1.0",
+            Execution = ExecutionId.New(),
+            Kind = ReasonletCaptureKind.NewReasonlet,
+            Status = ReasonletStatus.Active,
+            Source = ReasonletVerdictSource.Agent,
+            Success = true,
+        };
 
     public static readonly ExecutionId ExecutionIdentifier = ExecutionId.New();
 
@@ -63,7 +72,12 @@ internal sealed class FakeStore : IReasonletStore
         Calls++;
         Executed = (scope, id, outcome, provenance, evaluation, ct);
         var (source, success) = Verdict(outcome, evaluation);
-        return ValueTask.FromResult(ExecutionResult ?? Result<ReasonletRunReceipt, MnemosyneError>.Success(new ReasonletRunReceipt(ExecutionIdentifier, source, success)));
+        return ValueTask.FromResult(ExecutionResult ?? Result<ReasonletRunReceipt, MnemosyneError>.Success(new ReasonletRunReceipt
+        {
+            Execution = ExecutionIdentifier,
+            Source = source,
+            Success = success,
+        }));
     }
 
     /// <summary>The verdict a store derives for a new run: the evaluator's when there is one, else the agent's.</summary>
@@ -154,7 +168,13 @@ internal sealed class FakeSelector : IReasonletSelector
         Query = query;
         Candidates = candidates;
         return ValueTask.FromResult(Result ?? Result<IReadOnlyList<ReasonletMatch>, MnemosyneError>.Success(
-            candidates.Select(c => new ReasonletMatch(c.Reasonlet, new ReasonletScore(c.Similarity, 0.5, 1, 0.5), new ReasonletEvidence(c.Metrics.Runs, c.Metrics.JudgedRuns, false))).ToList()));
+            candidates.Select(c => new ReasonletMatch
+            {
+                Reasonlet = c.Reasonlet,
+                Score = new ReasonletScore(c.Similarity, 0.5, 1, 0.5),
+                Evidence = new ReasonletEvidence { Runs = c.Metrics.Runs, JudgedRuns = c.Metrics.JudgedRuns, UsesParentPrior = false },
+                LineageId = c.LineageId,
+            }).ToList()));
     }
 }
 

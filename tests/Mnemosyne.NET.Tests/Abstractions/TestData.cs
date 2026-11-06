@@ -42,5 +42,11 @@ internal static class TestData
         Provenance = Provenance(),
     };
 
-    public static ReasonletStoreEntry StoreEntry() => new(Capture(), "intent", "name", new[] { 0.1f, 0.2f, 0.3f });
+    public static ReasonletStoreEntry StoreEntry() => new ReasonletStoreEntry
+    {
+        Capture = Capture(),
+        Intent = "intent",
+        Name = "name",
+        Embedding = new[] { 0.1f, 0.2f, 0.3f },
+    };
 }

@@ -37,7 +37,11 @@ public sealed class ReviewGateTests
         var refused = new MnemosyneError(MnemosyneErrorCode.NotFound, "reject said no");
         var page = new List<ReasonletReview>
         {
-            new(TestData.Definition(), new ReasonletMetrics(0, 0, null, DateTimeOffset.UnixEpoch)),
+            new ReasonletReview
+            {
+                Definition = TestData.Definition(),
+                Metrics = new ReasonletMetrics(0, 0, null, DateTimeOffset.UnixEpoch),
+            },
         };
         _store.ApproveResult = denied;
         _store.RejectResult = refused;

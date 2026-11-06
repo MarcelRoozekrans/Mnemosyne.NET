@@ -89,9 +89,10 @@ public sealed class SentinelFacadeTests
         Assert.Equal(0, _store.Calls);
     }
 
-    // This pins AI.Sentinel 4.1.1: DetectionPipeline skips a detector that throws and counts it as clean, and PipelineResult
-    // carries no failure signal, so the guard cannot see it. The gap is tracked upstream as AI.Sentinel#550. When that fix
-    // lands this should flip to MnemosyneErrorCode.Unavailable.
+    // This pins AI.Sentinel 4.2.0: DetectionPipeline skips a detector that throws and counts it as clean, and PipelineResult
+    // carries no failure signal, so the guard cannot see it. Upstream fixed this in a release that adds
+    // PipelineResult.Failures and IsComplete, which 4.2.0 lacks. Adopting the fix is tracked in Mnemosyne.NET#58, and this
+    // should then flip to MnemosyneErrorCode.Unavailable.
     [Fact]
     public async Task AThrowingDetectorIsSkippedAndTheCaptureIsAllowed()
     {

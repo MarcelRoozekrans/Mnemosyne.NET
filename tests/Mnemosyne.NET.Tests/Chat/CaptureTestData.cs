@@ -46,16 +46,27 @@ internal static class CaptureTestData
             source);
     }
 
-    public static ReasonletMatch Match(ReasonletGraph? graph = null) => new(
-        TestData.Definition() with { Id = ReasonletId.New(), Graph = graph ?? TestData.Graph() },
-        default,
-        default);
+    public static ReasonletMatch Match(ReasonletGraph? graph = null) => new()
+    {
+        Reasonlet = TestData.Definition() with { Id = ReasonletId.New(), Graph = graph ?? TestData.Graph() },
+        Score = default,
+        Evidence = default,
+        LineageId = ReasonletId.New(),
+    };
 
     public static ReasonletGraph GraphOf(IEnumerable<ChatMessage> messages) => ReasonletTranscript.ToGraph(messages).Value;
 
     public static Result Receipt(ReasonletCaptureKind kind = ReasonletCaptureKind.NewReasonlet) => Result.Success(
-        new ReasonletReceipt(
-            ReasonletId.New(), "1.0.0", new ExecutionId(Guid.NewGuid()), kind, ReasonletStatus.Active, ReasonletVerdictSource.Agent, true));
+        new ReasonletReceipt
+        {
+            Id = ReasonletId.New(),
+            Version = "1.0.0",
+            Execution = new ExecutionId(Guid.NewGuid()),
+            Kind = kind,
+            Status = ReasonletStatus.Active,
+            Source = ReasonletVerdictSource.Agent,
+            Success = true,
+        });
 
     public static FakeReasonletMemory Memory(ReasonletCaptureKind kind = ReasonletCaptureKind.NewReasonlet)
     {

@@ -362,8 +362,16 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
         var capture = entry.Capture;
         var execution = await InsertExecutionAsync(executions, reasonletId, capture, entry.Evaluation, transaction, ct).ConfigureAwait(false);
         var (source, success) = Verdict(capture.Outcome, entry.Evaluation);
-        return new ReasonletReceipt(
-            new ReasonletId(reasonletId), version, execution, ReasonletCaptureKind.ExecutionOnly, (ReasonletStatus)status, source, success);
+        return new ReasonletReceipt
+        {
+            Id = new ReasonletId(reasonletId),
+            Version = version,
+            Execution = execution,
+            Kind = ReasonletCaptureKind.ExecutionOnly,
+            Status = (ReasonletStatus)status,
+            Source = source,
+            Success = success,
+        };
     }
 
     private static async Task<ReasonletReceipt> InsertReasonletAsync(
@@ -400,7 +408,16 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
             ct).ConfigureAwait(false);
         var execution = await InsertExecutionAsync(executions, id.Value, capture, entry.Evaluation, transaction, ct).ConfigureAwait(false);
         var (source, success) = Verdict(capture.Outcome, entry.Evaluation);
-        return new ReasonletReceipt(id, version, execution, kind, status, source, success);
+        return new ReasonletReceipt
+        {
+            Id = id,
+            Version = version,
+            Execution = execution,
+            Kind = kind,
+            Status = status,
+            Source = source,
+            Success = success,
+        };
     }
 
     /// <summary>
@@ -580,7 +597,12 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
         }
 
         var (source, success) = Verdict(outcome, evaluation);
-        return new ReasonletRunReceipt(executionId, source, success);
+        return new ReasonletRunReceipt
+        {
+            Execution = executionId,
+            Source = source,
+            Success = success,
+        };
     }
 
     /// <inheritdoc />
@@ -853,6 +875,16 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
         await using var transaction = await connection.BeginTransactionAsync(IsolationLevel.ReadCommitted, ct).ConfigureAwait(false);
         await ApplySearchSettingsAsync(connection, transaction, limit, ct).ConfigureAwait(false);
         var rows = await new ReasonletRepository(connection).SearchAsync(scope.Value, ToArray(embedding), intent, limit, transaction, ct).ConfigureAwait(false);
+        var roots = new Dictionary<Guid, Guid>();
+        if (rows.Count > 0)
+        {
+            var found = await new ReasonletRepository(connection).ResolveLineageRootsAsync(scope.Value, [.. rows.Select(r => r.Id)], transaction, ct).ConfigureAwait(false);
+            foreach (var link in found)
+            {
+                roots[link.StartId] = link.RootId;
+            }
+        }
+
         await transaction.CommitAsync(ct).ConfigureAwait(false);
         var candidates = new List<ReasonletCandidate>(rows.Count);
         foreach (var row in rows)
@@ -867,11 +899,14 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
                     row.ParentJudgedRuns!.Value,
                     row.ParentJudgedSuccesses!.Value)
                 : (ReasonletMetrics?)null;
-            candidates.Add(new ReasonletCandidate(
-                ToDefinition(row.ToReasonletRow()),
-                row.Similarity,
-                new ReasonletMetrics(row.Runs, row.Successes, row.LastSuccessAt, row.LastExecutedAt, row.JudgedRuns, row.JudgedSuccesses),
-                parent));
+            candidates.Add(new ReasonletCandidate
+            {
+                Reasonlet = ToDefinition(row.ToReasonletRow()),
+                Similarity = row.Similarity,
+                Metrics = new ReasonletMetrics(row.Runs, row.Successes, row.LastSuccessAt, row.LastExecutedAt, row.JudgedRuns, row.JudgedSuccesses),
+                ParentMetrics = parent,
+                LineageId = new ReasonletId(roots.TryGetValue(row.Id, out var root) ? root : row.Id),
+            });
         }
 
         return candidates;
@@ -1113,9 +1148,11 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
         var reviews = new List<ReasonletReview>(rows.Count);
         foreach (var row in rows)
         {
-            reviews.Add(new ReasonletReview(
-                ToDefinition(row.ToReasonletRow()),
-                new ReasonletMetrics(row.Runs, row.Successes, row.LastSuccessAt, row.LastExecutedAt, row.JudgedRuns, row.JudgedSuccesses)));
+            reviews.Add(new ReasonletReview
+            {
+                Definition = ToDefinition(row.ToReasonletRow()),
+                Metrics = new ReasonletMetrics(row.Runs, row.Successes, row.LastSuccessAt, row.LastExecutedAt, row.JudgedRuns, row.JudgedSuccesses),
+            });
         }
 
         return reviews;
