@@ -41,7 +41,7 @@ public sealed class SentinelFacadeTests
     [Fact]
     public async Task CredentialInQuestionIsBlocked()
     {
-        var result = await Remember("Why does api_key=abc123def456ghi789 fail?");
+        var result = await Remember("Why does api_key=abc123def456ghi789 fail?"); // gitleaks:allow - fake credential fixture
 
         Assert.Equal(MnemosyneErrorCode.Blocked, result.Error.Code);
         Assert.Equal("ai-sentinel/SEC-02", result.Error.Detail);
