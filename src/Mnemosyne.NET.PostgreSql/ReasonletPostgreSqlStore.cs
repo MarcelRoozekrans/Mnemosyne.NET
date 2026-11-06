@@ -362,8 +362,16 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
         var capture = entry.Capture;
         var execution = await InsertExecutionAsync(executions, reasonletId, capture, entry.Evaluation, transaction, ct).ConfigureAwait(false);
         var (source, success) = Verdict(capture.Outcome, entry.Evaluation);
-        return new ReasonletReceipt(
-            new ReasonletId(reasonletId), version, execution, ReasonletCaptureKind.ExecutionOnly, (ReasonletStatus)status, source, success);
+        return new ReasonletReceipt
+        {
+            Id = new ReasonletId(reasonletId),
+            Version = version,
+            Execution = execution,
+            Kind = ReasonletCaptureKind.ExecutionOnly,
+            Status = (ReasonletStatus)status,
+            Source = source,
+            Success = success,
+        };
     }
 
     private static async Task<ReasonletReceipt> InsertReasonletAsync(
@@ -400,7 +408,16 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
             ct).ConfigureAwait(false);
         var execution = await InsertExecutionAsync(executions, id.Value, capture, entry.Evaluation, transaction, ct).ConfigureAwait(false);
         var (source, success) = Verdict(capture.Outcome, entry.Evaluation);
-        return new ReasonletReceipt(id, version, execution, kind, status, source, success);
+        return new ReasonletReceipt
+        {
+            Id = id,
+            Version = version,
+            Execution = execution,
+            Kind = kind,
+            Status = status,
+            Source = source,
+            Success = success,
+        };
     }
 
     /// <summary>
@@ -580,7 +597,12 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
         }
 
         var (source, success) = Verdict(outcome, evaluation);
-        return new ReasonletRunReceipt(executionId, source, success);
+        return new ReasonletRunReceipt
+        {
+            Execution = executionId,
+            Source = source,
+            Success = success,
+        };
     }
 
     /// <inheritdoc />
@@ -1126,9 +1148,11 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
         var reviews = new List<ReasonletReview>(rows.Count);
         foreach (var row in rows)
         {
-            reviews.Add(new ReasonletReview(
-                ToDefinition(row.ToReasonletRow()),
-                new ReasonletMetrics(row.Runs, row.Successes, row.LastSuccessAt, row.LastExecutedAt, row.JudgedRuns, row.JudgedSuccesses)));
+            reviews.Add(new ReasonletReview
+            {
+                Definition = ToDefinition(row.ToReasonletRow()),
+                Metrics = new ReasonletMetrics(row.Runs, row.Successes, row.LastSuccessAt, row.LastExecutedAt, row.JudgedRuns, row.JudgedSuccesses),
+            });
         }
 
         return reviews;

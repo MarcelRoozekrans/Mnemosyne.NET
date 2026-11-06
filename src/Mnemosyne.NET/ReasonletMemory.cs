@@ -219,8 +219,15 @@ public sealed class ReasonletMemory : IReasonletMemory
         }
 
         // The answer is for an evaluator alone and is never stored, so it is stripped here, as the entry requires.
-        var entry = new ReasonletStoreEntry(
-            capture with { Intent = intent.Value, Name = name, Answer = null }, intent.Value, name, embedding.Value, evaluation, _options.RequireReview);
+        var entry = new ReasonletStoreEntry
+        {
+            Capture = capture with { Intent = intent.Value, Name = name, Answer = null },
+            Intent = intent.Value,
+            Name = name,
+            Embedding = embedding.Value,
+            Evaluation = evaluation,
+            ReviewRequired = _options.RequireReview,
+        };
         return await _store.RememberAsync(entry, ct).ConfigureAwait(false);
     }
 

@@ -9,6 +9,9 @@
          Remove the switch only if the fix for ZeroAlloc-Net/ZeroAlloc.Authorization#181 stops the generator emitting the
          registration type into libraries that declare no policies; documenting the type would still emit it. -->
     <ZeroAllocAuthorizationDisableBundledAnalyzer>true</ZeroAllocAuthorizationDisableBundledAnalyzer>
+    <!-- The ZeroAlloc.Inject generator (transitive via AI.Sentinel) emitted a public, undocumented registration type.
+         This org-wide switch makes generated types internal, which keeps the package surface to the types below. -->
+    <ZeroAllocGeneratedAccessibility>Internal</ZeroAllocGeneratedAccessibility>
     <Description>A capture guard that runs AI.Sentinel's detectors before a Reasonlet is stored.</Description>
   </PropertyGroup>
 

@@ -104,19 +104,17 @@ public class ContractShapeTests
     }
 
     [Fact]
-    public void TheRunReceiptIsAPositionalRecordOfTheExecutionAndItsVerdict()
+    public void TheRunReceiptHasInitOnlyExecutionSourceAndSuccess()
     {
         Assert.False(typeof(ReasonletRunReceipt).IsValueType);
-        var constructor = Assert.Single(typeof(ReasonletRunReceipt).GetConstructors(), c => c.GetParameters().Length > 1);
         Assert.Equal(
             ["ExecutionId Execution", "ReasonletVerdictSource Source", "Boolean Success"],
-            constructor.GetParameters().Select(p => p.ParameterType.Name + " " + p.Name));
+            InitShape(typeof(ReasonletRunReceipt)));
     }
 
     [Fact]
-    public void TheReceiptEndsWithTheVerdictOfItsRun()
+    public void TheReceiptHasInitOnlyMembersEndingWithTheVerdictOfItsRun()
     {
-        var constructor = Assert.Single(typeof(ReasonletReceipt).GetConstructors(), c => c.GetParameters().Length > 1);
         Assert.Equal(
             [
                 "ReasonletId Id",
@@ -127,7 +125,7 @@ public class ContractShapeTests
                 "ReasonletVerdictSource Source",
                 "Boolean Success",
             ],
-            constructor.GetParameters().Select(p => p.ParameterType.Name + " " + p.Name));
+            InitShape(typeof(ReasonletReceipt)));
     }
 
     [Fact]
@@ -151,11 +149,12 @@ public class ContractShapeTests
     private static string[] PositionalShape(Type record) =>
         [.. record.GetConstructors().Single(c => c.GetParameters().Length > 1).GetParameters().Select(p => p.ParameterType.Name + " " + p.Name)];
 
-    private static string[] InitShape(Type record)
+    private static string[] InitShape(Type record, params string[] optional)
     {
         Assert.DoesNotContain(record.GetConstructors(), c => c.GetParameters().Length > 0);
         var properties = record.GetProperties().Where(p => p.DeclaringType == record && p.Name != "EqualityContract").ToArray();
         Assert.All(properties, p => Assert.Contains(p.SetMethod!.ReturnParameter.GetRequiredCustomModifiers(), m => m.Name == "IsExternalInit"));
+        Assert.All(properties, p => Assert.Equal(!optional.Contains(p.Name), p.IsDefined(typeof(System.Runtime.CompilerServices.RequiredMemberAttribute), true)));
         return [.. properties.Select(p => p.PropertyType.Name + " " + p.Name)];
     }
 
@@ -264,20 +263,23 @@ public class ContractShapeTests
     }
 
     [Fact]
-    public void TheStoreEntryTakesAnOptionalEvaluationThenReviewRequiredLast()
+    public void TheStoreEntryHasInitOnlyMembersWithAnOptionalEvaluationThenReviewRequiredLast()
     {
-        var parameters = Assert.Single(typeof(ReasonletStoreEntry).GetConstructors(), c => c.GetParameters().Length > 1).GetParameters();
-        var evaluation = parameters[^2];
-        Assert.Equal("Evaluation", evaluation.Name);
-        Assert.Equal(typeof(ReasonletEvaluation?), evaluation.ParameterType);
-        Assert.True(evaluation.HasDefaultValue);
-        Assert.Null(evaluation.DefaultValue);
-        var review = parameters[^1];
-        Assert.Equal("ReviewRequired", review.Name);
-        Assert.Equal(typeof(bool), review.ParameterType);
-        Assert.True(review.HasDefaultValue);
-        Assert.Equal(false, review.DefaultValue);
+        Assert.Equal(
+            [
+                "ReasonletCapture Capture",
+                "String Intent",
+                "String Name",
+                "ReadOnlyMemory`1 Embedding",
+                "Nullable`1 Evaluation",
+                "Boolean ReviewRequired",
+            ],
+            InitShape(typeof(ReasonletStoreEntry), "Evaluation", "ReviewRequired"));
     }
+
+    [Fact]
+    public void TheReviewHasInitOnlyDefinitionAndMetrics() =>
+        Assert.Equal(["ReasonletDefinition Definition", "ReasonletMetrics Metrics"], InitShape(typeof(ReasonletReview)));
 
     [Fact]
     public void ReasonletQueryHasNoProvenance() =>
