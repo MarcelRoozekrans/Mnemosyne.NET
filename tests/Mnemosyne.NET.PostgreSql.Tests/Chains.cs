@@ -7,12 +7,14 @@ internal static class Chains
 {
     /// <summary>
     /// Inserts a chain of the given depth in the scope, versions 1.0 down to 1.(depth - 1), each the child of the one before,
-    /// and returns the ids of its root and its leaf. Pass a serialised graph when the rows must deserialise.
+    /// and returns the ids of its root and its leaf. A chain of depth 1 is a single row, so its root and leaf are the same id.
+    /// Pass a serialised graph when the rows must deserialise. The graph is doubled for single quotes, as it sits in a SQL literal.
     /// </summary>
     public static async Task<(Guid Root, Guid Leaf)> InsertAsync(Npgsql.NpgsqlDataSource dataSource, ReasonletScope scope, int depth, string graphJson = "{}")
     {
         var root = Guid.CreateVersion7();
         var leaf = Guid.CreateVersion7();
+        var graph = graphJson.Replace("'", "''", StringComparison.Ordinal);
         await Entries.ExecuteAsync(
             dataSource,
             $$"""
@@ -22,11 +24,11 @@ internal static class Chains
                 FOR i IN 0..{{depth - 1}} LOOP
                     current := CASE WHEN i = {{depth - 1}} THEN '{{leaf}}'::uuid WHEN i = 0 THEN '{{root}}'::uuid ELSE gen_random_uuid() END;
                     INSERT INTO mnemosyne.reasonlets (id, scope, name, intent, version, graph, content_hash, parent_id, status, source, created_at, embedding)
-                    VALUES (current, '{{scope.Value}}', 'n', 'i', '1.' || i, '{{graphJson}}', repeat('0', 64), previous, 1, 's', now(), '[1,0,0]');
+                    VALUES (current, '{{scope.Value}}', 'n', 'i', '1.' || i, '{{graph}}', repeat('0', 64), previous, 1, 's', now(), '[1,0,0]');
                     previous := current;
                 END LOOP;
             END $$
             """);
-        return (root, leaf);
+        return (depth == 1 ? leaf : root, leaf);
     }
 }

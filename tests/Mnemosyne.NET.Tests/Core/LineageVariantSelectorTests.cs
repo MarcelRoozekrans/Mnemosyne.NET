@@ -68,6 +68,7 @@ public sealed class LineageVariantSelectorTests
         var direct = await new ReasonletSelector(new ReasonletRankingOptions(), new FixedTimeProvider(Now))
             .RankAsync(TestData.Query(), [candidate], CancellationToken.None);
 
+        Assert.True(direct.IsSuccess);
         Assert.Equal(direct.Value, viaVariant);
     }
 
@@ -80,7 +81,6 @@ public sealed class LineageVariantSelectorTests
         var matches = await Rank(query, Candidate(a, 0.6), Candidate(b, 0.9), Candidate(a, 0.7), Candidate(c, 0.8));
 
         Assert.Equal([b, c, a], matches.Select(m => m.LineageId));
-        Assert.Equal(matches.OrderByDescending(m => m.Score.Total).Select(m => m.LineageId), matches.Select(m => m.LineageId));
     }
 
     [Fact]

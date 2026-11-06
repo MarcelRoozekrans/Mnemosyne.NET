@@ -103,6 +103,38 @@ public sealed class LineageTests(PgVectorFixture fixture) : IClassFixture<PgVect
     }
 
     [Fact(Timeout = 30_000)]
+    public async Task ALineageFourThousandVersionsDeepIsOneLinearWalk()
+    {
+        // The same depth and bound as the RememberTests walk. A planner that flattens the LATERAL step into a join is quadratic here.
+        var (store, scope) = await MigratedAsync();
+        var (root, leaf) = await Chains.InsertAsync(fixture.DataSource, scope, 4000, ReasonletGraphJson.Serialize(Entries.Graph()));
+        await Entries.ExecuteAsync(fixture.DataSource, "UPDATE mnemosyne.reasonlets SET embedding = '[0,1,0]' WHERE scope = $1 AND id <> $2", scope.Value, leaf);
+
+        var started = System.Diagnostics.Stopwatch.StartNew();
+        var result = await store.SearchAsync(scope, Query, null, 1, Ct);
+        started.Stop();
+
+        Assert.True(result.IsSuccess);
+        var only = Assert.Single(result.Value);
+        Assert.Equal((leaf, new ReasonletId(root)), (only.Reasonlet.Id.Value, only.LineageId));
+        Assert.InRange(started.Elapsed, TimeSpan.Zero, TimeSpan.FromSeconds(2));
+    }
+
+    [Fact]
+    public async Task AnIntentFilteredSearchStillReportsTheRoot()
+    {
+        var (store, scope) = await MigratedAsync();
+        var root = await RememberAsync(store, scope, null, "root", "intent-x");
+        var child = await RememberAsync(store, scope, root, "child", "intent-y");
+
+        var result = await store.SearchAsync(scope, Query, "intent-y", 10, Ct);
+
+        Assert.True(result.IsSuccess);
+        var only = Assert.Single(result.Value);
+        Assert.Equal((child, root), (only.Reasonlet.Id, only.LineageId));
+    }
+
+    [Fact(Timeout = 30_000)]
     public async Task AParentCycleDoesNotHangTheSearch()
     {
         // The store never creates a cycle, but hand-written SQL can. No row of a cycle has a null parent, so the lineage
@@ -122,10 +154,10 @@ public sealed class LineageTests(PgVectorFixture fixture) : IClassFixture<PgVect
         Assert.InRange(started.Elapsed, TimeSpan.Zero, TimeSpan.FromSeconds(5));
     }
 
-    private static async Task<ReasonletId> RememberAsync(ReasonletPostgreSqlStore store, ReasonletScope scope, ReasonletId? parent, string name)
+    private static async Task<ReasonletId> RememberAsync(ReasonletPostgreSqlStore store, ReasonletScope scope, ReasonletId? parent, string name, string intent = "i")
     {
         // A distinct graph per name keeps each remember a new Reasonlet instead of a repeat of the last one.
-        var entry = Entries.Entry(scope, Entries.Graph(name), parent, Query) with { Name = name };
+        var entry = Entries.Entry(scope, Entries.Graph(name), parent, Query) with { Name = name, Intent = intent };
         var result = await store.RememberAsync(entry, Ct);
         Assert.True(result.IsSuccess);
         return result.Value.Id;
