@@ -23,15 +23,15 @@ namespace Mnemosyne.NET.Sentinel;
 /// <para>
 /// A blocked capture is named by the blocking detection with the highest severity; on a tie, the first one wins. The
 /// detection's reason is never read, since it can quote the capture. Exceptions from the pipeline and cancellation
-/// propagate; the guard never returns an error.
+/// propagate.
 /// </para>
 /// <para>
-/// Known limitation: only an exception from the pipeline itself, or a timeout through the facade's guard timeout, fails
-/// closed as <c>Unavailable</c>. AI.Sentinel 4.2.0 catches an exception from a single detector, skips that detector, calls
-/// <see cref="SentinelOptions.OnDetectorFailure"/> and counts its result as clean. The pipeline result carries no failure
-/// signal, so a capture can be stored without that control. Upstream fixed this in a release that adds
-/// <c>PipelineResult.Failures</c> and <c>IsComplete</c>. AI.Sentinel 4.2.0 does not have those members, and the guard does
-/// not read them. Adopting the fix is tracked in Mnemosyne.NET#58.
+/// An incomplete scan fails closed. When a detector fails and no detector blocked, AI.Sentinel 5.1.1 reports the failure
+/// through <c>PipelineResult.Failures</c> and <c>IsComplete</c>, and the guard returns <c>Unavailable</c> with the message
+/// "The Sentinel scan did not complete." and the count of failed detectors as the detail, never a detector's message. This
+/// covers any failure AI.Sentinel reports: a detector that throws or times out, texts or examples it could not embed, and a
+/// review that failed. A blocking detection wins over a failed detector. The facade keeps only the code of this error, so
+/// <c>RememberAsync</c> fails with <c>Unavailable</c> and the facade's own message, as it does for a timeout.
 /// </para>
 /// </remarks>
 public sealed class SentinelCaptureGuard : ICaptureGuard
@@ -91,10 +91,22 @@ public sealed class SentinelCaptureGuard : ICaptureGuard
             }
         }
 
-        return Result<CaptureVerdict, MnemosyneError>.Success(
-            blocking is null
-                ? CaptureVerdict.Allow(_options.GuardName)
-                : CaptureVerdict.Block(_options.GuardName, DetectorName(blocking.DetectorId.Value)));
+        if (blocking is not null)
+        {
+            return Result<CaptureVerdict, MnemosyneError>.Success(
+                CaptureVerdict.Block(_options.GuardName, DetectorName(blocking.DetectorId.Value)));
+        }
+
+        // A scan that did not finish proves nothing. The detail holds the count only: a detector's message can quote the capture.
+        if (!result.IsComplete || result.Failures.Count > 0)
+        {
+            return Result<CaptureVerdict, MnemosyneError>.Failure(new MnemosyneError(
+                MnemosyneErrorCode.Unavailable,
+                "The Sentinel scan did not complete.",
+                result.Failures.Count == 1 ? "1 detector failed" : $"{result.Failures.Count} detectors failed"));
+        }
+
+        return Result<CaptureVerdict, MnemosyneError>.Success(CaptureVerdict.Allow(_options.GuardName));
     }
 
     private static void AddIfPresent(List<ChatMessage> messages, string? text)

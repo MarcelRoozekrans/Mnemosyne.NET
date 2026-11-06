@@ -108,11 +108,9 @@ Act 3. Ask "Which invoice was paid with card 4111 1111 1111 1111?" through a cli
 
 The sample checks the reply, the `Blocked` outcome, that no review is pending and that recall for the question finds nothing. [Chat pipeline](chat-pipeline.md#judges-and-guards) lists what was only observed by hand, such as the card number's severity. The adapter README lists which PII AI.Sentinel rates High and which Medium. Read it before relying on the default for emails or phone numbers.
 
-### A known limit: a throwing detector
+### A throwing detector fails the capture closed
 
-The guard fails closed when the pipeline as a whole throws, and when the facade's timeout runs out. It does not fail closed when a single detector throws. The pipeline catches that exception, skips the detector, calls `SentinelOptions.OnDetectorFailure` and counts the detector's result as clean. The result carries no failure signal, so the guard cannot tell. A detector that depends on an endpoint, such as a semantic one, is skipped while the endpoint is down, and the capture can be stored without that control.
-
-This was reported as [AI.Sentinel#550](https://github.com/MarcelRoozekrans/AI.Sentinel/issues/550). The issue is closed: upstream closed it on 2026-11-04 as completed, with a fix that adds `PipelineResult.Failures` and `IsComplete`. The version this repository pins, AI.Sentinel 4.2.0, does not have those members, and the adapter does not read them. A unit test pins the gap: with a throwing detector, the capture is allowed and the store is called. Until the adapter moves to a release with the signal, set `OnDetectorFailure` in the host's AI.Sentinel options to learn about a skipped detector. Adopting the fix is tracked in [Mnemosyne.NET#58](https://github.com/MarcelRoozekrans/Mnemosyne.NET/issues/58). The sample does not exercise this.
+When a detector fails, AI.Sentinel 5.1.1 skips it, calls `SentinelOptions.OnDetectorFailure` and reports the failure through `PipelineResult.Failures` and `IsComplete`. This covers any failure AI.Sentinel reports: a detector that throws or times out, texts or examples it could not embed, and a review that failed. If no detector blocked, the guard answers `Unavailable`, with the message "The Sentinel scan did not complete." and the number of failed detectors as the detail, such as "1 detector failed". The detail never holds a detector's message, since that can quote the capture. A blocking detection wins over a failed detector, so that capture is `Blocked`. The facade keeps only the code of a guard error, so a caller of `RememberAsync` sees `Unavailable` with the facade's own message and no detail, the same as for the facade's timeout; the message and the count reach callers of `ICaptureGuard` directly. The chat pipeline drops the capture, as Limits says. A detector that depends on an endpoint, such as a semantic one, or a host with a reviewer, therefore rejects captures while that outage lasts. Set `OnDetectorFailure` in the host's AI.Sentinel options to see which detector failed and to alert on it. This was reported as [AI.Sentinel#550](https://github.com/MarcelRoozekrans/AI.Sentinel/issues/550) and adopted in [Mnemosyne.NET#58](https://github.com/MarcelRoozekrans/Mnemosyne.NET/issues/58). The sample does not exercise this.
 
 ## The review gate
 
@@ -146,7 +144,7 @@ A review screen reads the pending list from the start each time, because ids fol
 ## Limits
 
 - The guard is as good as its detectors. It sees the question, intent and name, and not the answer or the graph.
-- A throwing detector is skipped and counted as clean. See the known limit above.
+- Any detector failure AI.Sentinel reports fails the capture closed as `Unavailable`, unless another detector blocked. See the section above.
 - A capture the guard cannot inspect is lost. The chat pipeline does not retry it.
 - Only `RememberAsync` is guarded. `RecordExecutionAsync` and direct writes to the store are not, and the question and answer of a run pass to the evaluator unguarded.
 - The gate holds back new Reasonlets and new versions. It does not review runs.

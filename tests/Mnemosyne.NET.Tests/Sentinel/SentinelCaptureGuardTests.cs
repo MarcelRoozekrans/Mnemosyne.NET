@@ -34,6 +34,56 @@ public sealed class SentinelCaptureGuardTests
         return result.Value;
     }
 
+    private static DetectorFailure Failure(string id) => new(new DetectorId(id), DetectorFailureKind.Threw);
+
+    private static PipelineResult Failed(IEnumerable<DetectionResult> detections, params DetectorFailure[] failures) =>
+        new(new ThreatRiskScore(50), detections.ToArray()) { Failures = failures };
+
+    private static async Task<ZeroAlloc.Results.Result<CaptureVerdict, MnemosyneError>> InspectRaw(PipelineResult result)
+    {
+        var guard = new SentinelCaptureGuard(new FakeDetectionPipeline { Result = result }, new SentinelOptions());
+        return await guard.InspectAsync(Capture(), TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task OneFailedDetectorWithNoDetectionFailsClosed()
+    {
+        var result = await InspectRaw(Failed([], Failure("TEST-THROW")));
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(MnemosyneErrorCode.Unavailable, result.Error.Code);
+        Assert.Equal("The Sentinel scan did not complete.", result.Error.Message);
+        Assert.Equal("1 detector failed", result.Error.Detail);
+    }
+
+    [Fact]
+    public async Task TwoFailedDetectorsReportThePluralCount()
+    {
+        var result = await InspectRaw(Failed([], Failure("TEST-A"), Failure("TEST-B")));
+
+        Assert.Equal(MnemosyneErrorCode.Unavailable, result.Error.Code);
+        Assert.Equal("2 detectors failed", result.Error.Detail);
+    }
+
+    [Fact]
+    public async Task ABlockingDetectionWinsOverFailedDetectors()
+    {
+        var result = await InspectRaw(Failed([Detection("SEC-02", Severity.High)], Failure("TEST-THROW")));
+
+        Assert.True(result.IsSuccess, result.IsFailure ? result.Error.ToString() : "");
+        Assert.Equal(CaptureVerdict.Block("ai-sentinel", "SEC-02"), result.Value);
+    }
+
+    [Fact]
+    public async Task ADetectionBelowThresholdDoesNotRescueAFailedScan()
+    {
+        var result = await InspectRaw(Failed([Detection("SEC-01", Severity.Medium)], Failure("TEST-THROW")));
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(MnemosyneErrorCode.Unavailable, result.Error.Code);
+        Assert.Equal("1 detector failed", result.Error.Detail);
+    }
+
     [Fact]
     public async Task CleanResultAllows()
     {

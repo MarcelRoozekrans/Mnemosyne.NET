@@ -54,9 +54,9 @@ The verdict carries the detector id only. The detection's reason is never read a
 
 ## Failures
 
-The guard never returns an error. An exception from the pipeline itself reaches the facade, which treats the guard as down: the remember fails closed with `Unavailable`, because a capture that the pipeline did not inspect is not stored. The caller's own cancellation propagates.
+An exception from the pipeline itself reaches the facade, which treats the guard as down: the remember fails closed with `Unavailable`, because a capture that the pipeline did not inspect is not stored. The caller's own cancellation propagates.
 
-Known limitation: this holds for the pipeline as a whole, not for each detector in it. AI.Sentinel 4.2.0 catches an exception from a single detector, skips that detector for the scan, calls `SentinelOptions.OnDetectorFailure` and counts its result as clean. `PipelineResult` carries no failure signal, so the guard cannot tell. A semantic or escalating detector whose endpoint is down is therefore skipped, and the capture can be stored without that control. Set `OnDetectorFailure` in the host's AI.Sentinel options to learn about it. This was reported as [AI.Sentinel#550](https://github.com/MarcelRoozekrans/AI.Sentinel/issues/550), which upstream closed on 2026-11-04 as completed, with a fix that adds `PipelineResult.Failures` and `IsComplete`. This repository pins 4.2.0, which does not have those members, and the guard does not read them. Adopting the fix is tracked in [Mnemosyne.NET#58](https://github.com/MarcelRoozekrans/Mnemosyne.NET/issues/58).
+The guard itself answers `Unavailable` in a second case, a scan that does not complete. When a detector fails, AI.Sentinel 5.1.1 skips it, calls `SentinelOptions.OnDetectorFailure` and reports it through `PipelineResult.Failures` and `IsComplete`. This covers any failure AI.Sentinel reports: a detector that throws or times out, texts or examples it could not embed, and a review that failed. If no detector blocked, the guard returns `Unavailable` with the message "The Sentinel scan did not complete." and the number of failed detectors as the detail, such as "1 detector failed", never a detector's message. A blocking detection still wins, so the capture is then `Blocked`. The facade keeps only the code of a guard error, so `RememberAsync` fails with `Unavailable` and the facade's own message, with no detail, exactly as for a timeout through the guard timeout. The message and the count reach callers of `ICaptureGuard` directly. A semantic or escalating detector whose endpoint is down therefore rejects captures instead of letting them through unchecked; set `OnDetectorFailure` to see which detector failed and alert on it.
 
 ## Slow detectors and `GuardTimeout`
 
@@ -64,7 +64,7 @@ Semantic and LLM-escalating detectors can be slow. The facade stops waiting for 
 
 ## A pipeline for the guard
 
-Set `PipelineName` to give the guard its own pipeline, so it can run fewer detectors than the host's chat client does. AI.Sentinel 4.2.0 needs the host to register the default pipeline as well. Checked with a host that registers only the named pipeline: resolving the guard throws `InvalidOperationException`, "No service for type 'AI.Sentinel.SentinelOptions' has been registered". AI.Sentinel's own README gives a wider reason for the same rule, the shared audit store, forwarders, alert sink and tool-call guard that the default call wires.
+Set `PipelineName` to give the guard its own pipeline, so it can run fewer detectors than the host's chat client does. AI.Sentinel 5.1.1 needs the host to register the default pipeline as well. Checked with a host that registers only the named pipeline: resolving the guard throws `InvalidOperationException`, "No service for type 'AI.Sentinel.SentinelOptions' has been registered". AI.Sentinel's own README gives a wider reason for the same rule, the shared audit store, forwarders, alert sink and tool-call guard that the default call wires.
 
 AI.Sentinel's own README says to register the default pipeline first, so put that call before the named one.
 
@@ -89,4 +89,4 @@ The guard protects what goes into the store. The agent's answer is protected by 
 
 ## Documentation
 
-- [Capture, redaction and review](https://marcelroozekrans.github.io/Mnemosyne.NET/guides/capture-and-review): the guard in the capture path, what the adapter scans, the known limit and the review gate.
+- [Capture, redaction and review](https://marcelroozekrans.github.io/Mnemosyne.NET/guides/capture-and-review): the guard in the capture path, what the adapter scans, the fail-closed handling of an incomplete scan and the review gate.
