@@ -1060,7 +1060,9 @@ internal sealed class RecordingMemory(ReasonletGraph graph) : IReasonletMemory
         Interlocked.Increment(ref _recalls);
         IReadOnlyList<ReasonletMatch> matches =
         [
-            new ReasonletMatch { Reasonlet = new ReasonletDefinition
+            new ReasonletMatch
+            {
+                Reasonlet = new ReasonletDefinition
                 {
                     Id = MatchId,
                     Scope = query.Scope,
@@ -1071,7 +1073,10 @@ internal sealed class RecordingMemory(ReasonletGraph graph) : IReasonletMemory
                     Provenance = new ReasonletProvenance { Source = "aot-smoke" },
                     Status = ReasonletStatus.Active,
                     CreatedAt = DateTimeOffset.UnixEpoch,
-                }, Score = new ReasonletScore(0.9, 0.8, 1, 0.9), Evidence = new ReasonletEvidence { Runs = 3, JudgedRuns = 0, UsesParentPrior = false } },
+                },
+                Score = new ReasonletScore(0.9, 0.8, 1, 0.9),
+                Evidence = new ReasonletEvidence { Runs = 3, JudgedRuns = 0, UsesParentPrior = false },
+            },
         ];
         return ValueTask.FromResult<Result<IReadOnlyList<ReasonletMatch>, MnemosyneError>>(Result<IReadOnlyList<ReasonletMatch>, MnemosyneError>.Success(matches));
     }

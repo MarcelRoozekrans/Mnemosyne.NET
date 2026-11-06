@@ -46,7 +46,12 @@ internal static class CaptureTestData
             source);
     }
 
-    public static ReasonletMatch Match(ReasonletGraph? graph = null) => new() { Reasonlet = TestData.Definition() with { Id = ReasonletId.New(), Graph = graph ?? TestData.Graph() }, Score = default, Evidence = default };
+    public static ReasonletMatch Match(ReasonletGraph? graph = null) => new()
+    {
+        Reasonlet = TestData.Definition() with { Id = ReasonletId.New(), Graph = graph ?? TestData.Graph() },
+        Score = default,
+        Evidence = default,
+    };
 
     public static ReasonletGraph GraphOf(IEnumerable<ChatMessage> messages) => ReasonletTranscript.ToGraph(messages).Value;
 

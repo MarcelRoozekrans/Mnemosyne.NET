@@ -71,7 +71,11 @@ public sealed class RecallTests(PgVectorFixture fixture) : IClassFixture<PgVecto
         AssertScore(result.Value[1].Score, 0.85, 22.5 / 25);
         AssertScore(result.Value[2].Score, 0.92, 5.0 / 10);
         Assert.Equal(
-            [new ReasonletEvidence { Runs = 1, JudgedRuns = 0, UsesParentPrior = true }, new ReasonletEvidence { Runs = 40, JudgedRuns = 0, UsesParentPrior = false }, new ReasonletEvidence { Runs = 10, JudgedRuns = 0, UsesParentPrior = false }],
+            [
+                new ReasonletEvidence { Runs = 1, JudgedRuns = 0, UsesParentPrior = true },
+                new ReasonletEvidence { Runs = 40, JudgedRuns = 0, UsesParentPrior = false },
+                new ReasonletEvidence { Runs = 10, JudgedRuns = 0, UsesParentPrior = false },
+            ],
             result.Value.Select(m => m.Evidence));
         Assert.Equal("1.1", result.Value[0].Reasonlet.Version);
         Assert.Equal(original, result.Value[0].Reasonlet.ParentId);

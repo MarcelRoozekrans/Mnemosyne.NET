@@ -150,7 +150,11 @@ public sealed class ReasonletSelectorTests
         var weakParent = Candidate(0.7, Metrics(2, 2), Metrics(20, 0));
         var matches = await Rank(Selector(), TestData.Query(), withParent, root, weakParent);
         Assert.Equal(
-            [new ReasonletEvidence { Runs = 10, JudgedRuns = 4, UsesParentPrior = true }, new ReasonletEvidence { Runs = 3, JudgedRuns = 3, UsesParentPrior = false }, new ReasonletEvidence { Runs = 2, JudgedRuns = 0, UsesParentPrior = false }],
+            [
+                new ReasonletEvidence { Runs = 10, JudgedRuns = 4, UsesParentPrior = true },
+                new ReasonletEvidence { Runs = 3, JudgedRuns = 3, UsesParentPrior = false },
+                new ReasonletEvidence { Runs = 2, JudgedRuns = 0, UsesParentPrior = false },
+            ],
             matches.Select(m => m.Evidence));
     }
 

@@ -317,7 +317,9 @@ public sealed class FindProcedureFunctionTests
             Edges = [new ReasonletEdge { From = "a", To = "b" }],
             SchemaVersion = ReasonletGraph.CurrentSchemaVersion,
         };
-        return new ReasonletMatch { Reasonlet = new ReasonletDefinition
+        return new ReasonletMatch
+        {
+            Reasonlet = new ReasonletDefinition
             {
                 Id = ReasonletId.New(),
                 Scope = Scope,
@@ -328,7 +330,10 @@ public sealed class FindProcedureFunctionTests
                 Provenance = new ReasonletProvenance { Source = "test" },
                 Status = ReasonletStatus.Active,
                 CreatedAt = DateTimeOffset.UnixEpoch,
-            }, Score = new ReasonletScore(Similarity: 0.82, SuccessRate: 0.75, Freshness: 1, Total: 0.8), Evidence = new ReasonletEvidence { Runs = 11, JudgedRuns = 11, UsesParentPrior = false } };
+            },
+            Score = new ReasonletScore(Similarity: 0.82, SuccessRate: 0.75, Freshness: 1, Total: 0.8),
+            Evidence = new ReasonletEvidence { Runs = 11, JudgedRuns = 11, UsesParentPrior = false },
+        };
     }
 
     private static ReasonletNode Node(string id, string tool, string arguments) =>
