@@ -152,7 +152,7 @@ public sealed class SubjectExportTests(PgVectorFixture fixture) : IClassFixture<
     }
 
     [Fact]
-    public async Task AnUnmigratedOrFailedStoreAnswersUnavailable()
+    public async Task AnUnmigratedStoreAnswersUnavailable()
     {
         var store = new ReasonletPostgreSqlStore(await fixture.CreateEmptyDatabaseAsync(), new MnemosynePostgreSqlOptions { Dimensions = 3 });
 
@@ -185,8 +185,9 @@ public sealed class SubjectExportTests(PgVectorFixture fixture) : IClassFixture<
         var database = new NpgsqlConnectionStringBuilder(dataSource.ConnectionString).Database!;
         const string Sessions = "FROM pg_stat_activity WHERE datname = $1 AND pid <> pg_backend_pid()";
         await Entries.ExecuteAsync(fixture.DataSource, $"SELECT pg_terminate_backend(pid) {Sessions}", database);
-        while (await Entries.ScalarAsync<long>(fixture.DataSource, $"SELECT count(*) {Sessions}", database) > 0)
+        for (var i = 0; await Entries.ScalarAsync<long>(fixture.DataSource, $"SELECT count(*) {Sessions}", database) > 0; i++)
         {
+            Assert.True(i < 500, "sessions did not end");
             await Task.Delay(10, Ct);
         }
 
@@ -248,6 +249,7 @@ public sealed class SubjectExportTests(PgVectorFixture fixture) : IClassFixture<
         Assert.Equal((false, ReasonletVerdictSource.Agent, agentOutcome), (a.Success, a.VerdictSource, a.Outcome));
         Assert.Null(a.Evaluation);
         Assert.Null(a.Feedback);
+        Assert.Null(a.FeedbackRecordedAt);
         Assert.Equal(tags, a.Provenance.Tags);
         Assert.Equal("test", a.Provenance.Source);
         var b = runs[judged];
@@ -257,10 +259,29 @@ public sealed class SubjectExportTests(PgVectorFixture fixture) : IClassFixture<
         var c = runs[human];
         Assert.Equal((false, ReasonletVerdictSource.Feedback, worked), (c.Success, c.VerdictSource, c.Feedback));
         Assert.Null(c.Evaluation);
+        Assert.NotNull(c.FeedbackRecordedAt);
         Assert.Equal(new ReasonletOutcome(true, TimeSpan.FromTicks(7), 1), c.Outcome);
         var d = runs[scored];
         Assert.Equal((true, ReasonletVerdictSource.Evaluator, judge, silent), (d.Success, d.VerdictSource, d.Evaluation, d.Feedback));
         Assert.Null(d.Feedback!.Value.Worked);
+        Assert.NotNull(d.FeedbackRecordedAt);
+    }
+
+    [Fact]
+    public async Task ALaterFeedbackWithoutAVerdictKeepsTheEarlierOne()
+    {
+        var store = await MigratedStoreAsync();
+        var scope = PgVectorFixture.NewScope();
+        var owner = await RememberAsync(store, scope, "a", subject: "owner");
+        var run = await AppendAsync(store, scope, owner.Id, Subject, feedback: new ReasonletFeedback(0.1, 0.2, 0.3, true));
+        Assert.True((await store.AppendFeedbackAsync(scope, run, new ReasonletFeedback(0.4, 0.5, 0.6), Ct)).IsSuccess);
+
+        var exported = (await store.ListSubjectRunsAsync(scope, Subject, 10, null, Ct)).Value.Single();
+
+        Assert.Equal(ReasonletVerdictSource.Feedback, exported.VerdictSource);
+        var feedback = exported.Feedback!.Value;
+        Assert.True(feedback.Worked);
+        Assert.Equal(0.4, feedback.Utility);
     }
 
     [Fact]
@@ -380,11 +401,17 @@ public sealed class SubjectExportTests(PgVectorFixture fixture) : IClassFixture<
         await AppendAsync(store, scope, b2.Id, C);
         await AppendAsync(store, scope, c1.Id, A);
         await AppendAsync(store, scope, c1.Id, B);
+        var bOnA = await RememberAsync(store, scope, "bOnA", parent: a1.Id, subject: B);
+        await AppendAsync(store, scope, bOnA.Id, A);
+        var aOnB = await RememberAsync(store, scope, "aOnB", parent: b1.Id, subject: A);
+        await AppendAsync(store, scope, aOnB.Id, B);
 
+        var exportedRecords = new List<ReasonletRecord>();
         var exportedReasonlets = new List<Guid>();
         ReasonletId? afterReasonlet = null;
         while ((await store.ListSubjectReasonletsAsync(scope, A, 2, afterReasonlet, Ct)).Value is { Count: > 0 } page)
         {
+            exportedRecords.AddRange(page);
             exportedReasonlets.AddRange(page.Select(r => r.Definition.Id.Value));
             afterReasonlet = page[^1].Definition.Id;
         }
@@ -411,6 +438,15 @@ public sealed class SubjectExportTests(PgVectorFixture fixture) : IClassFixture<
         Assert.Equal(allRuns.Except(exportedRuns).Order(), runsAfter.Order());
         Assert.Empty(exportedReasonlets.Intersect(reasonletsAfter));
         Assert.Empty(exportedRuns.Intersect(runsAfter));
+
+        // Lineage across owners: a version B captured on A's Reasonlet is B's, so it stays and loses its parent.
+        Assert.DoesNotContain(bOnA.Id.Value, exportedReasonlets);
+        Assert.Contains(bOnA.Id.Value, reasonletsAfter);
+        Assert.Null((await store.GetAsync(scope, bOnA.Id, Ct)).Value.ParentId);
+        // A version A captured on B's Reasonlet is A's: exported with its parent named, erased, and B's parent stays.
+        Assert.Equal(b1.Id, exportedRecords.Single(r => r.Definition.Id == aOnB.Id).Definition.ParentId);
+        Assert.DoesNotContain(aOnB.Id.Value, reasonletsAfter);
+        Assert.Contains(b1.Id.Value, reasonletsAfter);
     }
 
     private async Task<List<Guid>> IdsAsync(string sql, params object[] parameters)
@@ -418,7 +454,7 @@ public sealed class SubjectExportTests(PgVectorFixture fixture) : IClassFixture<
         await using var command = fixture.DataSource.CreateCommand(sql);
         foreach (var parameter in parameters)
         {
-            command.Parameters.Add(new Npgsql.NpgsqlParameter { Value = parameter });
+            command.Parameters.Add(new NpgsqlParameter { Value = parameter });
         }
 
         var ids = new List<Guid>();

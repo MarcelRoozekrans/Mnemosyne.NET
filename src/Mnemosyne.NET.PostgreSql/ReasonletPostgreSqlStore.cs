@@ -1133,6 +1133,7 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
             Outcome = new ReasonletOutcome(row.AgentSuccess, TimeSpan.FromTicks(row.DurationTicks), row.Score),
             Evaluation = evaluation,
             Feedback = feedback,
+            FeedbackRecordedAt = row.FeedbackRecordedAt,
             Success = row.Success,
             VerdictSource = row.FeedbackWorked is not null
                 ? ReasonletVerdictSource.Feedback

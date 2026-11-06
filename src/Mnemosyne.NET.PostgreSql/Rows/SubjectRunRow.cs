@@ -22,6 +22,7 @@ namespace Mnemosyne.NET.PostgreSql.Rows;
 /// <param name="Utility">The feedback utility, or null when there is no feedback row.</param>
 /// <param name="Correctness">The feedback correctness, or null when there is no feedback row.</param>
 /// <param name="Reusability">The feedback reusability, or null when there is no feedback row.</param>
+/// <param name="FeedbackRecordedAt">When the feedback was recorded, or null when there is no feedback row.</param>
 internal sealed record SubjectRunRow(
     Guid Id,
     Guid ReasonletId,
@@ -41,4 +42,5 @@ internal sealed record SubjectRunRow(
     [Json] string? Tags,
     double? Utility,
     double? Correctness,
-    double? Reusability);
+    double? Reusability,
+    DateTimeOffset? FeedbackRecordedAt);
