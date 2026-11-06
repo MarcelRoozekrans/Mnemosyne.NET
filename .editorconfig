@@ -11,3 +11,15 @@ indent_size = 4
 
 [*.{csproj,props,targets,slnx,json,yml,yaml}]
 indent_size = 2
+
+# Public API gate (Microsoft.CodeAnalysis.PublicApiAnalyzers runs on the packable projects under src only).
+# A public change without a PublicAPI.Unshipped.txt line fails the build.
+[*.cs]
+dotnet_diagnostic.RS0016.severity = error
+dotnet_diagnostic.RS0017.severity = error
+dotnet_diagnostic.RS0022.severity = error
+dotnet_diagnostic.RS0025.severity = error
+dotnet_diagnostic.RS0026.severity = error
+dotnet_diagnostic.RS0027.severity = error
+dotnet_diagnostic.RS0036.severity = error
+dotnet_diagnostic.RS0037.severity = error

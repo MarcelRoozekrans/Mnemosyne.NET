@@ -1,0 +1,207 @@
+#nullable enable
+const Mnemosyne.NET.ReasonletChatOptionsExtensions.ScopeKey = "mnemosyne.scope" -> string!
+const Mnemosyne.NET.ReasonletSuggestions.AgentIntegration = "agent" -> string!
+const Mnemosyne.NET.ReasonletSuggestions.ChatIntegration = "chat" -> string!
+const Mnemosyne.NET.ReasonletSuggestions.ContinuationReason = "continuation" -> string!
+const Mnemosyne.NET.ReasonletSuggestions.NoScopeReason = "no_scope" -> string!
+const Mnemosyne.NET.ReasonletTools.FindProcedureName = "find_procedure" -> string!
+Mnemosyne.NET.ChatEvaluatorOptions
+Mnemosyne.NET.ChatEvaluatorOptions.ChatClientKey.get -> object?
+Mnemosyne.NET.ChatEvaluatorOptions.ChatClientKey.init -> void
+Mnemosyne.NET.ChatEvaluatorOptions.ChatEvaluatorOptions() -> void
+Mnemosyne.NET.ChatEvaluatorOptions.Criteria.get -> string?
+Mnemosyne.NET.ChatEvaluatorOptions.Criteria.init -> void
+Mnemosyne.NET.ChatEvaluatorOptions.EvaluatorName.get -> string!
+Mnemosyne.NET.ChatEvaluatorOptions.EvaluatorName.init -> void
+Mnemosyne.NET.ChatEvaluatorOptions.Validate() -> ZeroAlloc.Results.UnitResult<Mnemosyne.NET.Abstractions.MnemosyneError>
+Mnemosyne.NET.ChatReasonletEvaluator
+Mnemosyne.NET.ChatReasonletEvaluator.ChatReasonletEvaluator(Microsoft.Extensions.AI.IChatClient! client, Mnemosyne.NET.ChatEvaluatorOptions! options) -> void
+Mnemosyne.NET.ChatReasonletEvaluator.EvaluateAsync(Mnemosyne.NET.Abstractions.ReasonletEvaluationRequest! request, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<ZeroAlloc.Results.Result<Mnemosyne.NET.Abstractions.ReasonletEvaluation, Mnemosyne.NET.Abstractions.MnemosyneError>>
+Mnemosyne.NET.FindProcedureFunction
+Mnemosyne.NET.FindProcedureFunction.Lookups.get -> System.Collections.Generic.IReadOnlyList<System.Collections.Generic.IReadOnlyList<Mnemosyne.NET.Abstractions.ReasonletMatch!>!>!
+Mnemosyne.NET.IReasonletCaptureSink
+Mnemosyne.NET.IReasonletCaptureSink.TryCapture(Mnemosyne.NET.ReasonletCaptureRun! run) -> bool
+Mnemosyne.NET.MnemosyneOptions
+Mnemosyne.NET.MnemosyneOptions.CandidatePool.get -> int
+Mnemosyne.NET.MnemosyneOptions.CandidatePool.init -> void
+Mnemosyne.NET.MnemosyneOptions.EvaluationTimeout.get -> System.TimeSpan
+Mnemosyne.NET.MnemosyneOptions.EvaluationTimeout.init -> void
+Mnemosyne.NET.MnemosyneOptions.GuardTimeout.get -> System.TimeSpan
+Mnemosyne.NET.MnemosyneOptions.GuardTimeout.init -> void
+Mnemosyne.NET.MnemosyneOptions.MinIntentConfidence.get -> double
+Mnemosyne.NET.MnemosyneOptions.MinIntentConfidence.init -> void
+Mnemosyne.NET.MnemosyneOptions.MnemosyneOptions() -> void
+Mnemosyne.NET.MnemosyneOptions.Ranking.get -> Mnemosyne.NET.ReasonletRankingOptions!
+Mnemosyne.NET.MnemosyneOptions.Ranking.init -> void
+Mnemosyne.NET.MnemosyneOptions.RequireReview.get -> bool
+Mnemosyne.NET.MnemosyneOptions.RequireReview.init -> void
+Mnemosyne.NET.MnemosyneOptions.Validate() -> ZeroAlloc.Results.UnitResult<Mnemosyne.NET.Abstractions.MnemosyneError>
+Mnemosyne.NET.ReasonletCallScope
+Mnemosyne.NET.ReasonletCallScope.<Clone>$() -> Mnemosyne.NET.ReasonletCallScope!
+Mnemosyne.NET.ReasonletCallScope.Deconstruct(out Mnemosyne.NET.Abstractions.ReasonletScope Scope, out string? SubjectId) -> void
+Mnemosyne.NET.ReasonletCallScope.Equals(Mnemosyne.NET.ReasonletCallScope? other) -> bool
+Mnemosyne.NET.ReasonletCallScope.ReasonletCallScope(Mnemosyne.NET.Abstractions.ReasonletScope Scope, string? SubjectId) -> void
+Mnemosyne.NET.ReasonletCallScope.Scope.get -> Mnemosyne.NET.Abstractions.ReasonletScope
+Mnemosyne.NET.ReasonletCallScope.Scope.init -> void
+Mnemosyne.NET.ReasonletCallScope.SubjectId.get -> string?
+Mnemosyne.NET.ReasonletCallScope.SubjectId.init -> void
+Mnemosyne.NET.ReasonletCaptureOptions
+Mnemosyne.NET.ReasonletCaptureOptions.Capacity.get -> int
+Mnemosyne.NET.ReasonletCaptureOptions.Capacity.init -> void
+Mnemosyne.NET.ReasonletCaptureOptions.DrainTimeout.get -> System.TimeSpan
+Mnemosyne.NET.ReasonletCaptureOptions.DrainTimeout.init -> void
+Mnemosyne.NET.ReasonletCaptureOptions.ReasonletCaptureOptions() -> void
+Mnemosyne.NET.ReasonletCaptureOptions.Source.get -> string!
+Mnemosyne.NET.ReasonletCaptureOptions.Source.init -> void
+Mnemosyne.NET.ReasonletCaptureOptions.Validate() -> ZeroAlloc.Results.UnitResult<Mnemosyne.NET.Abstractions.MnemosyneError>
+Mnemosyne.NET.ReasonletCaptureRun
+Mnemosyne.NET.ReasonletCaptureRun.<Clone>$() -> Mnemosyne.NET.ReasonletCaptureRun!
+Mnemosyne.NET.ReasonletCaptureRun.Duration.get -> System.TimeSpan
+Mnemosyne.NET.ReasonletCaptureRun.Duration.init -> void
+Mnemosyne.NET.ReasonletCaptureRun.Equals(Mnemosyne.NET.ReasonletCaptureRun? other) -> bool
+Mnemosyne.NET.ReasonletCaptureRun.FinishReason.get -> Microsoft.Extensions.AI.ChatFinishReason?
+Mnemosyne.NET.ReasonletCaptureRun.FinishReason.init -> void
+Mnemosyne.NET.ReasonletCaptureRun.InjectedParent.get -> Mnemosyne.NET.Abstractions.ReasonletId?
+Mnemosyne.NET.ReasonletCaptureRun.InjectedParent.init -> void
+Mnemosyne.NET.ReasonletCaptureRun.Lookups.get -> System.Collections.Generic.IReadOnlyList<System.Collections.Generic.IReadOnlyList<Mnemosyne.NET.Abstractions.ReasonletMatch!>!>!
+Mnemosyne.NET.ReasonletCaptureRun.Lookups.init -> void
+Mnemosyne.NET.ReasonletCaptureRun.Messages.get -> System.Collections.Generic.IReadOnlyList<Microsoft.Extensions.AI.ChatMessage!>!
+Mnemosyne.NET.ReasonletCaptureRun.Messages.init -> void
+Mnemosyne.NET.ReasonletCaptureRun.ReasonletCaptureRun(Mnemosyne.NET.Abstractions.ReasonletScope scope, System.Collections.Generic.IReadOnlyList<Microsoft.Extensions.AI.ChatMessage!>! messages) -> void
+Mnemosyne.NET.ReasonletCaptureRun.RunId.get -> string?
+Mnemosyne.NET.ReasonletCaptureRun.RunId.init -> void
+Mnemosyne.NET.ReasonletCaptureRun.Scope.get -> Mnemosyne.NET.Abstractions.ReasonletScope
+Mnemosyne.NET.ReasonletCaptureRun.Scope.init -> void
+Mnemosyne.NET.ReasonletCaptureRun.Source.get -> string?
+Mnemosyne.NET.ReasonletCaptureRun.Source.init -> void
+Mnemosyne.NET.ReasonletCaptureRun.SubjectId.get -> string?
+Mnemosyne.NET.ReasonletCaptureRun.SubjectId.init -> void
+Mnemosyne.NET.ReasonletCaptures
+Mnemosyne.NET.ReasonletChatClientBuilderExtensions
+Mnemosyne.NET.ReasonletChatOptions
+Mnemosyne.NET.ReasonletChatOptions.Capture.get -> bool
+Mnemosyne.NET.ReasonletChatOptions.Capture.init -> void
+Mnemosyne.NET.ReasonletChatOptions.DefaultScope.get -> Mnemosyne.NET.Abstractions.ReasonletScope?
+Mnemosyne.NET.ReasonletChatOptions.DefaultScope.init -> void
+Mnemosyne.NET.ReasonletChatOptions.ExposeFindProcedure.get -> bool
+Mnemosyne.NET.ReasonletChatOptions.ExposeFindProcedure.init -> void
+Mnemosyne.NET.ReasonletChatOptions.Formatter.get -> System.Func<Mnemosyne.NET.Abstractions.ReasonletMatch!, string!>?
+Mnemosyne.NET.ReasonletChatOptions.Formatter.init -> void
+Mnemosyne.NET.ReasonletChatOptions.MinSimilarity.get -> double?
+Mnemosyne.NET.ReasonletChatOptions.MinSimilarity.init -> void
+Mnemosyne.NET.ReasonletChatOptions.ReasonletChatOptions() -> void
+Mnemosyne.NET.ReasonletChatOptions.Recall.get -> bool
+Mnemosyne.NET.ReasonletChatOptions.Recall.init -> void
+Mnemosyne.NET.ReasonletChatOptions.RecallTimeout.get -> System.TimeSpan
+Mnemosyne.NET.ReasonletChatOptions.RecallTimeout.init -> void
+Mnemosyne.NET.ReasonletChatOptions.Validate() -> ZeroAlloc.Results.UnitResult<Mnemosyne.NET.Abstractions.MnemosyneError>
+Mnemosyne.NET.ReasonletChatOptionsExtensions
+Mnemosyne.NET.ReasonletMemory
+Mnemosyne.NET.ReasonletMemory.ApproveAsync(Mnemosyne.NET.Abstractions.ReasonletScope scope, Mnemosyne.NET.Abstractions.ReasonletId id, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<ZeroAlloc.Results.UnitResult<Mnemosyne.NET.Abstractions.MnemosyneError>>
+Mnemosyne.NET.ReasonletMemory.EraseAsync(Mnemosyne.NET.Abstractions.ReasonletErasure! erasure, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<ZeroAlloc.Results.Result<Mnemosyne.NET.Abstractions.ReasonletErasureResult!, Mnemosyne.NET.Abstractions.MnemosyneError>>
+Mnemosyne.NET.ReasonletMemory.ListPendingAsync(Mnemosyne.NET.Abstractions.ReasonletScope scope, int limit, Mnemosyne.NET.Abstractions.ReasonletId? after, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<ZeroAlloc.Results.Result<System.Collections.Generic.IReadOnlyList<Mnemosyne.NET.Abstractions.ReasonletReview!>!, Mnemosyne.NET.Abstractions.MnemosyneError>>
+Mnemosyne.NET.ReasonletMemory.ReasonletMemory(Mnemosyne.NET.Abstractions.IReasonletStore! store, Mnemosyne.NET.Abstractions.IReasonletSelector! selector, Microsoft.Extensions.AI.IEmbeddingGenerator<string!, Microsoft.Extensions.AI.Embedding<float>!>! embeddings, Mnemosyne.NET.Abstractions.IIntentExtractor? extractor, Mnemosyne.NET.Abstractions.IReasonletEvaluator? evaluator, Mnemosyne.NET.MnemosyneOptions! options, System.TimeProvider? timeProvider = null, Mnemosyne.NET.Abstractions.ICaptureGuard? guard = null) -> void
+Mnemosyne.NET.ReasonletMemory.RecallAsync(Mnemosyne.NET.Abstractions.ReasonletQuery! query, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<ZeroAlloc.Results.Result<System.Collections.Generic.IReadOnlyList<Mnemosyne.NET.Abstractions.ReasonletMatch!>!, Mnemosyne.NET.Abstractions.MnemosyneError>>
+Mnemosyne.NET.ReasonletMemory.RecordExecutionAsync(Mnemosyne.NET.Abstractions.ReasonletRun! run, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<ZeroAlloc.Results.Result<Mnemosyne.NET.Abstractions.ReasonletRunReceipt!, Mnemosyne.NET.Abstractions.MnemosyneError>>
+Mnemosyne.NET.ReasonletMemory.RecordFeedbackAsync(Mnemosyne.NET.Abstractions.ReasonletScope scope, Mnemosyne.NET.Abstractions.ExecutionId execution, Mnemosyne.NET.Abstractions.ReasonletFeedback feedback, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<ZeroAlloc.Results.UnitResult<Mnemosyne.NET.Abstractions.MnemosyneError>>
+Mnemosyne.NET.ReasonletMemory.RejectAsync(Mnemosyne.NET.Abstractions.ReasonletScope scope, Mnemosyne.NET.Abstractions.ReasonletId id, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<ZeroAlloc.Results.UnitResult<Mnemosyne.NET.Abstractions.MnemosyneError>>
+Mnemosyne.NET.ReasonletMemory.RememberAsync(Mnemosyne.NET.Abstractions.ReasonletCapture! capture, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<ZeroAlloc.Results.Result<Mnemosyne.NET.Abstractions.ReasonletReceipt!, Mnemosyne.NET.Abstractions.MnemosyneError>>
+Mnemosyne.NET.ReasonletRankingOptions
+Mnemosyne.NET.ReasonletRankingOptions.AgentVerdictWeight.get -> double
+Mnemosyne.NET.ReasonletRankingOptions.AgentVerdictWeight.init -> void
+Mnemosyne.NET.ReasonletRankingOptions.FreshnessHalfLife.get -> System.TimeSpan
+Mnemosyne.NET.ReasonletRankingOptions.FreshnessHalfLife.init -> void
+Mnemosyne.NET.ReasonletRankingOptions.FreshnessWeight.get -> double
+Mnemosyne.NET.ReasonletRankingOptions.FreshnessWeight.init -> void
+Mnemosyne.NET.ReasonletRankingOptions.MinSimilarity.get -> double
+Mnemosyne.NET.ReasonletRankingOptions.MinSimilarity.init -> void
+Mnemosyne.NET.ReasonletRankingOptions.PriorWeight.get -> double
+Mnemosyne.NET.ReasonletRankingOptions.PriorWeight.init -> void
+Mnemosyne.NET.ReasonletRankingOptions.ReasonletRankingOptions() -> void
+Mnemosyne.NET.ReasonletRankingOptions.SimilarityWeight.get -> double
+Mnemosyne.NET.ReasonletRankingOptions.SimilarityWeight.init -> void
+Mnemosyne.NET.ReasonletRankingOptions.SuccessRateWeight.get -> double
+Mnemosyne.NET.ReasonletRankingOptions.SuccessRateWeight.init -> void
+Mnemosyne.NET.ReasonletRankingOptions.Validate() -> ZeroAlloc.Results.UnitResult<Mnemosyne.NET.Abstractions.MnemosyneError>
+Mnemosyne.NET.ReasonletSelector
+Mnemosyne.NET.ReasonletSelector.RankAsync(Mnemosyne.NET.Abstractions.ReasonletQuery! query, System.Collections.Generic.IReadOnlyList<Mnemosyne.NET.Abstractions.ReasonletCandidate!>! candidates, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<ZeroAlloc.Results.Result<System.Collections.Generic.IReadOnlyList<Mnemosyne.NET.Abstractions.ReasonletMatch!>!, Mnemosyne.NET.Abstractions.MnemosyneError>>
+Mnemosyne.NET.ReasonletSelector.ReasonletSelector(Mnemosyne.NET.ReasonletRankingOptions! options, System.TimeProvider! time) -> void
+Mnemosyne.NET.ReasonletSuggestion
+Mnemosyne.NET.ReasonletSuggestion.<Clone>$() -> Mnemosyne.NET.ReasonletSuggestion!
+Mnemosyne.NET.ReasonletSuggestion.Deconstruct(out Mnemosyne.NET.Abstractions.ReasonletId Id, out string! Text) -> void
+Mnemosyne.NET.ReasonletSuggestion.Equals(Mnemosyne.NET.ReasonletSuggestion? other) -> bool
+Mnemosyne.NET.ReasonletSuggestion.Id.get -> Mnemosyne.NET.Abstractions.ReasonletId
+Mnemosyne.NET.ReasonletSuggestion.Id.init -> void
+Mnemosyne.NET.ReasonletSuggestion.ReasonletSuggestion(Mnemosyne.NET.Abstractions.ReasonletId Id, string! Text) -> void
+Mnemosyne.NET.ReasonletSuggestion.Text.get -> string!
+Mnemosyne.NET.ReasonletSuggestion.Text.init -> void
+Mnemosyne.NET.ReasonletSuggestionOptions
+Mnemosyne.NET.ReasonletSuggestionOptions.Formatter.get -> System.Func<Mnemosyne.NET.Abstractions.ReasonletMatch!, string!>?
+Mnemosyne.NET.ReasonletSuggestionOptions.Formatter.init -> void
+Mnemosyne.NET.ReasonletSuggestionOptions.MinSimilarity.get -> double?
+Mnemosyne.NET.ReasonletSuggestionOptions.MinSimilarity.init -> void
+Mnemosyne.NET.ReasonletSuggestionOptions.ReasonletSuggestionOptions() -> void
+Mnemosyne.NET.ReasonletSuggestionOptions.RecallTimeout.get -> System.TimeSpan
+Mnemosyne.NET.ReasonletSuggestionOptions.RecallTimeout.init -> void
+Mnemosyne.NET.ReasonletSuggestionOptions.TimeProvider.get -> System.TimeProvider!
+Mnemosyne.NET.ReasonletSuggestionOptions.TimeProvider.init -> void
+Mnemosyne.NET.ReasonletSuggestionOptions.Validate() -> ZeroAlloc.Results.UnitResult<Mnemosyne.NET.Abstractions.MnemosyneError>
+Mnemosyne.NET.ReasonletSuggestions
+Mnemosyne.NET.ReasonletTools
+Mnemosyne.NET.ReasonletTranscript
+Mnemosyne.NET.ServiceCollectionExtensions
+Mnemosyne.NET.TranscriptCaptureDetails
+Mnemosyne.NET.TranscriptCaptureDetails.<Clone>$() -> Mnemosyne.NET.TranscriptCaptureDetails!
+Mnemosyne.NET.TranscriptCaptureDetails.Equals(Mnemosyne.NET.TranscriptCaptureDetails? other) -> bool
+Mnemosyne.NET.TranscriptCaptureDetails.Intent.get -> string?
+Mnemosyne.NET.TranscriptCaptureDetails.Intent.init -> void
+Mnemosyne.NET.TranscriptCaptureDetails.Name.get -> string?
+Mnemosyne.NET.TranscriptCaptureDetails.Name.init -> void
+Mnemosyne.NET.TranscriptCaptureDetails.Outcome.get -> Mnemosyne.NET.Abstractions.ReasonletOutcome
+Mnemosyne.NET.TranscriptCaptureDetails.Outcome.init -> void
+Mnemosyne.NET.TranscriptCaptureDetails.ParentId.get -> Mnemosyne.NET.Abstractions.ReasonletId?
+Mnemosyne.NET.TranscriptCaptureDetails.ParentId.init -> void
+Mnemosyne.NET.TranscriptCaptureDetails.Provenance.get -> Mnemosyne.NET.Abstractions.ReasonletProvenance!
+Mnemosyne.NET.TranscriptCaptureDetails.Provenance.init -> void
+Mnemosyne.NET.TranscriptCaptureDetails.Scope.get -> Mnemosyne.NET.Abstractions.ReasonletScope
+Mnemosyne.NET.TranscriptCaptureDetails.Scope.init -> void
+Mnemosyne.NET.TranscriptCaptureDetails.TranscriptCaptureDetails() -> void
+Mnemosyne.NET.TranscriptSkipReason
+Mnemosyne.NET.TranscriptSkipReason.NoQuestion = 1 -> Mnemosyne.NET.TranscriptSkipReason
+Mnemosyne.NET.TranscriptSkipReason.NoToolCalls = 2 -> Mnemosyne.NET.TranscriptSkipReason
+override Mnemosyne.NET.FindProcedureFunction.Description.get -> string!
+override Mnemosyne.NET.FindProcedureFunction.JsonSchema.get -> System.Text.Json.JsonElement
+override Mnemosyne.NET.FindProcedureFunction.Name.get -> string!
+override Mnemosyne.NET.ReasonletCallScope.Equals(object? obj) -> bool
+override Mnemosyne.NET.ReasonletCallScope.GetHashCode() -> int
+override Mnemosyne.NET.ReasonletCallScope.ToString() -> string!
+override Mnemosyne.NET.ReasonletCaptureRun.Equals(object? obj) -> bool
+override Mnemosyne.NET.ReasonletCaptureRun.GetHashCode() -> int
+override Mnemosyne.NET.ReasonletCaptureRun.ToString() -> string!
+override Mnemosyne.NET.ReasonletSuggestion.Equals(object? obj) -> bool
+override Mnemosyne.NET.ReasonletSuggestion.GetHashCode() -> int
+override Mnemosyne.NET.ReasonletSuggestion.ToString() -> string!
+override Mnemosyne.NET.TranscriptCaptureDetails.Equals(object? obj) -> bool
+override Mnemosyne.NET.TranscriptCaptureDetails.GetHashCode() -> int
+override Mnemosyne.NET.TranscriptCaptureDetails.ToString() -> string!
+static Mnemosyne.NET.ReasonletCallScope.operator !=(Mnemosyne.NET.ReasonletCallScope? left, Mnemosyne.NET.ReasonletCallScope? right) -> bool
+static Mnemosyne.NET.ReasonletCallScope.operator ==(Mnemosyne.NET.ReasonletCallScope? left, Mnemosyne.NET.ReasonletCallScope? right) -> bool
+static Mnemosyne.NET.ReasonletCaptureRun.operator !=(Mnemosyne.NET.ReasonletCaptureRun? left, Mnemosyne.NET.ReasonletCaptureRun? right) -> bool
+static Mnemosyne.NET.ReasonletCaptureRun.operator ==(Mnemosyne.NET.ReasonletCaptureRun? left, Mnemosyne.NET.ReasonletCaptureRun? right) -> bool
+static Mnemosyne.NET.ReasonletCaptures.CountFailed(System.Exception! exception) -> void
+static Mnemosyne.NET.ReasonletChatClientBuilderExtensions.UseReasonlets(this Microsoft.Extensions.AI.ChatClientBuilder! builder, Mnemosyne.NET.ReasonletChatOptions? options = null) -> Microsoft.Extensions.AI.ChatClientBuilder!
+static Mnemosyne.NET.ReasonletChatOptionsExtensions.GetReasonletScope(this Microsoft.Extensions.AI.ChatOptions? options) -> Mnemosyne.NET.ReasonletCallScope?
+static Mnemosyne.NET.ReasonletChatOptionsExtensions.WithReasonletScope(this Microsoft.Extensions.AI.ChatOptions? options, Mnemosyne.NET.Abstractions.ReasonletScope scope, string? subjectId = null) -> Microsoft.Extensions.AI.ChatOptions!
+static Mnemosyne.NET.ReasonletSuggestion.operator !=(Mnemosyne.NET.ReasonletSuggestion? left, Mnemosyne.NET.ReasonletSuggestion? right) -> bool
+static Mnemosyne.NET.ReasonletSuggestion.operator ==(Mnemosyne.NET.ReasonletSuggestion? left, Mnemosyne.NET.ReasonletSuggestion? right) -> bool
+static Mnemosyne.NET.ReasonletSuggestions.CountFailed(System.Exception! exception, string! integration) -> void
+static Mnemosyne.NET.ReasonletSuggestions.CountSkipped(string! reason, string! integration) -> void
+static Mnemosyne.NET.ReasonletSuggestions.RecallAsync(Mnemosyne.NET.Abstractions.IReasonletMemory! memory, Mnemosyne.NET.Abstractions.ReasonletScope scope, string! question, Mnemosyne.NET.ReasonletSuggestionOptions! options, string! integration, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<Mnemosyne.NET.ReasonletSuggestion?>
+static Mnemosyne.NET.ReasonletTools.CreateFindProcedure(Mnemosyne.NET.Abstractions.IReasonletMemory! memory, Mnemosyne.NET.Abstractions.ReasonletScope scope) -> Mnemosyne.NET.FindProcedureFunction!
+static Mnemosyne.NET.ReasonletTranscript.ToCapture(System.Collections.Generic.IEnumerable<Microsoft.Extensions.AI.ChatMessage!>! messages, Mnemosyne.NET.TranscriptCaptureDetails! details) -> ZeroAlloc.Results.Result<Mnemosyne.NET.Abstractions.ReasonletCapture!, Mnemosyne.NET.TranscriptSkipReason>
+static Mnemosyne.NET.ReasonletTranscript.ToGraph(System.Collections.Generic.IEnumerable<Microsoft.Extensions.AI.ChatMessage!>! messages) -> ZeroAlloc.Results.Result<Mnemosyne.NET.Abstractions.ReasonletGraph!, Mnemosyne.NET.TranscriptSkipReason>
+static Mnemosyne.NET.ServiceCollectionExtensions.AddMnemosyne(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, Mnemosyne.NET.MnemosyneOptions? options = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+static Mnemosyne.NET.ServiceCollectionExtensions.AddMnemosyneChatEvaluator(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, Mnemosyne.NET.ChatEvaluatorOptions? options = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+static Mnemosyne.NET.ServiceCollectionExtensions.AddReasonletCapture(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, Mnemosyne.NET.ReasonletCaptureOptions? options = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+static Mnemosyne.NET.TranscriptCaptureDetails.operator !=(Mnemosyne.NET.TranscriptCaptureDetails? left, Mnemosyne.NET.TranscriptCaptureDetails? right) -> bool
+static Mnemosyne.NET.TranscriptCaptureDetails.operator ==(Mnemosyne.NET.TranscriptCaptureDetails? left, Mnemosyne.NET.TranscriptCaptureDetails? right) -> bool

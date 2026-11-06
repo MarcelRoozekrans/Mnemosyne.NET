@@ -1,0 +1,15 @@
+#nullable enable
+Mnemosyne.NET.Minos.MinosEvaluatorOptions
+Mnemosyne.NET.Minos.MinosEvaluatorOptions.DecisionClientKey.get -> object?
+Mnemosyne.NET.Minos.MinosEvaluatorOptions.DecisionClientKey.init -> void
+Mnemosyne.NET.Minos.MinosEvaluatorOptions.EvaluatorName.get -> string!
+Mnemosyne.NET.Minos.MinosEvaluatorOptions.EvaluatorName.init -> void
+Mnemosyne.NET.Minos.MinosEvaluatorOptions.MinosEvaluatorOptions() -> void
+Mnemosyne.NET.Minos.MinosEvaluatorOptions.SuccessThreshold.get -> double
+Mnemosyne.NET.Minos.MinosEvaluatorOptions.SuccessThreshold.init -> void
+Mnemosyne.NET.Minos.MinosEvaluatorOptions.Validate() -> ZeroAlloc.Results.UnitResult<Mnemosyne.NET.Abstractions.MnemosyneError>
+Mnemosyne.NET.Minos.MinosReasonletEvaluator
+Mnemosyne.NET.Minos.MinosReasonletEvaluator.EvaluateAsync(Mnemosyne.NET.Abstractions.ReasonletEvaluationRequest! request, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<ZeroAlloc.Results.Result<Mnemosyne.NET.Abstractions.ReasonletEvaluation, Mnemosyne.NET.Abstractions.MnemosyneError>>
+Mnemosyne.NET.Minos.MinosReasonletEvaluator.MinosReasonletEvaluator(Minos.IDecisionClient! client, Mnemosyne.NET.Minos.MinosEvaluatorOptions! options) -> void
+Mnemosyne.NET.Minos.ServiceCollectionExtensions
+static Mnemosyne.NET.Minos.ServiceCollectionExtensions.AddMnemosyneMinosEvaluator(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, Mnemosyne.NET.Minos.MinosEvaluatorOptions? options = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!

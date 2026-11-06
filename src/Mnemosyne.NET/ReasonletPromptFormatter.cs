@@ -12,7 +12,7 @@ namespace Mnemosyne.NET;
 /// Its arguments are the names in the <c>mnemosyne.arguments</c> property when that is a JSON array of strings.
 /// The success rate is a whole percent with no space before the sign, because the invariant percent pattern adds one. Numbers use <see cref="CultureInfo.InvariantCulture"/>.
 /// </remarks>
-public static class ReasonletPromptFormatter
+internal static class ReasonletPromptFormatter
 {
     private const string ArgumentsProperty = "mnemosyne.arguments";
 

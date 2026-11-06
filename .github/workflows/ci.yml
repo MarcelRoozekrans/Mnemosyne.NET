@@ -228,6 +228,26 @@ jobs:
             exit 1
           fi
 
+      - name: Assert every package ships a public API baseline
+        shell: bash
+        run: |
+          # A baseline holds the "#nullable enable" header plus one line per shipped API, so
+          # "non-empty" means at least one line that is neither blank nor the header.
+          failed=0
+          for proj in src/*/*.csproj; do
+            dir=$(dirname "$proj")
+            name=$(basename "$proj" .csproj)
+            baseline="$dir/PublicAPI.Shipped.txt"
+            if [ ! -f "$baseline" ]; then
+              echo "::error::$name has no PublicAPI.Shipped.txt ($baseline)."
+              failed=1
+            elif ! grep -qvE '^(#nullable enable)?[[:space:]]*$' "$baseline"; then
+              echo "::error::$name ships an empty PublicAPI.Shipped.txt ($baseline)."
+              failed=1
+            fi
+          done
+          exit "$failed"
+
   # Native AOT is a gate over every package: the smoke app roots each one, and the publish fails
   # on any trim or AOT warning.
   aot-publish:

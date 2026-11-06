@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "nodes": [
+    {
+      "id": "n1",
+      "type": "tool",
+      "name": "Search the order",
+      "tool": "orders.search",
+      "properties": { "node.retries": 3, "node.labels": ["a", "b"] }
+    },
+    { "id": "n2", "type": "decision", "name": null, "tool": null, "properties": null },
+    { "id": "n3", "type": "answer", "name": "Reply with a refund link" }
+  ],
+  "edges": [
+    {
+      "from": "n1",
+      "to": "n2",
+      "condition": "order found",
+      "properties": { "edge.weight": { "x": [1, 2.5, null, true, "text"] } }
+    },
+    { "from": "n2", "to": "n3", "condition": null, "properties": null },
+    { "from": "n1", "to": "n3" }
+  ],
+  "properties": { "graph.owner": "team", "graph.review": { "required": false } }
+}

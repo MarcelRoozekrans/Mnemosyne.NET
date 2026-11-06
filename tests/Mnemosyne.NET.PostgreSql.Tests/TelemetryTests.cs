@@ -554,7 +554,13 @@ public sealed class TelemetryTests(PgVectorFixture fixture) : IClassFixture<PgVe
         var graph = Entries.Graph(token);
         Assert.Contains(graph.Nodes, node => node.Name!.Contains(token, StringComparison.Ordinal));
         var capture0 = Entries.Entry(scope, graph, provenance: provenance).Capture with { Question = $"question-{token}" };
-        var entry = new ReasonletStoreEntry(capture0, intent, $"name-{token}", new float[] { 1f, 0.5f, -0.25f });
+        var entry = new ReasonletStoreEntry
+        {
+            Capture = capture0,
+            Intent = intent,
+            Name = $"name-{token}",
+            Embedding = new float[] { 1f, 0.5f, -0.25f },
+        };
         var store = await MigratedStoreAsync();
         using var capture = new TelemetryCapture();
 

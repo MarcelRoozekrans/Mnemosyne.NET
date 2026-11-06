@@ -100,8 +100,9 @@ public class SearchBenchmarks
         return result.IsSuccess ? result.Value.Count : throw new InvalidOperationException(result.Error.Message);
     }
 
-    private ReasonletStoreEntry Entry(int index, ReasonletId? parent) => new(
-        new ReasonletCapture
+    private ReasonletStoreEntry Entry(int index, ReasonletId? parent) => new ReasonletStoreEntry
+    {
+        Capture = new ReasonletCapture
         {
             Scope = _scope,
             Question = $"How do I run procedure {index}?",
@@ -115,7 +116,8 @@ public class SearchBenchmarks
             Provenance = new ReasonletProvenance { Source = "benchmark" },
             ParentId = parent,
         },
-        "benchmark",
-        $"procedure-{index}",
-        BenchmarkData.Embedding(index, Dimensions));
+        Intent = "benchmark",
+        Name = $"procedure-{index}",
+        Embedding = BenchmarkData.Embedding(index, Dimensions),
+    };
 }

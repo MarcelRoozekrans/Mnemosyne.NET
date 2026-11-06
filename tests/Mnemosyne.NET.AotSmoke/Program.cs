@@ -173,8 +173,9 @@ static async Task<int> PostgreSqlSmoke(string connectionString, ReasonletGraph g
     var scope = new ReasonletScope($"aot-smoke-{Guid.NewGuid():N}");
     var outcome = new ReasonletOutcome(true, TimeSpan.FromMilliseconds(5), 0.5);
     var embedding = new float[] { 1f, 0f, 0f };
-    var entry = new ReasonletStoreEntry(
-        new ReasonletCapture
+    var entry = new ReasonletStoreEntry
+    {
+        Capture = new ReasonletCapture
         {
             Scope = scope,
             Question = "How do I search?",
@@ -182,9 +183,10 @@ static async Task<int> PostgreSqlSmoke(string connectionString, ReasonletGraph g
             Outcome = outcome,
             Provenance = new ReasonletProvenance { Source = "aot-smoke", SubjectId = "smoke-subject" },
         },
-        "aot-smoke",
-        "AOT smoke",
-        embedding);
+        Intent = "aot-smoke",
+        Name = "AOT smoke",
+        Embedding = embedding,
+    };
 
     var remembered = await store.RememberAsync(entry, ct);
     if (remembered.IsFailure)
@@ -1052,14 +1054,16 @@ internal sealed class RecordingMemory(ReasonletGraph graph) : IReasonletMemory
     {
         Captured = capture;
         Interlocked.Increment(ref _remembers);
-        return ValueTask.FromResult<Result<ReasonletReceipt, MnemosyneError>>(new ReasonletReceipt(
-            MatchId,
-            "1.1",
-            ExecutionId.New(),
-            ReasonletCaptureKind.NewVersion,
-            ReasonletStatus.Active,
-            ReasonletVerdictSource.Agent,
-            true));
+        return ValueTask.FromResult<Result<ReasonletReceipt, MnemosyneError>>(new ReasonletReceipt
+        {
+            Id = MatchId,
+            Version = "1.1",
+            Execution = ExecutionId.New(),
+            Kind = ReasonletCaptureKind.NewVersion,
+            Status = ReasonletStatus.Active,
+            Source = ReasonletVerdictSource.Agent,
+            Success = true,
+        });
     }
 
     public ValueTask<Result<IReadOnlyList<ReasonletMatch>, MnemosyneError>> RecallAsync(ReasonletQuery query, CancellationToken ct)

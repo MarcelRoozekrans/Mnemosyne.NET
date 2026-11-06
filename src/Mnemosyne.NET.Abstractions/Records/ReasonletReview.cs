@@ -7,11 +7,16 @@ namespace Mnemosyne.NET.Abstractions;
 /// <remarks>
 /// Carries what a reviewer needs to decide: the definition, graph included, and the metrics of the runs recorded so far.
 /// A Reasonlet is pending when the review gate is on and it has been neither approved nor rejected.
+/// Init-only, so later phases can add members without breaking callers.
 /// </remarks>
-/// <param name="Definition">The pending Reasonlet's definition. Must not be null and must be valid.</param>
-/// <param name="Metrics">The execution metrics of the pending Reasonlet.</param>
-public sealed record ReasonletReview(ReasonletDefinition Definition, ReasonletMetrics Metrics)
+public sealed record ReasonletReview
 {
+    /// <summary>Gets the pending Reasonlet's definition. Must not be null and must be valid.</summary>
+    public required ReasonletDefinition Definition { get; init; }
+
+    /// <summary>Gets the execution metrics of the pending Reasonlet.</summary>
+    public required ReasonletMetrics Metrics { get; init; }
+
     /// <summary>Validates the review.</summary>
     /// <returns>Success, or a validation failure with a path relative to this record.</returns>
     public UnitResult<MnemosyneError> Validate() => Check.All(

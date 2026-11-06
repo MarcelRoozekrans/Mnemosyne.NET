@@ -1,0 +1,15 @@
+#nullable enable
+Mnemosyne.NET.Sentinel.SentinelCaptureGuard
+Mnemosyne.NET.Sentinel.SentinelCaptureGuard.InspectAsync(Mnemosyne.NET.Abstractions.ReasonletCapture! capture, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<ZeroAlloc.Results.Result<Mnemosyne.NET.Abstractions.CaptureVerdict, Mnemosyne.NET.Abstractions.MnemosyneError>>
+Mnemosyne.NET.Sentinel.SentinelCaptureGuard.SentinelCaptureGuard(AI.Sentinel.Detection.IDetectionPipeline! pipeline, AI.Sentinel.SentinelOptions! sentinelOptions, Mnemosyne.NET.Sentinel.SentinelCaptureGuardOptions? options = null) -> void
+Mnemosyne.NET.Sentinel.SentinelCaptureGuardOptions
+Mnemosyne.NET.Sentinel.SentinelCaptureGuardOptions.BlockAtSeverity.get -> AI.Sentinel.Detection.Severity
+Mnemosyne.NET.Sentinel.SentinelCaptureGuardOptions.BlockAtSeverity.init -> void
+Mnemosyne.NET.Sentinel.SentinelCaptureGuardOptions.GuardName.get -> string!
+Mnemosyne.NET.Sentinel.SentinelCaptureGuardOptions.GuardName.init -> void
+Mnemosyne.NET.Sentinel.SentinelCaptureGuardOptions.PipelineName.get -> string?
+Mnemosyne.NET.Sentinel.SentinelCaptureGuardOptions.PipelineName.init -> void
+Mnemosyne.NET.Sentinel.SentinelCaptureGuardOptions.SentinelCaptureGuardOptions() -> void
+Mnemosyne.NET.Sentinel.SentinelCaptureGuardOptions.Validate() -> ZeroAlloc.Results.UnitResult<Mnemosyne.NET.Abstractions.MnemosyneError>
+Mnemosyne.NET.Sentinel.ServiceCollectionExtensions
+static Mnemosyne.NET.Sentinel.ServiceCollectionExtensions.AddMnemosyneSentinel(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, Mnemosyne.NET.Sentinel.SentinelCaptureGuardOptions? options = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
