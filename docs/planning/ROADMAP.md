@@ -174,50 +174,58 @@ Design: [roadmap design](../superpowers/specs/2026-10-21-roadmap-design.md), bui
 **Plan:** `docs/superpowers/plans/2026-11-05-phase-3.7-integration-docs-samples.md`
 **Completed:** 2026-11-06
 
-## Milestone 4: 1.0 [status: pending]
+## Milestone 4: 1.0 [status: active]
 **Goal:** Ship 1.0.0: stable public API, versioning ready for variants, benchmarks in CI, complete docs.
+**Started:** 2026-11-06
 **Definition of Done:**
+- [ ] #55, #57 and #58 closed
 - [ ] Versioning and lineage API lets variant selection be added without a breaking change
 - [ ] BenchmarkDotNet suite runs in CI
-- [ ] Public API and graph schema compatibility policy reviewed
+- [ ] PublicApiAnalyzers baselines and package validation fail CI on a breaking change, and the graph schema compatibility policy is published
 - [ ] Docsite complete, including the data protection guide
 - [ ] 1.0.0 on NuGet
 
-### Phase 4.1: Versioning and lineage API [status: pending]
+### Phase 4.1: Test and sample hygiene [status: pending]
+**Goal:** Share the scripted model and embedding stubs across the PostgreSQL tests (#55) and the self-check runner across the four samples (#57).
+**Surface:** Refactor
+**HelpWanted:** no
+**Plan:** `docs/superpowers/plans/2026-11-06-phase-4.1-test-sample-hygiene.md`
+
+### Phase 4.2: Versioning and lineage API [status: pending]
 **Goal:** Settle the versioning and lineage API so variant selection fits later.
 **Surface:** Backend
 **HelpWanted:** no
-**Plan:** _to be written_
+**Plan:** `docs/superpowers/plans/2026-11-06-phase-4.2-versioning-lineage-api.md`
 
-### Phase 4.2: Benchmarks in CI [status: pending]
+### Phase 4.3: Benchmarks in CI [status: pending]
 **Goal:** BenchmarkDotNet suite for ranking, search and middleware overhead, running in CI.
 **Surface:** Infra
 **HelpWanted:** no
-**Plan:** _to be written_
+**Plan:** `docs/superpowers/plans/2026-11-06-phase-4.3-benchmarks-in-ci.md`
 
-### Phase 4.3: Public API review [status: pending]
-**Goal:** Review the public API and set the graph schema compatibility policy.
+### Phase 4.4: Public API review and freeze [status: pending]
+**Goal:** Review the public API, adopt the AI.Sentinel fix (#58), add the PublicApiAnalyzers baselines and package validation, and set the graph schema compatibility policy.
 **Surface:** Refactor
 **HelpWanted:** no
-**Plan:** _to be written_
+**Plan:** `docs/superpowers/plans/2026-11-06-phase-4.4-public-api-review-freeze.md`
 
-### Phase 4.4: Docs completeness [status: pending]
+### Phase 4.5: Docs completeness [status: pending]
 **Goal:** Concepts, the variants vision, and the Daedalus and Thalos guide.
 **Surface:** Docs
 **HelpWanted:** no
-**Plan:** _to be written_
+**Plan:** `docs/superpowers/plans/2026-11-06-phase-4.5-docs-completeness.md`
 
-### Phase 4.5: Data protection guide [status: pending]
+### Phase 4.6: Data protection guide [status: pending]
 **Goal:** How scope, provenance, redaction, erasure, retention and telemetry support a deployer's GDPR duties, and a short note on where the EU AI Act does and does not apply.
 **Surface:** Docs
 **HelpWanted:** no
-**Plan:** _to be written_
+**Plan:** `docs/superpowers/plans/2026-11-06-phase-4.6-data-protection-guide.md`
 
-### Phase 4.6: 1.0.0 release [status: pending]
+### Phase 4.7: 1.0.0 release [status: pending]
 **Goal:** Release 1.0.0 through release-please.
 **Surface:** Infra
 **HelpWanted:** no
-**Plan:** _to be written_
+**Plan:** `docs/superpowers/plans/2026-11-06-phase-4.7-1-0-release.md`
 
 ## Milestone 5: Variants [status: pending]
 **Goal:** Choose between sibling versions of a procedure, post-1.0 (handover phase 4).
