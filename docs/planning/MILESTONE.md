@@ -1,40 +1,37 @@
-# Milestone 3: Off-the-shelf integrations
+# Milestone 4: 1.0
 
-**Status:** complete
-**Started:** 2026-10-30
-**Completed:** 2026-11-06
+**Status:** active
+**Started:** 2026-11-06
 
 ## Goal
-Any `IChatClient` app or Microsoft Agent Framework agent gets recall, capture and learning without writing Mnemosyne-specific code.
-- `UseReasonlets()` recalls the best procedure for a new question and offers it to the model as a suggestion, then captures the run's tool calls in the background, judged by the milestone 2 evaluator.
-- A captured procedure is the tool shape only: the tools called, in order, with argument names but not values.
-- A `find_procedure` tool lets the model look procedures up itself, and an `AIContextProvider` gives Agent Framework agents the same over a whole thread.
-- Captured content passes a redaction hook, AI.Sentinel by default; a flagged capture is dropped, never stored. An opt-in review gate keeps new procedures out of recall until approved.
+Ship `Mnemosyne.NET` 1.0.0 on NuGet, released by release-please, with the public API and graph schema locked by a mechanical gate.
+- The versioning and lineage API leaves room for variant selection without a breaking change.
+- Benchmarks run in CI, and the docsite explains the whole model, including the data protection guide.
+- Milestone 3's open follow-ups are closed first: #55, #57 and #58.
 
-See the [milestone design](../superpowers/specs/2026-10-30-milestone-3-design.md) and the [roadmap](ROADMAP.md#milestone-3-off-the-shelf-integrations-status-complete). Earlier milestones are archived in [milestones/milestone-1.md](milestones/milestone-1.md) and [milestones/milestone-2.md](milestones/milestone-2.md).
+See the [milestone design](../superpowers/specs/2026-11-06-milestone-4-design.md) and the [roadmap](ROADMAP.md#milestone-4-10-status-active). Earlier milestones are archived in [milestones/milestone-1.md](milestones/milestone-1.md), [milestones/milestone-2.md](milestones/milestone-2.md) and [milestones/milestone-3.md](milestones/milestone-3.md).
 
 ## Definition of Done
-- [x] All planned phases complete
-- [x] All tests passing, including integration tests against PostgreSQL + pgvector
-- [x] CI green, including the Native AOT gate for every new package
-- [x] A tool-calling chat transcript becomes a tool-shape graph, stored as a new Reasonlet, a new version or an execution of the recalled one
-- [x] Captured content passes a redaction hook; a flagged capture is dropped and leaves a telemetry event without the content
-- [x] With the review gate on, captured procedures stay out of recall until approved, and can be approved or rejected
-- [x] `Mnemosyne.NET.Sentinel` runs AI.Sentinel's detectors as the redaction hook
-- [x] `UseReasonlets()` recalls, injects the best match, and captures and judges in the background in an `IChatClient` pipeline; the `find_procedure` tool is shipped
-- [x] An Agent Framework `AIContextProvider` gives an agent the same recall and capture over its thread
-- [x] Docs and samples cover every integration
+- [ ] All planned phases complete
+- [ ] All tests passing, including integration tests against PostgreSQL + pgvector
+- [ ] CI green, including the Native AOT gate for every package
+- [ ] #55, #57 and #58 closed
+- [ ] The versioning and lineage API lets variant selection be added without a breaking change
+- [ ] A BenchmarkDotNet suite for ranking, search and middleware overhead runs in CI
+- [ ] PublicApiAnalyzers baselines and package validation fail CI on a breaking change, and the graph schema compatibility policy is published
+- [ ] The docsite is complete: concepts, the variants vision, the Daedalus and Thalos guide
+- [ ] The data protection guide is published
+- [ ] 1.0.0 is on NuGet, released by release-please
 
 ## Phases
-1. Phase 3.1 — Capture [complete]
-2. Phase 3.2 — Redaction hook [complete]
-3. Phase 3.3 — Human review gate [complete]
-4. Phase 3.4 — AI.Sentinel adapter [complete]
-5. Phase 3.5 — UseReasonlets middleware and find_procedure tool [complete]
-6. Phase 3.6 — Agent Framework AIContextProvider [complete]
-7. Phase 3.7 — Integration docs and samples [complete]
+1. Phase 4.1 — Test and sample hygiene [pending]
+2. Phase 4.2 — Versioning and lineage API [pending]
+3. Phase 4.3 — Benchmarks in CI [pending]
+4. Phase 4.4 — Public API review and freeze [pending]
+5. Phase 4.5 — Docs completeness [pending]
+6. Phase 4.6 — Data protection guide [pending]
+7. Phase 4.7 — 1.0.0 release [pending]
 
 ## Audit History
 | Date | Verdict | Gaps |
 |---|---|---|
-| 2026-11-06 | PASS | None; unit 1582 and PostgreSQL 313 passed, CI green on main ([audit](../superpowers/reviews/2026-11-06-milestone-3-audit.md)) |
