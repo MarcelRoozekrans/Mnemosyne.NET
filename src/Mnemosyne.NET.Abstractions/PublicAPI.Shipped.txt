@@ -1,0 +1,638 @@
+#nullable enable
+const Mnemosyne.NET.Abstractions.EvaluationLimits.MaxEvaluatorLength = 100 -> int
+const Mnemosyne.NET.Abstractions.EvaluationLimits.MaxRunTextLength = 32000 -> int
+const Mnemosyne.NET.Abstractions.MnemosyneTelemetry.ActivitySourceName = "Mnemosyne.NET" -> string!
+const Mnemosyne.NET.Abstractions.MnemosyneTelemetry.MeterName = "Mnemosyne.NET" -> string!
+const Mnemosyne.NET.Abstractions.ReasonletGraph.CurrentSchemaVersion = 1 -> int
+const Mnemosyne.NET.Abstractions.ReasonletGraphLimits.MaxEdges = 2000 -> int
+const Mnemosyne.NET.Abstractions.ReasonletGraphLimits.MaxIdentifierLength = 256 -> int
+const Mnemosyne.NET.Abstractions.ReasonletGraphLimits.MaxNodes = 500 -> int
+const Mnemosyne.NET.Abstractions.ReasonletGraphLimits.MaxPropertiesBytes = 65536 -> int
+const Mnemosyne.NET.Abstractions.ReasonletGraphLimits.MaxPropertyDepth = 32 -> int
+const Mnemosyne.NET.Abstractions.ReasonletGraphLimits.MaxTextLength = 1024 -> int
+Mnemosyne.NET.Abstractions.CaptureVerdict
+Mnemosyne.NET.Abstractions.CaptureVerdict.CaptureVerdict() -> void
+Mnemosyne.NET.Abstractions.CaptureVerdict.Detector.get -> string?
+Mnemosyne.NET.Abstractions.CaptureVerdict.Equals(Mnemosyne.NET.Abstractions.CaptureVerdict other) -> bool
+Mnemosyne.NET.Abstractions.CaptureVerdict.Guard.get -> string!
+Mnemosyne.NET.Abstractions.CaptureVerdict.IsBlocked.get -> bool
+Mnemosyne.NET.Abstractions.CaptureVerdict.Validate() -> ZeroAlloc.Results.UnitResult<Mnemosyne.NET.Abstractions.MnemosyneError>
+Mnemosyne.NET.Abstractions.EvaluationLimits
+Mnemosyne.NET.Abstractions.ExecutionId
+Mnemosyne.NET.Abstractions.ExecutionId.Deconstruct(out System.Guid Value) -> void
+Mnemosyne.NET.Abstractions.ExecutionId.Equals(Mnemosyne.NET.Abstractions.ExecutionId other) -> bool
+Mnemosyne.NET.Abstractions.ExecutionId.ExecutionId() -> void
+Mnemosyne.NET.Abstractions.ExecutionId.ExecutionId(System.Guid Value) -> void
+Mnemosyne.NET.Abstractions.ExecutionId.IsDefault.get -> bool
+Mnemosyne.NET.Abstractions.ExecutionId.Value.get -> System.Guid
+Mnemosyne.NET.Abstractions.ExecutionId.Value.init -> void
+Mnemosyne.NET.Abstractions.ICaptureGuard
+Mnemosyne.NET.Abstractions.ICaptureGuard.InspectAsync(Mnemosyne.NET.Abstractions.ReasonletCapture! capture, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<ZeroAlloc.Results.Result<Mnemosyne.NET.Abstractions.CaptureVerdict, Mnemosyne.NET.Abstractions.MnemosyneError>>
+Mnemosyne.NET.Abstractions.IIntentExtractor
+Mnemosyne.NET.Abstractions.IIntentExtractor.ExtractAsync(string! question, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<ZeroAlloc.Results.Result<Mnemosyne.NET.Abstractions.ReasonletIntent, Mnemosyne.NET.Abstractions.MnemosyneError>>
+Mnemosyne.NET.Abstractions.IReasonletEvaluator
+Mnemosyne.NET.Abstractions.IReasonletEvaluator.EvaluateAsync(Mnemosyne.NET.Abstractions.ReasonletEvaluationRequest! request, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<ZeroAlloc.Results.Result<Mnemosyne.NET.Abstractions.ReasonletEvaluation, Mnemosyne.NET.Abstractions.MnemosyneError>>
+Mnemosyne.NET.Abstractions.IReasonletMemory
+Mnemosyne.NET.Abstractions.IReasonletMemory.ApproveAsync(Mnemosyne.NET.Abstractions.ReasonletScope scope, Mnemosyne.NET.Abstractions.ReasonletId id, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<ZeroAlloc.Results.UnitResult<Mnemosyne.NET.Abstractions.MnemosyneError>>
+Mnemosyne.NET.Abstractions.IReasonletMemory.EraseAsync(Mnemosyne.NET.Abstractions.ReasonletErasure! erasure, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<ZeroAlloc.Results.Result<Mnemosyne.NET.Abstractions.ReasonletErasureResult!, Mnemosyne.NET.Abstractions.MnemosyneError>>
+Mnemosyne.NET.Abstractions.IReasonletMemory.ListPendingAsync(Mnemosyne.NET.Abstractions.ReasonletScope scope, int limit, Mnemosyne.NET.Abstractions.ReasonletId? after, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<ZeroAlloc.Results.Result<System.Collections.Generic.IReadOnlyList<Mnemosyne.NET.Abstractions.ReasonletReview!>!, Mnemosyne.NET.Abstractions.MnemosyneError>>
+Mnemosyne.NET.Abstractions.IReasonletMemory.RecallAsync(Mnemosyne.NET.Abstractions.ReasonletQuery! query, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<ZeroAlloc.Results.Result<System.Collections.Generic.IReadOnlyList<Mnemosyne.NET.Abstractions.ReasonletMatch!>!, Mnemosyne.NET.Abstractions.MnemosyneError>>
+Mnemosyne.NET.Abstractions.IReasonletMemory.RecordExecutionAsync(Mnemosyne.NET.Abstractions.ReasonletRun! run, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<ZeroAlloc.Results.Result<Mnemosyne.NET.Abstractions.ReasonletRunReceipt!, Mnemosyne.NET.Abstractions.MnemosyneError>>
+Mnemosyne.NET.Abstractions.IReasonletMemory.RecordFeedbackAsync(Mnemosyne.NET.Abstractions.ReasonletScope scope, Mnemosyne.NET.Abstractions.ExecutionId execution, Mnemosyne.NET.Abstractions.ReasonletFeedback feedback, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<ZeroAlloc.Results.UnitResult<Mnemosyne.NET.Abstractions.MnemosyneError>>
+Mnemosyne.NET.Abstractions.IReasonletMemory.RejectAsync(Mnemosyne.NET.Abstractions.ReasonletScope scope, Mnemosyne.NET.Abstractions.ReasonletId id, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<ZeroAlloc.Results.UnitResult<Mnemosyne.NET.Abstractions.MnemosyneError>>
+Mnemosyne.NET.Abstractions.IReasonletMemory.RememberAsync(Mnemosyne.NET.Abstractions.ReasonletCapture! capture, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<ZeroAlloc.Results.Result<Mnemosyne.NET.Abstractions.ReasonletReceipt!, Mnemosyne.NET.Abstractions.MnemosyneError>>
+Mnemosyne.NET.Abstractions.IReasonletSelector
+Mnemosyne.NET.Abstractions.IReasonletSelector.RankAsync(Mnemosyne.NET.Abstractions.ReasonletQuery! query, System.Collections.Generic.IReadOnlyList<Mnemosyne.NET.Abstractions.ReasonletCandidate!>! candidates, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<ZeroAlloc.Results.Result<System.Collections.Generic.IReadOnlyList<Mnemosyne.NET.Abstractions.ReasonletMatch!>!, Mnemosyne.NET.Abstractions.MnemosyneError>>
+Mnemosyne.NET.Abstractions.IReasonletStore
+Mnemosyne.NET.Abstractions.IReasonletStore.AppendExecutionAsync(Mnemosyne.NET.Abstractions.ReasonletScope scope, Mnemosyne.NET.Abstractions.ReasonletId id, Mnemosyne.NET.Abstractions.ReasonletOutcome outcome, Mnemosyne.NET.Abstractions.ReasonletProvenance! provenance, Mnemosyne.NET.Abstractions.ReasonletEvaluation? evaluation, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<ZeroAlloc.Results.Result<Mnemosyne.NET.Abstractions.ReasonletRunReceipt!, Mnemosyne.NET.Abstractions.MnemosyneError>>
+Mnemosyne.NET.Abstractions.IReasonletStore.AppendFeedbackAsync(Mnemosyne.NET.Abstractions.ReasonletScope scope, Mnemosyne.NET.Abstractions.ExecutionId execution, Mnemosyne.NET.Abstractions.ReasonletFeedback feedback, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<ZeroAlloc.Results.UnitResult<Mnemosyne.NET.Abstractions.MnemosyneError>>
+Mnemosyne.NET.Abstractions.IReasonletStore.ApproveAsync(Mnemosyne.NET.Abstractions.ReasonletScope scope, Mnemosyne.NET.Abstractions.ReasonletId id, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<ZeroAlloc.Results.UnitResult<Mnemosyne.NET.Abstractions.MnemosyneError>>
+Mnemosyne.NET.Abstractions.IReasonletStore.Dimensions.get -> int
+Mnemosyne.NET.Abstractions.IReasonletStore.EraseAsync(Mnemosyne.NET.Abstractions.ReasonletErasure! erasure, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<ZeroAlloc.Results.Result<Mnemosyne.NET.Abstractions.ReasonletErasureResult!, Mnemosyne.NET.Abstractions.MnemosyneError>>
+Mnemosyne.NET.Abstractions.IReasonletStore.GetAsync(Mnemosyne.NET.Abstractions.ReasonletScope scope, Mnemosyne.NET.Abstractions.ReasonletId id, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<ZeroAlloc.Results.Result<Mnemosyne.NET.Abstractions.ReasonletDefinition!, Mnemosyne.NET.Abstractions.MnemosyneError>>
+Mnemosyne.NET.Abstractions.IReasonletStore.ListPendingAsync(Mnemosyne.NET.Abstractions.ReasonletScope scope, int limit, Mnemosyne.NET.Abstractions.ReasonletId? after, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<ZeroAlloc.Results.Result<System.Collections.Generic.IReadOnlyList<Mnemosyne.NET.Abstractions.ReasonletReview!>!, Mnemosyne.NET.Abstractions.MnemosyneError>>
+Mnemosyne.NET.Abstractions.IReasonletStore.PruneAsync(Mnemosyne.NET.Abstractions.ReasonletRetention! retention, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<ZeroAlloc.Results.Result<Mnemosyne.NET.Abstractions.ReasonletPruneResult!, Mnemosyne.NET.Abstractions.MnemosyneError>>
+Mnemosyne.NET.Abstractions.IReasonletStore.RejectAsync(Mnemosyne.NET.Abstractions.ReasonletScope scope, Mnemosyne.NET.Abstractions.ReasonletId id, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<ZeroAlloc.Results.UnitResult<Mnemosyne.NET.Abstractions.MnemosyneError>>
+Mnemosyne.NET.Abstractions.IReasonletStore.RememberAsync(Mnemosyne.NET.Abstractions.ReasonletStoreEntry! entry, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<ZeroAlloc.Results.Result<Mnemosyne.NET.Abstractions.ReasonletReceipt!, Mnemosyne.NET.Abstractions.MnemosyneError>>
+Mnemosyne.NET.Abstractions.IReasonletStore.SearchAsync(Mnemosyne.NET.Abstractions.ReasonletScope scope, System.ReadOnlyMemory<float> embedding, string? intent, int limit, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<ZeroAlloc.Results.Result<System.Collections.Generic.IReadOnlyList<Mnemosyne.NET.Abstractions.ReasonletCandidate!>!, Mnemosyne.NET.Abstractions.MnemosyneError>>
+Mnemosyne.NET.Abstractions.MnemosyneError
+Mnemosyne.NET.Abstractions.MnemosyneError.Code.get -> Mnemosyne.NET.Abstractions.MnemosyneErrorCode
+Mnemosyne.NET.Abstractions.MnemosyneError.Code.init -> void
+Mnemosyne.NET.Abstractions.MnemosyneError.Deconstruct(out Mnemosyne.NET.Abstractions.MnemosyneErrorCode Code, out string! Message, out string? Detail) -> void
+Mnemosyne.NET.Abstractions.MnemosyneError.Detail.get -> string?
+Mnemosyne.NET.Abstractions.MnemosyneError.Detail.init -> void
+Mnemosyne.NET.Abstractions.MnemosyneError.Equals(Mnemosyne.NET.Abstractions.MnemosyneError other) -> bool
+Mnemosyne.NET.Abstractions.MnemosyneError.Message.get -> string!
+Mnemosyne.NET.Abstractions.MnemosyneError.Message.init -> void
+Mnemosyne.NET.Abstractions.MnemosyneError.MnemosyneError() -> void
+Mnemosyne.NET.Abstractions.MnemosyneError.MnemosyneError(Mnemosyne.NET.Abstractions.MnemosyneErrorCode Code, string! Message, string? Detail = null) -> void
+Mnemosyne.NET.Abstractions.MnemosyneErrorCode
+Mnemosyne.NET.Abstractions.MnemosyneErrorCode.Blocked = 5 -> Mnemosyne.NET.Abstractions.MnemosyneErrorCode
+Mnemosyne.NET.Abstractions.MnemosyneErrorCode.Conflict = 3 -> Mnemosyne.NET.Abstractions.MnemosyneErrorCode
+Mnemosyne.NET.Abstractions.MnemosyneErrorCode.NotFound = 2 -> Mnemosyne.NET.Abstractions.MnemosyneErrorCode
+Mnemosyne.NET.Abstractions.MnemosyneErrorCode.Unavailable = 4 -> Mnemosyne.NET.Abstractions.MnemosyneErrorCode
+Mnemosyne.NET.Abstractions.MnemosyneErrorCode.Validation = 1 -> Mnemosyne.NET.Abstractions.MnemosyneErrorCode
+Mnemosyne.NET.Abstractions.MnemosyneTelemetry
+Mnemosyne.NET.Abstractions.ReasonletCandidate
+Mnemosyne.NET.Abstractions.ReasonletCandidate.<Clone>$() -> Mnemosyne.NET.Abstractions.ReasonletCandidate!
+Mnemosyne.NET.Abstractions.ReasonletCandidate.Equals(Mnemosyne.NET.Abstractions.ReasonletCandidate? other) -> bool
+Mnemosyne.NET.Abstractions.ReasonletCandidate.LineageId.get -> Mnemosyne.NET.Abstractions.ReasonletId
+Mnemosyne.NET.Abstractions.ReasonletCandidate.LineageId.init -> void
+Mnemosyne.NET.Abstractions.ReasonletCandidate.Metrics.get -> Mnemosyne.NET.Abstractions.ReasonletMetrics
+Mnemosyne.NET.Abstractions.ReasonletCandidate.Metrics.init -> void
+Mnemosyne.NET.Abstractions.ReasonletCandidate.ParentMetrics.get -> Mnemosyne.NET.Abstractions.ReasonletMetrics?
+Mnemosyne.NET.Abstractions.ReasonletCandidate.ParentMetrics.init -> void
+Mnemosyne.NET.Abstractions.ReasonletCandidate.Reasonlet.get -> Mnemosyne.NET.Abstractions.ReasonletDefinition!
+Mnemosyne.NET.Abstractions.ReasonletCandidate.Reasonlet.init -> void
+Mnemosyne.NET.Abstractions.ReasonletCandidate.ReasonletCandidate() -> void
+Mnemosyne.NET.Abstractions.ReasonletCandidate.Similarity.get -> double
+Mnemosyne.NET.Abstractions.ReasonletCandidate.Similarity.init -> void
+Mnemosyne.NET.Abstractions.ReasonletCandidate.Validate() -> ZeroAlloc.Results.UnitResult<Mnemosyne.NET.Abstractions.MnemosyneError>
+Mnemosyne.NET.Abstractions.ReasonletCapture
+Mnemosyne.NET.Abstractions.ReasonletCapture.<Clone>$() -> Mnemosyne.NET.Abstractions.ReasonletCapture!
+Mnemosyne.NET.Abstractions.ReasonletCapture.Answer.get -> string?
+Mnemosyne.NET.Abstractions.ReasonletCapture.Answer.init -> void
+Mnemosyne.NET.Abstractions.ReasonletCapture.Equals(Mnemosyne.NET.Abstractions.ReasonletCapture? other) -> bool
+Mnemosyne.NET.Abstractions.ReasonletCapture.Graph.get -> Mnemosyne.NET.Abstractions.ReasonletGraph!
+Mnemosyne.NET.Abstractions.ReasonletCapture.Graph.init -> void
+Mnemosyne.NET.Abstractions.ReasonletCapture.Intent.get -> string?
+Mnemosyne.NET.Abstractions.ReasonletCapture.Intent.init -> void
+Mnemosyne.NET.Abstractions.ReasonletCapture.Name.get -> string?
+Mnemosyne.NET.Abstractions.ReasonletCapture.Name.init -> void
+Mnemosyne.NET.Abstractions.ReasonletCapture.Outcome.get -> Mnemosyne.NET.Abstractions.ReasonletOutcome
+Mnemosyne.NET.Abstractions.ReasonletCapture.Outcome.init -> void
+Mnemosyne.NET.Abstractions.ReasonletCapture.ParentId.get -> Mnemosyne.NET.Abstractions.ReasonletId?
+Mnemosyne.NET.Abstractions.ReasonletCapture.ParentId.init -> void
+Mnemosyne.NET.Abstractions.ReasonletCapture.Provenance.get -> Mnemosyne.NET.Abstractions.ReasonletProvenance!
+Mnemosyne.NET.Abstractions.ReasonletCapture.Provenance.init -> void
+Mnemosyne.NET.Abstractions.ReasonletCapture.Question.get -> string!
+Mnemosyne.NET.Abstractions.ReasonletCapture.Question.init -> void
+Mnemosyne.NET.Abstractions.ReasonletCapture.ReasonletCapture() -> void
+Mnemosyne.NET.Abstractions.ReasonletCapture.Scope.get -> Mnemosyne.NET.Abstractions.ReasonletScope
+Mnemosyne.NET.Abstractions.ReasonletCapture.Scope.init -> void
+Mnemosyne.NET.Abstractions.ReasonletCapture.Validate() -> ZeroAlloc.Results.UnitResult<Mnemosyne.NET.Abstractions.MnemosyneError>
+Mnemosyne.NET.Abstractions.ReasonletCaptureKind
+Mnemosyne.NET.Abstractions.ReasonletCaptureKind.ExecutionOnly = 3 -> Mnemosyne.NET.Abstractions.ReasonletCaptureKind
+Mnemosyne.NET.Abstractions.ReasonletCaptureKind.NewReasonlet = 1 -> Mnemosyne.NET.Abstractions.ReasonletCaptureKind
+Mnemosyne.NET.Abstractions.ReasonletCaptureKind.NewVersion = 2 -> Mnemosyne.NET.Abstractions.ReasonletCaptureKind
+Mnemosyne.NET.Abstractions.ReasonletDefinition
+Mnemosyne.NET.Abstractions.ReasonletDefinition.<Clone>$() -> Mnemosyne.NET.Abstractions.ReasonletDefinition!
+Mnemosyne.NET.Abstractions.ReasonletDefinition.CreatedAt.get -> System.DateTimeOffset
+Mnemosyne.NET.Abstractions.ReasonletDefinition.CreatedAt.init -> void
+Mnemosyne.NET.Abstractions.ReasonletDefinition.Equals(Mnemosyne.NET.Abstractions.ReasonletDefinition? other) -> bool
+Mnemosyne.NET.Abstractions.ReasonletDefinition.Graph.get -> Mnemosyne.NET.Abstractions.ReasonletGraph!
+Mnemosyne.NET.Abstractions.ReasonletDefinition.Graph.init -> void
+Mnemosyne.NET.Abstractions.ReasonletDefinition.Id.get -> Mnemosyne.NET.Abstractions.ReasonletId
+Mnemosyne.NET.Abstractions.ReasonletDefinition.Id.init -> void
+Mnemosyne.NET.Abstractions.ReasonletDefinition.Intent.get -> string!
+Mnemosyne.NET.Abstractions.ReasonletDefinition.Intent.init -> void
+Mnemosyne.NET.Abstractions.ReasonletDefinition.Name.get -> string!
+Mnemosyne.NET.Abstractions.ReasonletDefinition.Name.init -> void
+Mnemosyne.NET.Abstractions.ReasonletDefinition.ParentId.get -> Mnemosyne.NET.Abstractions.ReasonletId?
+Mnemosyne.NET.Abstractions.ReasonletDefinition.ParentId.init -> void
+Mnemosyne.NET.Abstractions.ReasonletDefinition.Provenance.get -> Mnemosyne.NET.Abstractions.ReasonletProvenance!
+Mnemosyne.NET.Abstractions.ReasonletDefinition.Provenance.init -> void
+Mnemosyne.NET.Abstractions.ReasonletDefinition.ReasonletDefinition() -> void
+Mnemosyne.NET.Abstractions.ReasonletDefinition.Scope.get -> Mnemosyne.NET.Abstractions.ReasonletScope
+Mnemosyne.NET.Abstractions.ReasonletDefinition.Scope.init -> void
+Mnemosyne.NET.Abstractions.ReasonletDefinition.Status.get -> Mnemosyne.NET.Abstractions.ReasonletStatus
+Mnemosyne.NET.Abstractions.ReasonletDefinition.Status.init -> void
+Mnemosyne.NET.Abstractions.ReasonletDefinition.Validate() -> ZeroAlloc.Results.UnitResult<Mnemosyne.NET.Abstractions.MnemosyneError>
+Mnemosyne.NET.Abstractions.ReasonletDefinition.Version.get -> string!
+Mnemosyne.NET.Abstractions.ReasonletDefinition.Version.init -> void
+Mnemosyne.NET.Abstractions.ReasonletEdge
+Mnemosyne.NET.Abstractions.ReasonletEdge.<Clone>$() -> Mnemosyne.NET.Abstractions.ReasonletEdge!
+Mnemosyne.NET.Abstractions.ReasonletEdge.Condition.get -> string?
+Mnemosyne.NET.Abstractions.ReasonletEdge.Condition.init -> void
+Mnemosyne.NET.Abstractions.ReasonletEdge.Equals(Mnemosyne.NET.Abstractions.ReasonletEdge? other) -> bool
+Mnemosyne.NET.Abstractions.ReasonletEdge.From.get -> string!
+Mnemosyne.NET.Abstractions.ReasonletEdge.From.init -> void
+Mnemosyne.NET.Abstractions.ReasonletEdge.Properties.get -> System.Collections.Generic.IReadOnlyDictionary<string!, System.Text.Json.JsonElement>?
+Mnemosyne.NET.Abstractions.ReasonletEdge.Properties.init -> void
+Mnemosyne.NET.Abstractions.ReasonletEdge.ReasonletEdge() -> void
+Mnemosyne.NET.Abstractions.ReasonletEdge.To.get -> string!
+Mnemosyne.NET.Abstractions.ReasonletEdge.To.init -> void
+Mnemosyne.NET.Abstractions.ReasonletEdge.Validate() -> ZeroAlloc.Results.UnitResult<Mnemosyne.NET.Abstractions.MnemosyneError>
+Mnemosyne.NET.Abstractions.ReasonletErasure
+Mnemosyne.NET.Abstractions.ReasonletErasure.<Clone>$() -> Mnemosyne.NET.Abstractions.ReasonletErasure!
+Mnemosyne.NET.Abstractions.ReasonletErasure.Deconstruct(out Mnemosyne.NET.Abstractions.ReasonletScope Scope, out string? SubjectId) -> void
+Mnemosyne.NET.Abstractions.ReasonletErasure.Equals(Mnemosyne.NET.Abstractions.ReasonletErasure? other) -> bool
+Mnemosyne.NET.Abstractions.ReasonletErasure.ReasonletErasure(Mnemosyne.NET.Abstractions.ReasonletScope Scope, string? SubjectId) -> void
+Mnemosyne.NET.Abstractions.ReasonletErasure.Scope.get -> Mnemosyne.NET.Abstractions.ReasonletScope
+Mnemosyne.NET.Abstractions.ReasonletErasure.Scope.init -> void
+Mnemosyne.NET.Abstractions.ReasonletErasure.SubjectId.get -> string?
+Mnemosyne.NET.Abstractions.ReasonletErasure.SubjectId.init -> void
+Mnemosyne.NET.Abstractions.ReasonletErasure.Validate() -> ZeroAlloc.Results.UnitResult<Mnemosyne.NET.Abstractions.MnemosyneError>
+Mnemosyne.NET.Abstractions.ReasonletErasureResult
+Mnemosyne.NET.Abstractions.ReasonletErasureResult.<Clone>$() -> Mnemosyne.NET.Abstractions.ReasonletErasureResult!
+Mnemosyne.NET.Abstractions.ReasonletErasureResult.Equals(Mnemosyne.NET.Abstractions.ReasonletErasureResult? other) -> bool
+Mnemosyne.NET.Abstractions.ReasonletErasureResult.Executions.get -> int
+Mnemosyne.NET.Abstractions.ReasonletErasureResult.Executions.init -> void
+Mnemosyne.NET.Abstractions.ReasonletErasureResult.ReasonletErasureResult() -> void
+Mnemosyne.NET.Abstractions.ReasonletErasureResult.Reasonlets.get -> int
+Mnemosyne.NET.Abstractions.ReasonletErasureResult.Reasonlets.init -> void
+Mnemosyne.NET.Abstractions.ReasonletEvaluation
+Mnemosyne.NET.Abstractions.ReasonletEvaluation.Deconstruct(out bool Success, out double Score, out string! Evaluator) -> void
+Mnemosyne.NET.Abstractions.ReasonletEvaluation.Equals(Mnemosyne.NET.Abstractions.ReasonletEvaluation other) -> bool
+Mnemosyne.NET.Abstractions.ReasonletEvaluation.Evaluator.get -> string!
+Mnemosyne.NET.Abstractions.ReasonletEvaluation.Evaluator.init -> void
+Mnemosyne.NET.Abstractions.ReasonletEvaluation.ReasonletEvaluation() -> void
+Mnemosyne.NET.Abstractions.ReasonletEvaluation.ReasonletEvaluation(bool Success, double Score, string! Evaluator) -> void
+Mnemosyne.NET.Abstractions.ReasonletEvaluation.Score.get -> double
+Mnemosyne.NET.Abstractions.ReasonletEvaluation.Score.init -> void
+Mnemosyne.NET.Abstractions.ReasonletEvaluation.Success.get -> bool
+Mnemosyne.NET.Abstractions.ReasonletEvaluation.Success.init -> void
+Mnemosyne.NET.Abstractions.ReasonletEvaluation.Validate() -> ZeroAlloc.Results.UnitResult<Mnemosyne.NET.Abstractions.MnemosyneError>
+Mnemosyne.NET.Abstractions.ReasonletEvaluationRequest
+Mnemosyne.NET.Abstractions.ReasonletEvaluationRequest.<Clone>$() -> Mnemosyne.NET.Abstractions.ReasonletEvaluationRequest!
+Mnemosyne.NET.Abstractions.ReasonletEvaluationRequest.Answer.get -> string!
+Mnemosyne.NET.Abstractions.ReasonletEvaluationRequest.Answer.init -> void
+Mnemosyne.NET.Abstractions.ReasonletEvaluationRequest.Equals(Mnemosyne.NET.Abstractions.ReasonletEvaluationRequest? other) -> bool
+Mnemosyne.NET.Abstractions.ReasonletEvaluationRequest.Graph.get -> Mnemosyne.NET.Abstractions.ReasonletGraph!
+Mnemosyne.NET.Abstractions.ReasonletEvaluationRequest.Graph.init -> void
+Mnemosyne.NET.Abstractions.ReasonletEvaluationRequest.Intent.get -> string!
+Mnemosyne.NET.Abstractions.ReasonletEvaluationRequest.Intent.init -> void
+Mnemosyne.NET.Abstractions.ReasonletEvaluationRequest.Name.get -> string!
+Mnemosyne.NET.Abstractions.ReasonletEvaluationRequest.Name.init -> void
+Mnemosyne.NET.Abstractions.ReasonletEvaluationRequest.Outcome.get -> Mnemosyne.NET.Abstractions.ReasonletOutcome
+Mnemosyne.NET.Abstractions.ReasonletEvaluationRequest.Outcome.init -> void
+Mnemosyne.NET.Abstractions.ReasonletEvaluationRequest.Question.get -> string!
+Mnemosyne.NET.Abstractions.ReasonletEvaluationRequest.Question.init -> void
+Mnemosyne.NET.Abstractions.ReasonletEvaluationRequest.ReasonletEvaluationRequest() -> void
+Mnemosyne.NET.Abstractions.ReasonletEvaluationRequest.Validate() -> ZeroAlloc.Results.UnitResult<Mnemosyne.NET.Abstractions.MnemosyneError>
+Mnemosyne.NET.Abstractions.ReasonletEvidence
+Mnemosyne.NET.Abstractions.ReasonletEvidence.Equals(Mnemosyne.NET.Abstractions.ReasonletEvidence other) -> bool
+Mnemosyne.NET.Abstractions.ReasonletEvidence.JudgedRuns.get -> int
+Mnemosyne.NET.Abstractions.ReasonletEvidence.JudgedRuns.init -> void
+Mnemosyne.NET.Abstractions.ReasonletEvidence.ReasonletEvidence() -> void
+Mnemosyne.NET.Abstractions.ReasonletEvidence.Runs.get -> int
+Mnemosyne.NET.Abstractions.ReasonletEvidence.Runs.init -> void
+Mnemosyne.NET.Abstractions.ReasonletEvidence.UsesParentPrior.get -> bool
+Mnemosyne.NET.Abstractions.ReasonletEvidence.UsesParentPrior.init -> void
+Mnemosyne.NET.Abstractions.ReasonletEvidence.Validate() -> ZeroAlloc.Results.UnitResult<Mnemosyne.NET.Abstractions.MnemosyneError>
+Mnemosyne.NET.Abstractions.ReasonletFeedback
+Mnemosyne.NET.Abstractions.ReasonletFeedback.Correctness.get -> double
+Mnemosyne.NET.Abstractions.ReasonletFeedback.Correctness.init -> void
+Mnemosyne.NET.Abstractions.ReasonletFeedback.Deconstruct(out double Utility, out double Correctness, out double Reusability, out bool? Worked) -> void
+Mnemosyne.NET.Abstractions.ReasonletFeedback.Equals(Mnemosyne.NET.Abstractions.ReasonletFeedback other) -> bool
+Mnemosyne.NET.Abstractions.ReasonletFeedback.ReasonletFeedback() -> void
+Mnemosyne.NET.Abstractions.ReasonletFeedback.ReasonletFeedback(double Utility, double Correctness, double Reusability, bool? Worked = null) -> void
+Mnemosyne.NET.Abstractions.ReasonletFeedback.Reusability.get -> double
+Mnemosyne.NET.Abstractions.ReasonletFeedback.Reusability.init -> void
+Mnemosyne.NET.Abstractions.ReasonletFeedback.Utility.get -> double
+Mnemosyne.NET.Abstractions.ReasonletFeedback.Utility.init -> void
+Mnemosyne.NET.Abstractions.ReasonletFeedback.Validate() -> ZeroAlloc.Results.UnitResult<Mnemosyne.NET.Abstractions.MnemosyneError>
+Mnemosyne.NET.Abstractions.ReasonletFeedback.Worked.get -> bool?
+Mnemosyne.NET.Abstractions.ReasonletFeedback.Worked.init -> void
+Mnemosyne.NET.Abstractions.ReasonletGraph
+Mnemosyne.NET.Abstractions.ReasonletGraph.<Clone>$() -> Mnemosyne.NET.Abstractions.ReasonletGraph!
+Mnemosyne.NET.Abstractions.ReasonletGraph.ComputeContentHash() -> ZeroAlloc.Results.Result<string!, Mnemosyne.NET.Abstractions.MnemosyneError>
+Mnemosyne.NET.Abstractions.ReasonletGraph.Edges.get -> System.Collections.Generic.IReadOnlyList<Mnemosyne.NET.Abstractions.ReasonletEdge!>!
+Mnemosyne.NET.Abstractions.ReasonletGraph.Edges.init -> void
+Mnemosyne.NET.Abstractions.ReasonletGraph.Equals(Mnemosyne.NET.Abstractions.ReasonletGraph? other) -> bool
+Mnemosyne.NET.Abstractions.ReasonletGraph.Nodes.get -> System.Collections.Generic.IReadOnlyList<Mnemosyne.NET.Abstractions.ReasonletNode!>!
+Mnemosyne.NET.Abstractions.ReasonletGraph.Nodes.init -> void
+Mnemosyne.NET.Abstractions.ReasonletGraph.Properties.get -> System.Collections.Generic.IReadOnlyDictionary<string!, System.Text.Json.JsonElement>?
+Mnemosyne.NET.Abstractions.ReasonletGraph.Properties.init -> void
+Mnemosyne.NET.Abstractions.ReasonletGraph.ReasonletGraph() -> void
+Mnemosyne.NET.Abstractions.ReasonletGraph.SchemaVersion.get -> int
+Mnemosyne.NET.Abstractions.ReasonletGraph.SchemaVersion.init -> void
+Mnemosyne.NET.Abstractions.ReasonletGraph.Validate() -> ZeroAlloc.Results.UnitResult<Mnemosyne.NET.Abstractions.MnemosyneError>
+Mnemosyne.NET.Abstractions.ReasonletGraphJson
+Mnemosyne.NET.Abstractions.ReasonletGraphLimits
+Mnemosyne.NET.Abstractions.ReasonletId
+Mnemosyne.NET.Abstractions.ReasonletId.Deconstruct(out System.Guid Value) -> void
+Mnemosyne.NET.Abstractions.ReasonletId.Equals(Mnemosyne.NET.Abstractions.ReasonletId other) -> bool
+Mnemosyne.NET.Abstractions.ReasonletId.IsDefault.get -> bool
+Mnemosyne.NET.Abstractions.ReasonletId.ReasonletId() -> void
+Mnemosyne.NET.Abstractions.ReasonletId.ReasonletId(System.Guid Value) -> void
+Mnemosyne.NET.Abstractions.ReasonletId.Value.get -> System.Guid
+Mnemosyne.NET.Abstractions.ReasonletId.Value.init -> void
+Mnemosyne.NET.Abstractions.ReasonletIntent
+Mnemosyne.NET.Abstractions.ReasonletIntent.Confidence.get -> double
+Mnemosyne.NET.Abstractions.ReasonletIntent.Confidence.init -> void
+Mnemosyne.NET.Abstractions.ReasonletIntent.Deconstruct(out string! Intent, out double Confidence) -> void
+Mnemosyne.NET.Abstractions.ReasonletIntent.Equals(Mnemosyne.NET.Abstractions.ReasonletIntent other) -> bool
+Mnemosyne.NET.Abstractions.ReasonletIntent.Intent.get -> string!
+Mnemosyne.NET.Abstractions.ReasonletIntent.Intent.init -> void
+Mnemosyne.NET.Abstractions.ReasonletIntent.ReasonletIntent() -> void
+Mnemosyne.NET.Abstractions.ReasonletIntent.ReasonletIntent(string! Intent, double Confidence) -> void
+Mnemosyne.NET.Abstractions.ReasonletIntent.Validate() -> ZeroAlloc.Results.UnitResult<Mnemosyne.NET.Abstractions.MnemosyneError>
+Mnemosyne.NET.Abstractions.ReasonletMatch
+Mnemosyne.NET.Abstractions.ReasonletMatch.<Clone>$() -> Mnemosyne.NET.Abstractions.ReasonletMatch!
+Mnemosyne.NET.Abstractions.ReasonletMatch.Equals(Mnemosyne.NET.Abstractions.ReasonletMatch? other) -> bool
+Mnemosyne.NET.Abstractions.ReasonletMatch.Evidence.get -> Mnemosyne.NET.Abstractions.ReasonletEvidence
+Mnemosyne.NET.Abstractions.ReasonletMatch.Evidence.init -> void
+Mnemosyne.NET.Abstractions.ReasonletMatch.LineageId.get -> Mnemosyne.NET.Abstractions.ReasonletId
+Mnemosyne.NET.Abstractions.ReasonletMatch.LineageId.init -> void
+Mnemosyne.NET.Abstractions.ReasonletMatch.Reasonlet.get -> Mnemosyne.NET.Abstractions.ReasonletDefinition!
+Mnemosyne.NET.Abstractions.ReasonletMatch.Reasonlet.init -> void
+Mnemosyne.NET.Abstractions.ReasonletMatch.ReasonletMatch() -> void
+Mnemosyne.NET.Abstractions.ReasonletMatch.Score.get -> Mnemosyne.NET.Abstractions.ReasonletScore
+Mnemosyne.NET.Abstractions.ReasonletMatch.Score.init -> void
+Mnemosyne.NET.Abstractions.ReasonletMatch.Validate() -> ZeroAlloc.Results.UnitResult<Mnemosyne.NET.Abstractions.MnemosyneError>
+Mnemosyne.NET.Abstractions.ReasonletMetrics
+Mnemosyne.NET.Abstractions.ReasonletMetrics.Deconstruct(out int Runs, out int Successes, out System.DateTimeOffset? LastSuccessAt, out System.DateTimeOffset LastExecutedAt, out int JudgedRuns, out int JudgedSuccesses) -> void
+Mnemosyne.NET.Abstractions.ReasonletMetrics.Equals(Mnemosyne.NET.Abstractions.ReasonletMetrics other) -> bool
+Mnemosyne.NET.Abstractions.ReasonletMetrics.JudgedRuns.get -> int
+Mnemosyne.NET.Abstractions.ReasonletMetrics.JudgedRuns.init -> void
+Mnemosyne.NET.Abstractions.ReasonletMetrics.JudgedSuccesses.get -> int
+Mnemosyne.NET.Abstractions.ReasonletMetrics.JudgedSuccesses.init -> void
+Mnemosyne.NET.Abstractions.ReasonletMetrics.LastExecutedAt.get -> System.DateTimeOffset
+Mnemosyne.NET.Abstractions.ReasonletMetrics.LastExecutedAt.init -> void
+Mnemosyne.NET.Abstractions.ReasonletMetrics.LastSuccessAt.get -> System.DateTimeOffset?
+Mnemosyne.NET.Abstractions.ReasonletMetrics.LastSuccessAt.init -> void
+Mnemosyne.NET.Abstractions.ReasonletMetrics.ReasonletMetrics() -> void
+Mnemosyne.NET.Abstractions.ReasonletMetrics.ReasonletMetrics(int Runs, int Successes, System.DateTimeOffset? LastSuccessAt, System.DateTimeOffset LastExecutedAt, int JudgedRuns = 0, int JudgedSuccesses = 0) -> void
+Mnemosyne.NET.Abstractions.ReasonletMetrics.Runs.get -> int
+Mnemosyne.NET.Abstractions.ReasonletMetrics.Runs.init -> void
+Mnemosyne.NET.Abstractions.ReasonletMetrics.Successes.get -> int
+Mnemosyne.NET.Abstractions.ReasonletMetrics.Successes.init -> void
+Mnemosyne.NET.Abstractions.ReasonletMetrics.Validate() -> ZeroAlloc.Results.UnitResult<Mnemosyne.NET.Abstractions.MnemosyneError>
+Mnemosyne.NET.Abstractions.ReasonletNode
+Mnemosyne.NET.Abstractions.ReasonletNode.<Clone>$() -> Mnemosyne.NET.Abstractions.ReasonletNode!
+Mnemosyne.NET.Abstractions.ReasonletNode.Equals(Mnemosyne.NET.Abstractions.ReasonletNode? other) -> bool
+Mnemosyne.NET.Abstractions.ReasonletNode.Id.get -> string!
+Mnemosyne.NET.Abstractions.ReasonletNode.Id.init -> void
+Mnemosyne.NET.Abstractions.ReasonletNode.Name.get -> string?
+Mnemosyne.NET.Abstractions.ReasonletNode.Name.init -> void
+Mnemosyne.NET.Abstractions.ReasonletNode.Properties.get -> System.Collections.Generic.IReadOnlyDictionary<string!, System.Text.Json.JsonElement>?
+Mnemosyne.NET.Abstractions.ReasonletNode.Properties.init -> void
+Mnemosyne.NET.Abstractions.ReasonletNode.ReasonletNode() -> void
+Mnemosyne.NET.Abstractions.ReasonletNode.Tool.get -> string?
+Mnemosyne.NET.Abstractions.ReasonletNode.Tool.init -> void
+Mnemosyne.NET.Abstractions.ReasonletNode.Type.get -> string!
+Mnemosyne.NET.Abstractions.ReasonletNode.Type.init -> void
+Mnemosyne.NET.Abstractions.ReasonletNode.Validate() -> ZeroAlloc.Results.UnitResult<Mnemosyne.NET.Abstractions.MnemosyneError>
+Mnemosyne.NET.Abstractions.ReasonletOutcome
+Mnemosyne.NET.Abstractions.ReasonletOutcome.Deconstruct(out bool Success, out System.TimeSpan Duration, out double? Score) -> void
+Mnemosyne.NET.Abstractions.ReasonletOutcome.Duration.get -> System.TimeSpan
+Mnemosyne.NET.Abstractions.ReasonletOutcome.Duration.init -> void
+Mnemosyne.NET.Abstractions.ReasonletOutcome.Equals(Mnemosyne.NET.Abstractions.ReasonletOutcome other) -> bool
+Mnemosyne.NET.Abstractions.ReasonletOutcome.ReasonletOutcome() -> void
+Mnemosyne.NET.Abstractions.ReasonletOutcome.ReasonletOutcome(bool Success, System.TimeSpan Duration, double? Score) -> void
+Mnemosyne.NET.Abstractions.ReasonletOutcome.Score.get -> double?
+Mnemosyne.NET.Abstractions.ReasonletOutcome.Score.init -> void
+Mnemosyne.NET.Abstractions.ReasonletOutcome.Success.get -> bool
+Mnemosyne.NET.Abstractions.ReasonletOutcome.Success.init -> void
+Mnemosyne.NET.Abstractions.ReasonletOutcome.Validate() -> ZeroAlloc.Results.UnitResult<Mnemosyne.NET.Abstractions.MnemosyneError>
+Mnemosyne.NET.Abstractions.ReasonletProvenance
+Mnemosyne.NET.Abstractions.ReasonletProvenance.<Clone>$() -> Mnemosyne.NET.Abstractions.ReasonletProvenance!
+Mnemosyne.NET.Abstractions.ReasonletProvenance.Equals(Mnemosyne.NET.Abstractions.ReasonletProvenance? other) -> bool
+Mnemosyne.NET.Abstractions.ReasonletProvenance.ReasonletProvenance() -> void
+Mnemosyne.NET.Abstractions.ReasonletProvenance.RunId.get -> string?
+Mnemosyne.NET.Abstractions.ReasonletProvenance.RunId.init -> void
+Mnemosyne.NET.Abstractions.ReasonletProvenance.Source.get -> string!
+Mnemosyne.NET.Abstractions.ReasonletProvenance.Source.init -> void
+Mnemosyne.NET.Abstractions.ReasonletProvenance.SubjectId.get -> string?
+Mnemosyne.NET.Abstractions.ReasonletProvenance.SubjectId.init -> void
+Mnemosyne.NET.Abstractions.ReasonletProvenance.Tags.get -> System.Collections.Generic.IReadOnlyDictionary<string!, string!>?
+Mnemosyne.NET.Abstractions.ReasonletProvenance.Tags.init -> void
+Mnemosyne.NET.Abstractions.ReasonletProvenance.Validate() -> ZeroAlloc.Results.UnitResult<Mnemosyne.NET.Abstractions.MnemosyneError>
+Mnemosyne.NET.Abstractions.ReasonletPruneResult
+Mnemosyne.NET.Abstractions.ReasonletPruneResult.<Clone>$() -> Mnemosyne.NET.Abstractions.ReasonletPruneResult!
+Mnemosyne.NET.Abstractions.ReasonletPruneResult.Equals(Mnemosyne.NET.Abstractions.ReasonletPruneResult? other) -> bool
+Mnemosyne.NET.Abstractions.ReasonletPruneResult.Executions.get -> int
+Mnemosyne.NET.Abstractions.ReasonletPruneResult.Executions.init -> void
+Mnemosyne.NET.Abstractions.ReasonletPruneResult.ReasonletPruneResult() -> void
+Mnemosyne.NET.Abstractions.ReasonletPruneResult.Reasonlets.get -> int
+Mnemosyne.NET.Abstractions.ReasonletPruneResult.Reasonlets.init -> void
+Mnemosyne.NET.Abstractions.ReasonletQuery
+Mnemosyne.NET.Abstractions.ReasonletQuery.<Clone>$() -> Mnemosyne.NET.Abstractions.ReasonletQuery!
+Mnemosyne.NET.Abstractions.ReasonletQuery.Equals(Mnemosyne.NET.Abstractions.ReasonletQuery? other) -> bool
+Mnemosyne.NET.Abstractions.ReasonletQuery.Intent.get -> string?
+Mnemosyne.NET.Abstractions.ReasonletQuery.Intent.init -> void
+Mnemosyne.NET.Abstractions.ReasonletQuery.MinSimilarity.get -> double?
+Mnemosyne.NET.Abstractions.ReasonletQuery.MinSimilarity.init -> void
+Mnemosyne.NET.Abstractions.ReasonletQuery.Question.get -> string!
+Mnemosyne.NET.Abstractions.ReasonletQuery.Question.init -> void
+Mnemosyne.NET.Abstractions.ReasonletQuery.ReasonletQuery() -> void
+Mnemosyne.NET.Abstractions.ReasonletQuery.Scope.get -> Mnemosyne.NET.Abstractions.ReasonletScope
+Mnemosyne.NET.Abstractions.ReasonletQuery.Scope.init -> void
+Mnemosyne.NET.Abstractions.ReasonletQuery.Top.get -> int
+Mnemosyne.NET.Abstractions.ReasonletQuery.Top.init -> void
+Mnemosyne.NET.Abstractions.ReasonletQuery.Validate() -> ZeroAlloc.Results.UnitResult<Mnemosyne.NET.Abstractions.MnemosyneError>
+Mnemosyne.NET.Abstractions.ReasonletReceipt
+Mnemosyne.NET.Abstractions.ReasonletReceipt.<Clone>$() -> Mnemosyne.NET.Abstractions.ReasonletReceipt!
+Mnemosyne.NET.Abstractions.ReasonletReceipt.Equals(Mnemosyne.NET.Abstractions.ReasonletReceipt? other) -> bool
+Mnemosyne.NET.Abstractions.ReasonletReceipt.Execution.get -> Mnemosyne.NET.Abstractions.ExecutionId
+Mnemosyne.NET.Abstractions.ReasonletReceipt.Execution.init -> void
+Mnemosyne.NET.Abstractions.ReasonletReceipt.Id.get -> Mnemosyne.NET.Abstractions.ReasonletId
+Mnemosyne.NET.Abstractions.ReasonletReceipt.Id.init -> void
+Mnemosyne.NET.Abstractions.ReasonletReceipt.Kind.get -> Mnemosyne.NET.Abstractions.ReasonletCaptureKind
+Mnemosyne.NET.Abstractions.ReasonletReceipt.Kind.init -> void
+Mnemosyne.NET.Abstractions.ReasonletReceipt.ReasonletReceipt() -> void
+Mnemosyne.NET.Abstractions.ReasonletReceipt.Source.get -> Mnemosyne.NET.Abstractions.ReasonletVerdictSource
+Mnemosyne.NET.Abstractions.ReasonletReceipt.Source.init -> void
+Mnemosyne.NET.Abstractions.ReasonletReceipt.Status.get -> Mnemosyne.NET.Abstractions.ReasonletStatus
+Mnemosyne.NET.Abstractions.ReasonletReceipt.Status.init -> void
+Mnemosyne.NET.Abstractions.ReasonletReceipt.Success.get -> bool
+Mnemosyne.NET.Abstractions.ReasonletReceipt.Success.init -> void
+Mnemosyne.NET.Abstractions.ReasonletReceipt.Version.get -> string!
+Mnemosyne.NET.Abstractions.ReasonletReceipt.Version.init -> void
+Mnemosyne.NET.Abstractions.ReasonletRetention
+Mnemosyne.NET.Abstractions.ReasonletRetention.<Clone>$() -> Mnemosyne.NET.Abstractions.ReasonletRetention!
+Mnemosyne.NET.Abstractions.ReasonletRetention.Equals(Mnemosyne.NET.Abstractions.ReasonletRetention? other) -> bool
+Mnemosyne.NET.Abstractions.ReasonletRetention.ExecutionsOlderThan.get -> System.TimeSpan?
+Mnemosyne.NET.Abstractions.ReasonletRetention.ExecutionsOlderThan.init -> void
+Mnemosyne.NET.Abstractions.ReasonletRetention.ReasonletRetention() -> void
+Mnemosyne.NET.Abstractions.ReasonletRetention.ReasonletsUnusedFor.get -> System.TimeSpan?
+Mnemosyne.NET.Abstractions.ReasonletRetention.ReasonletsUnusedFor.init -> void
+Mnemosyne.NET.Abstractions.ReasonletRetention.Scope.get -> Mnemosyne.NET.Abstractions.ReasonletScope?
+Mnemosyne.NET.Abstractions.ReasonletRetention.Scope.init -> void
+Mnemosyne.NET.Abstractions.ReasonletRetention.Validate() -> ZeroAlloc.Results.UnitResult<Mnemosyne.NET.Abstractions.MnemosyneError>
+Mnemosyne.NET.Abstractions.ReasonletReview
+Mnemosyne.NET.Abstractions.ReasonletReview.<Clone>$() -> Mnemosyne.NET.Abstractions.ReasonletReview!
+Mnemosyne.NET.Abstractions.ReasonletReview.Definition.get -> Mnemosyne.NET.Abstractions.ReasonletDefinition!
+Mnemosyne.NET.Abstractions.ReasonletReview.Definition.init -> void
+Mnemosyne.NET.Abstractions.ReasonletReview.Equals(Mnemosyne.NET.Abstractions.ReasonletReview? other) -> bool
+Mnemosyne.NET.Abstractions.ReasonletReview.Metrics.get -> Mnemosyne.NET.Abstractions.ReasonletMetrics
+Mnemosyne.NET.Abstractions.ReasonletReview.Metrics.init -> void
+Mnemosyne.NET.Abstractions.ReasonletReview.ReasonletReview() -> void
+Mnemosyne.NET.Abstractions.ReasonletReview.Validate() -> ZeroAlloc.Results.UnitResult<Mnemosyne.NET.Abstractions.MnemosyneError>
+Mnemosyne.NET.Abstractions.ReasonletRun
+Mnemosyne.NET.Abstractions.ReasonletRun.<Clone>$() -> Mnemosyne.NET.Abstractions.ReasonletRun!
+Mnemosyne.NET.Abstractions.ReasonletRun.Answer.get -> string?
+Mnemosyne.NET.Abstractions.ReasonletRun.Answer.init -> void
+Mnemosyne.NET.Abstractions.ReasonletRun.Equals(Mnemosyne.NET.Abstractions.ReasonletRun? other) -> bool
+Mnemosyne.NET.Abstractions.ReasonletRun.Id.get -> Mnemosyne.NET.Abstractions.ReasonletId
+Mnemosyne.NET.Abstractions.ReasonletRun.Id.init -> void
+Mnemosyne.NET.Abstractions.ReasonletRun.Outcome.get -> Mnemosyne.NET.Abstractions.ReasonletOutcome
+Mnemosyne.NET.Abstractions.ReasonletRun.Outcome.init -> void
+Mnemosyne.NET.Abstractions.ReasonletRun.Provenance.get -> Mnemosyne.NET.Abstractions.ReasonletProvenance!
+Mnemosyne.NET.Abstractions.ReasonletRun.Provenance.init -> void
+Mnemosyne.NET.Abstractions.ReasonletRun.Question.get -> string?
+Mnemosyne.NET.Abstractions.ReasonletRun.Question.init -> void
+Mnemosyne.NET.Abstractions.ReasonletRun.ReasonletRun() -> void
+Mnemosyne.NET.Abstractions.ReasonletRun.Scope.get -> Mnemosyne.NET.Abstractions.ReasonletScope
+Mnemosyne.NET.Abstractions.ReasonletRun.Scope.init -> void
+Mnemosyne.NET.Abstractions.ReasonletRun.Validate() -> ZeroAlloc.Results.UnitResult<Mnemosyne.NET.Abstractions.MnemosyneError>
+Mnemosyne.NET.Abstractions.ReasonletRunReceipt
+Mnemosyne.NET.Abstractions.ReasonletRunReceipt.<Clone>$() -> Mnemosyne.NET.Abstractions.ReasonletRunReceipt!
+Mnemosyne.NET.Abstractions.ReasonletRunReceipt.Equals(Mnemosyne.NET.Abstractions.ReasonletRunReceipt? other) -> bool
+Mnemosyne.NET.Abstractions.ReasonletRunReceipt.Execution.get -> Mnemosyne.NET.Abstractions.ExecutionId
+Mnemosyne.NET.Abstractions.ReasonletRunReceipt.Execution.init -> void
+Mnemosyne.NET.Abstractions.ReasonletRunReceipt.ReasonletRunReceipt() -> void
+Mnemosyne.NET.Abstractions.ReasonletRunReceipt.Source.get -> Mnemosyne.NET.Abstractions.ReasonletVerdictSource
+Mnemosyne.NET.Abstractions.ReasonletRunReceipt.Source.init -> void
+Mnemosyne.NET.Abstractions.ReasonletRunReceipt.Success.get -> bool
+Mnemosyne.NET.Abstractions.ReasonletRunReceipt.Success.init -> void
+Mnemosyne.NET.Abstractions.ReasonletScope
+Mnemosyne.NET.Abstractions.ReasonletScope.Deconstruct(out string! Value) -> void
+Mnemosyne.NET.Abstractions.ReasonletScope.Equals(Mnemosyne.NET.Abstractions.ReasonletScope other) -> bool
+Mnemosyne.NET.Abstractions.ReasonletScope.ReasonletScope() -> void
+Mnemosyne.NET.Abstractions.ReasonletScope.ReasonletScope(string! Value) -> void
+Mnemosyne.NET.Abstractions.ReasonletScope.Validate() -> ZeroAlloc.Results.UnitResult<Mnemosyne.NET.Abstractions.MnemosyneError>
+Mnemosyne.NET.Abstractions.ReasonletScope.Value.get -> string!
+Mnemosyne.NET.Abstractions.ReasonletScope.Value.init -> void
+Mnemosyne.NET.Abstractions.ReasonletScore
+Mnemosyne.NET.Abstractions.ReasonletScore.Deconstruct(out double Similarity, out double SuccessRate, out double Freshness, out double Total) -> void
+Mnemosyne.NET.Abstractions.ReasonletScore.Equals(Mnemosyne.NET.Abstractions.ReasonletScore other) -> bool
+Mnemosyne.NET.Abstractions.ReasonletScore.Freshness.get -> double
+Mnemosyne.NET.Abstractions.ReasonletScore.Freshness.init -> void
+Mnemosyne.NET.Abstractions.ReasonletScore.ReasonletScore() -> void
+Mnemosyne.NET.Abstractions.ReasonletScore.ReasonletScore(double Similarity, double SuccessRate, double Freshness, double Total) -> void
+Mnemosyne.NET.Abstractions.ReasonletScore.Similarity.get -> double
+Mnemosyne.NET.Abstractions.ReasonletScore.Similarity.init -> void
+Mnemosyne.NET.Abstractions.ReasonletScore.SuccessRate.get -> double
+Mnemosyne.NET.Abstractions.ReasonletScore.SuccessRate.init -> void
+Mnemosyne.NET.Abstractions.ReasonletScore.Total.get -> double
+Mnemosyne.NET.Abstractions.ReasonletScore.Total.init -> void
+Mnemosyne.NET.Abstractions.ReasonletScore.Validate() -> ZeroAlloc.Results.UnitResult<Mnemosyne.NET.Abstractions.MnemosyneError>
+Mnemosyne.NET.Abstractions.ReasonletStatus
+Mnemosyne.NET.Abstractions.ReasonletStatus.Active = 1 -> Mnemosyne.NET.Abstractions.ReasonletStatus
+Mnemosyne.NET.Abstractions.ReasonletStatus.PendingReview = 2 -> Mnemosyne.NET.Abstractions.ReasonletStatus
+Mnemosyne.NET.Abstractions.ReasonletStoreEntry
+Mnemosyne.NET.Abstractions.ReasonletStoreEntry.<Clone>$() -> Mnemosyne.NET.Abstractions.ReasonletStoreEntry!
+Mnemosyne.NET.Abstractions.ReasonletStoreEntry.Capture.get -> Mnemosyne.NET.Abstractions.ReasonletCapture!
+Mnemosyne.NET.Abstractions.ReasonletStoreEntry.Capture.init -> void
+Mnemosyne.NET.Abstractions.ReasonletStoreEntry.Embedding.get -> System.ReadOnlyMemory<float>
+Mnemosyne.NET.Abstractions.ReasonletStoreEntry.Embedding.init -> void
+Mnemosyne.NET.Abstractions.ReasonletStoreEntry.Equals(Mnemosyne.NET.Abstractions.ReasonletStoreEntry? other) -> bool
+Mnemosyne.NET.Abstractions.ReasonletStoreEntry.Evaluation.get -> Mnemosyne.NET.Abstractions.ReasonletEvaluation?
+Mnemosyne.NET.Abstractions.ReasonletStoreEntry.Evaluation.init -> void
+Mnemosyne.NET.Abstractions.ReasonletStoreEntry.Intent.get -> string!
+Mnemosyne.NET.Abstractions.ReasonletStoreEntry.Intent.init -> void
+Mnemosyne.NET.Abstractions.ReasonletStoreEntry.Name.get -> string!
+Mnemosyne.NET.Abstractions.ReasonletStoreEntry.Name.init -> void
+Mnemosyne.NET.Abstractions.ReasonletStoreEntry.ReasonletStoreEntry() -> void
+Mnemosyne.NET.Abstractions.ReasonletStoreEntry.ReviewRequired.get -> bool
+Mnemosyne.NET.Abstractions.ReasonletStoreEntry.ReviewRequired.init -> void
+Mnemosyne.NET.Abstractions.ReasonletStoreEntry.Validate() -> ZeroAlloc.Results.UnitResult<Mnemosyne.NET.Abstractions.MnemosyneError>
+Mnemosyne.NET.Abstractions.ReasonletVerdictSource
+Mnemosyne.NET.Abstractions.ReasonletVerdictSource.Agent = 1 -> Mnemosyne.NET.Abstractions.ReasonletVerdictSource
+Mnemosyne.NET.Abstractions.ReasonletVerdictSource.Evaluator = 2 -> Mnemosyne.NET.Abstractions.ReasonletVerdictSource
+Mnemosyne.NET.Abstractions.ReasonletVerdictSource.Feedback = 3 -> Mnemosyne.NET.Abstractions.ReasonletVerdictSource
+Mnemosyne.NET.Abstractions.Validation.Check
+override Mnemosyne.NET.Abstractions.CaptureVerdict.GetHashCode() -> int
+override Mnemosyne.NET.Abstractions.ExecutionId.GetHashCode() -> int
+override Mnemosyne.NET.Abstractions.ExecutionId.ToString() -> string!
+override Mnemosyne.NET.Abstractions.MnemosyneError.GetHashCode() -> int
+override Mnemosyne.NET.Abstractions.ReasonletCandidate.Equals(object? obj) -> bool
+override Mnemosyne.NET.Abstractions.ReasonletCandidate.GetHashCode() -> int
+override Mnemosyne.NET.Abstractions.ReasonletCandidate.ToString() -> string!
+override Mnemosyne.NET.Abstractions.ReasonletCapture.Equals(object? obj) -> bool
+override Mnemosyne.NET.Abstractions.ReasonletCapture.GetHashCode() -> int
+override Mnemosyne.NET.Abstractions.ReasonletCapture.ToString() -> string!
+override Mnemosyne.NET.Abstractions.ReasonletDefinition.Equals(object? obj) -> bool
+override Mnemosyne.NET.Abstractions.ReasonletDefinition.GetHashCode() -> int
+override Mnemosyne.NET.Abstractions.ReasonletDefinition.ToString() -> string!
+override Mnemosyne.NET.Abstractions.ReasonletEdge.Equals(object? obj) -> bool
+override Mnemosyne.NET.Abstractions.ReasonletEdge.GetHashCode() -> int
+override Mnemosyne.NET.Abstractions.ReasonletEdge.ToString() -> string!
+override Mnemosyne.NET.Abstractions.ReasonletErasure.Equals(object? obj) -> bool
+override Mnemosyne.NET.Abstractions.ReasonletErasure.GetHashCode() -> int
+override Mnemosyne.NET.Abstractions.ReasonletErasure.ToString() -> string!
+override Mnemosyne.NET.Abstractions.ReasonletErasureResult.Equals(object? obj) -> bool
+override Mnemosyne.NET.Abstractions.ReasonletErasureResult.GetHashCode() -> int
+override Mnemosyne.NET.Abstractions.ReasonletErasureResult.ToString() -> string!
+override Mnemosyne.NET.Abstractions.ReasonletEvaluation.GetHashCode() -> int
+override Mnemosyne.NET.Abstractions.ReasonletEvaluationRequest.Equals(object? obj) -> bool
+override Mnemosyne.NET.Abstractions.ReasonletEvaluationRequest.GetHashCode() -> int
+override Mnemosyne.NET.Abstractions.ReasonletEvaluationRequest.ToString() -> string!
+override Mnemosyne.NET.Abstractions.ReasonletEvidence.GetHashCode() -> int
+override Mnemosyne.NET.Abstractions.ReasonletFeedback.GetHashCode() -> int
+override Mnemosyne.NET.Abstractions.ReasonletGraph.Equals(object? obj) -> bool
+override Mnemosyne.NET.Abstractions.ReasonletGraph.GetHashCode() -> int
+override Mnemosyne.NET.Abstractions.ReasonletGraph.ToString() -> string!
+override Mnemosyne.NET.Abstractions.ReasonletId.GetHashCode() -> int
+override Mnemosyne.NET.Abstractions.ReasonletId.ToString() -> string!
+override Mnemosyne.NET.Abstractions.ReasonletIntent.GetHashCode() -> int
+override Mnemosyne.NET.Abstractions.ReasonletMatch.Equals(object? obj) -> bool
+override Mnemosyne.NET.Abstractions.ReasonletMatch.GetHashCode() -> int
+override Mnemosyne.NET.Abstractions.ReasonletMatch.ToString() -> string!
+override Mnemosyne.NET.Abstractions.ReasonletMetrics.GetHashCode() -> int
+override Mnemosyne.NET.Abstractions.ReasonletNode.Equals(object? obj) -> bool
+override Mnemosyne.NET.Abstractions.ReasonletNode.GetHashCode() -> int
+override Mnemosyne.NET.Abstractions.ReasonletNode.ToString() -> string!
+override Mnemosyne.NET.Abstractions.ReasonletOutcome.GetHashCode() -> int
+override Mnemosyne.NET.Abstractions.ReasonletProvenance.Equals(object? obj) -> bool
+override Mnemosyne.NET.Abstractions.ReasonletProvenance.GetHashCode() -> int
+override Mnemosyne.NET.Abstractions.ReasonletProvenance.ToString() -> string!
+override Mnemosyne.NET.Abstractions.ReasonletPruneResult.Equals(object? obj) -> bool
+override Mnemosyne.NET.Abstractions.ReasonletPruneResult.GetHashCode() -> int
+override Mnemosyne.NET.Abstractions.ReasonletPruneResult.ToString() -> string!
+override Mnemosyne.NET.Abstractions.ReasonletQuery.Equals(object? obj) -> bool
+override Mnemosyne.NET.Abstractions.ReasonletQuery.GetHashCode() -> int
+override Mnemosyne.NET.Abstractions.ReasonletQuery.ToString() -> string!
+override Mnemosyne.NET.Abstractions.ReasonletReceipt.Equals(object? obj) -> bool
+override Mnemosyne.NET.Abstractions.ReasonletReceipt.GetHashCode() -> int
+override Mnemosyne.NET.Abstractions.ReasonletReceipt.ToString() -> string!
+override Mnemosyne.NET.Abstractions.ReasonletRetention.Equals(object? obj) -> bool
+override Mnemosyne.NET.Abstractions.ReasonletRetention.GetHashCode() -> int
+override Mnemosyne.NET.Abstractions.ReasonletRetention.ToString() -> string!
+override Mnemosyne.NET.Abstractions.ReasonletReview.Equals(object? obj) -> bool
+override Mnemosyne.NET.Abstractions.ReasonletReview.GetHashCode() -> int
+override Mnemosyne.NET.Abstractions.ReasonletReview.ToString() -> string!
+override Mnemosyne.NET.Abstractions.ReasonletRun.Equals(object? obj) -> bool
+override Mnemosyne.NET.Abstractions.ReasonletRun.GetHashCode() -> int
+override Mnemosyne.NET.Abstractions.ReasonletRun.ToString() -> string!
+override Mnemosyne.NET.Abstractions.ReasonletRunReceipt.Equals(object? obj) -> bool
+override Mnemosyne.NET.Abstractions.ReasonletRunReceipt.GetHashCode() -> int
+override Mnemosyne.NET.Abstractions.ReasonletRunReceipt.ToString() -> string!
+override Mnemosyne.NET.Abstractions.ReasonletScope.GetHashCode() -> int
+override Mnemosyne.NET.Abstractions.ReasonletScore.GetHashCode() -> int
+override Mnemosyne.NET.Abstractions.ReasonletStoreEntry.Equals(object? obj) -> bool
+override Mnemosyne.NET.Abstractions.ReasonletStoreEntry.GetHashCode() -> int
+override Mnemosyne.NET.Abstractions.ReasonletStoreEntry.ToString() -> string!
+static Mnemosyne.NET.Abstractions.CaptureVerdict.Allow(string! guard) -> Mnemosyne.NET.Abstractions.CaptureVerdict
+static Mnemosyne.NET.Abstractions.CaptureVerdict.Block(string! guard, string! detector) -> Mnemosyne.NET.Abstractions.CaptureVerdict
+static Mnemosyne.NET.Abstractions.CaptureVerdict.operator !=(Mnemosyne.NET.Abstractions.CaptureVerdict left, Mnemosyne.NET.Abstractions.CaptureVerdict right) -> bool
+static Mnemosyne.NET.Abstractions.CaptureVerdict.operator ==(Mnemosyne.NET.Abstractions.CaptureVerdict left, Mnemosyne.NET.Abstractions.CaptureVerdict right) -> bool
+static Mnemosyne.NET.Abstractions.ExecutionId.New() -> Mnemosyne.NET.Abstractions.ExecutionId
+static Mnemosyne.NET.Abstractions.ExecutionId.operator !=(Mnemosyne.NET.Abstractions.ExecutionId left, Mnemosyne.NET.Abstractions.ExecutionId right) -> bool
+static Mnemosyne.NET.Abstractions.ExecutionId.operator ==(Mnemosyne.NET.Abstractions.ExecutionId left, Mnemosyne.NET.Abstractions.ExecutionId right) -> bool
+static Mnemosyne.NET.Abstractions.MnemosyneError.operator !=(Mnemosyne.NET.Abstractions.MnemosyneError left, Mnemosyne.NET.Abstractions.MnemosyneError right) -> bool
+static Mnemosyne.NET.Abstractions.MnemosyneError.operator ==(Mnemosyne.NET.Abstractions.MnemosyneError left, Mnemosyne.NET.Abstractions.MnemosyneError right) -> bool
+static Mnemosyne.NET.Abstractions.ReasonletCandidate.operator !=(Mnemosyne.NET.Abstractions.ReasonletCandidate? left, Mnemosyne.NET.Abstractions.ReasonletCandidate? right) -> bool
+static Mnemosyne.NET.Abstractions.ReasonletCandidate.operator ==(Mnemosyne.NET.Abstractions.ReasonletCandidate? left, Mnemosyne.NET.Abstractions.ReasonletCandidate? right) -> bool
+static Mnemosyne.NET.Abstractions.ReasonletCapture.operator !=(Mnemosyne.NET.Abstractions.ReasonletCapture? left, Mnemosyne.NET.Abstractions.ReasonletCapture? right) -> bool
+static Mnemosyne.NET.Abstractions.ReasonletCapture.operator ==(Mnemosyne.NET.Abstractions.ReasonletCapture? left, Mnemosyne.NET.Abstractions.ReasonletCapture? right) -> bool
+static Mnemosyne.NET.Abstractions.ReasonletDefinition.operator !=(Mnemosyne.NET.Abstractions.ReasonletDefinition? left, Mnemosyne.NET.Abstractions.ReasonletDefinition? right) -> bool
+static Mnemosyne.NET.Abstractions.ReasonletDefinition.operator ==(Mnemosyne.NET.Abstractions.ReasonletDefinition? left, Mnemosyne.NET.Abstractions.ReasonletDefinition? right) -> bool
+static Mnemosyne.NET.Abstractions.ReasonletEdge.operator !=(Mnemosyne.NET.Abstractions.ReasonletEdge? left, Mnemosyne.NET.Abstractions.ReasonletEdge? right) -> bool
+static Mnemosyne.NET.Abstractions.ReasonletEdge.operator ==(Mnemosyne.NET.Abstractions.ReasonletEdge? left, Mnemosyne.NET.Abstractions.ReasonletEdge? right) -> bool
+static Mnemosyne.NET.Abstractions.ReasonletErasure.operator !=(Mnemosyne.NET.Abstractions.ReasonletErasure? left, Mnemosyne.NET.Abstractions.ReasonletErasure? right) -> bool
+static Mnemosyne.NET.Abstractions.ReasonletErasure.operator ==(Mnemosyne.NET.Abstractions.ReasonletErasure? left, Mnemosyne.NET.Abstractions.ReasonletErasure? right) -> bool
+static Mnemosyne.NET.Abstractions.ReasonletErasureResult.operator !=(Mnemosyne.NET.Abstractions.ReasonletErasureResult? left, Mnemosyne.NET.Abstractions.ReasonletErasureResult? right) -> bool
+static Mnemosyne.NET.Abstractions.ReasonletErasureResult.operator ==(Mnemosyne.NET.Abstractions.ReasonletErasureResult? left, Mnemosyne.NET.Abstractions.ReasonletErasureResult? right) -> bool
+static Mnemosyne.NET.Abstractions.ReasonletEvaluation.operator !=(Mnemosyne.NET.Abstractions.ReasonletEvaluation left, Mnemosyne.NET.Abstractions.ReasonletEvaluation right) -> bool
+static Mnemosyne.NET.Abstractions.ReasonletEvaluation.operator ==(Mnemosyne.NET.Abstractions.ReasonletEvaluation left, Mnemosyne.NET.Abstractions.ReasonletEvaluation right) -> bool
+static Mnemosyne.NET.Abstractions.ReasonletEvaluationRequest.operator !=(Mnemosyne.NET.Abstractions.ReasonletEvaluationRequest? left, Mnemosyne.NET.Abstractions.ReasonletEvaluationRequest? right) -> bool
+static Mnemosyne.NET.Abstractions.ReasonletEvaluationRequest.operator ==(Mnemosyne.NET.Abstractions.ReasonletEvaluationRequest? left, Mnemosyne.NET.Abstractions.ReasonletEvaluationRequest? right) -> bool
+static Mnemosyne.NET.Abstractions.ReasonletEvidence.operator !=(Mnemosyne.NET.Abstractions.ReasonletEvidence left, Mnemosyne.NET.Abstractions.ReasonletEvidence right) -> bool
+static Mnemosyne.NET.Abstractions.ReasonletEvidence.operator ==(Mnemosyne.NET.Abstractions.ReasonletEvidence left, Mnemosyne.NET.Abstractions.ReasonletEvidence right) -> bool
+static Mnemosyne.NET.Abstractions.ReasonletFeedback.operator !=(Mnemosyne.NET.Abstractions.ReasonletFeedback left, Mnemosyne.NET.Abstractions.ReasonletFeedback right) -> bool
+static Mnemosyne.NET.Abstractions.ReasonletFeedback.operator ==(Mnemosyne.NET.Abstractions.ReasonletFeedback left, Mnemosyne.NET.Abstractions.ReasonletFeedback right) -> bool
+static Mnemosyne.NET.Abstractions.ReasonletGraph.operator !=(Mnemosyne.NET.Abstractions.ReasonletGraph? left, Mnemosyne.NET.Abstractions.ReasonletGraph? right) -> bool
+static Mnemosyne.NET.Abstractions.ReasonletGraph.operator ==(Mnemosyne.NET.Abstractions.ReasonletGraph? left, Mnemosyne.NET.Abstractions.ReasonletGraph? right) -> bool
+static Mnemosyne.NET.Abstractions.ReasonletGraphJson.Deserialize(string! json) -> ZeroAlloc.Results.Result<Mnemosyne.NET.Abstractions.ReasonletGraph!, Mnemosyne.NET.Abstractions.MnemosyneError>
+static Mnemosyne.NET.Abstractions.ReasonletGraphJson.Serialize(Mnemosyne.NET.Abstractions.ReasonletGraph! graph) -> string!
+static Mnemosyne.NET.Abstractions.ReasonletId.New() -> Mnemosyne.NET.Abstractions.ReasonletId
+static Mnemosyne.NET.Abstractions.ReasonletId.operator !=(Mnemosyne.NET.Abstractions.ReasonletId left, Mnemosyne.NET.Abstractions.ReasonletId right) -> bool
+static Mnemosyne.NET.Abstractions.ReasonletId.operator ==(Mnemosyne.NET.Abstractions.ReasonletId left, Mnemosyne.NET.Abstractions.ReasonletId right) -> bool
+static Mnemosyne.NET.Abstractions.ReasonletIntent.operator !=(Mnemosyne.NET.Abstractions.ReasonletIntent left, Mnemosyne.NET.Abstractions.ReasonletIntent right) -> bool
+static Mnemosyne.NET.Abstractions.ReasonletIntent.operator ==(Mnemosyne.NET.Abstractions.ReasonletIntent left, Mnemosyne.NET.Abstractions.ReasonletIntent right) -> bool
+static Mnemosyne.NET.Abstractions.ReasonletMatch.operator !=(Mnemosyne.NET.Abstractions.ReasonletMatch? left, Mnemosyne.NET.Abstractions.ReasonletMatch? right) -> bool
+static Mnemosyne.NET.Abstractions.ReasonletMatch.operator ==(Mnemosyne.NET.Abstractions.ReasonletMatch? left, Mnemosyne.NET.Abstractions.ReasonletMatch? right) -> bool
+static Mnemosyne.NET.Abstractions.ReasonletMetrics.operator !=(Mnemosyne.NET.Abstractions.ReasonletMetrics left, Mnemosyne.NET.Abstractions.ReasonletMetrics right) -> bool
+static Mnemosyne.NET.Abstractions.ReasonletMetrics.operator ==(Mnemosyne.NET.Abstractions.ReasonletMetrics left, Mnemosyne.NET.Abstractions.ReasonletMetrics right) -> bool
+static Mnemosyne.NET.Abstractions.ReasonletNode.operator !=(Mnemosyne.NET.Abstractions.ReasonletNode? left, Mnemosyne.NET.Abstractions.ReasonletNode? right) -> bool
+static Mnemosyne.NET.Abstractions.ReasonletNode.operator ==(Mnemosyne.NET.Abstractions.ReasonletNode? left, Mnemosyne.NET.Abstractions.ReasonletNode? right) -> bool
+static Mnemosyne.NET.Abstractions.ReasonletOutcome.operator !=(Mnemosyne.NET.Abstractions.ReasonletOutcome left, Mnemosyne.NET.Abstractions.ReasonletOutcome right) -> bool
+static Mnemosyne.NET.Abstractions.ReasonletOutcome.operator ==(Mnemosyne.NET.Abstractions.ReasonletOutcome left, Mnemosyne.NET.Abstractions.ReasonletOutcome right) -> bool
+static Mnemosyne.NET.Abstractions.ReasonletProvenance.operator !=(Mnemosyne.NET.Abstractions.ReasonletProvenance? left, Mnemosyne.NET.Abstractions.ReasonletProvenance? right) -> bool
+static Mnemosyne.NET.Abstractions.ReasonletProvenance.operator ==(Mnemosyne.NET.Abstractions.ReasonletProvenance? left, Mnemosyne.NET.Abstractions.ReasonletProvenance? right) -> bool
+static Mnemosyne.NET.Abstractions.ReasonletPruneResult.operator !=(Mnemosyne.NET.Abstractions.ReasonletPruneResult? left, Mnemosyne.NET.Abstractions.ReasonletPruneResult? right) -> bool
+static Mnemosyne.NET.Abstractions.ReasonletPruneResult.operator ==(Mnemosyne.NET.Abstractions.ReasonletPruneResult? left, Mnemosyne.NET.Abstractions.ReasonletPruneResult? right) -> bool
+static Mnemosyne.NET.Abstractions.ReasonletQuery.operator !=(Mnemosyne.NET.Abstractions.ReasonletQuery? left, Mnemosyne.NET.Abstractions.ReasonletQuery? right) -> bool
+static Mnemosyne.NET.Abstractions.ReasonletQuery.operator ==(Mnemosyne.NET.Abstractions.ReasonletQuery? left, Mnemosyne.NET.Abstractions.ReasonletQuery? right) -> bool
+static Mnemosyne.NET.Abstractions.ReasonletReceipt.operator !=(Mnemosyne.NET.Abstractions.ReasonletReceipt? left, Mnemosyne.NET.Abstractions.ReasonletReceipt? right) -> bool
+static Mnemosyne.NET.Abstractions.ReasonletReceipt.operator ==(Mnemosyne.NET.Abstractions.ReasonletReceipt? left, Mnemosyne.NET.Abstractions.ReasonletReceipt? right) -> bool
+static Mnemosyne.NET.Abstractions.ReasonletRetention.operator !=(Mnemosyne.NET.Abstractions.ReasonletRetention? left, Mnemosyne.NET.Abstractions.ReasonletRetention? right) -> bool
+static Mnemosyne.NET.Abstractions.ReasonletRetention.operator ==(Mnemosyne.NET.Abstractions.ReasonletRetention? left, Mnemosyne.NET.Abstractions.ReasonletRetention? right) -> bool
+static Mnemosyne.NET.Abstractions.ReasonletReview.operator !=(Mnemosyne.NET.Abstractions.ReasonletReview? left, Mnemosyne.NET.Abstractions.ReasonletReview? right) -> bool
+static Mnemosyne.NET.Abstractions.ReasonletReview.operator ==(Mnemosyne.NET.Abstractions.ReasonletReview? left, Mnemosyne.NET.Abstractions.ReasonletReview? right) -> bool
+static Mnemosyne.NET.Abstractions.ReasonletRun.operator !=(Mnemosyne.NET.Abstractions.ReasonletRun? left, Mnemosyne.NET.Abstractions.ReasonletRun? right) -> bool
+static Mnemosyne.NET.Abstractions.ReasonletRun.operator ==(Mnemosyne.NET.Abstractions.ReasonletRun? left, Mnemosyne.NET.Abstractions.ReasonletRun? right) -> bool
+static Mnemosyne.NET.Abstractions.ReasonletRunReceipt.operator !=(Mnemosyne.NET.Abstractions.ReasonletRunReceipt? left, Mnemosyne.NET.Abstractions.ReasonletRunReceipt? right) -> bool
+static Mnemosyne.NET.Abstractions.ReasonletRunReceipt.operator ==(Mnemosyne.NET.Abstractions.ReasonletRunReceipt? left, Mnemosyne.NET.Abstractions.ReasonletRunReceipt? right) -> bool
+static Mnemosyne.NET.Abstractions.ReasonletScope.operator !=(Mnemosyne.NET.Abstractions.ReasonletScope left, Mnemosyne.NET.Abstractions.ReasonletScope right) -> bool
+static Mnemosyne.NET.Abstractions.ReasonletScope.operator ==(Mnemosyne.NET.Abstractions.ReasonletScope left, Mnemosyne.NET.Abstractions.ReasonletScope right) -> bool
+static Mnemosyne.NET.Abstractions.ReasonletScore.operator !=(Mnemosyne.NET.Abstractions.ReasonletScore left, Mnemosyne.NET.Abstractions.ReasonletScore right) -> bool
+static Mnemosyne.NET.Abstractions.ReasonletScore.operator ==(Mnemosyne.NET.Abstractions.ReasonletScore left, Mnemosyne.NET.Abstractions.ReasonletScore right) -> bool
+static Mnemosyne.NET.Abstractions.ReasonletStoreEntry.operator !=(Mnemosyne.NET.Abstractions.ReasonletStoreEntry? left, Mnemosyne.NET.Abstractions.ReasonletStoreEntry? right) -> bool
+static Mnemosyne.NET.Abstractions.ReasonletStoreEntry.operator ==(Mnemosyne.NET.Abstractions.ReasonletStoreEntry? left, Mnemosyne.NET.Abstractions.ReasonletStoreEntry? right) -> bool
+static Mnemosyne.NET.Abstractions.Validation.Check.All(params System.ReadOnlySpan<System.Func<ZeroAlloc.Results.UnitResult<Mnemosyne.NET.Abstractions.MnemosyneError>>!> checks) -> ZeroAlloc.Results.UnitResult<Mnemosyne.NET.Abstractions.MnemosyneError>
+static Mnemosyne.NET.Abstractions.Validation.Check.Fail(string! path, string! reason) -> ZeroAlloc.Results.UnitResult<Mnemosyne.NET.Abstractions.MnemosyneError>
+static Mnemosyne.NET.Abstractions.Validation.Check.MaxLength(string? value, int max, string! path) -> ZeroAlloc.Results.UnitResult<Mnemosyne.NET.Abstractions.MnemosyneError>
+static Mnemosyne.NET.Abstractions.Validation.Check.Nested(ZeroAlloc.Results.UnitResult<Mnemosyne.NET.Abstractions.MnemosyneError> inner, string! prefix) -> ZeroAlloc.Results.UnitResult<Mnemosyne.NET.Abstractions.MnemosyneError>
+static Mnemosyne.NET.Abstractions.Validation.Check.NotBlank(string? value, string! path) -> ZeroAlloc.Results.UnitResult<Mnemosyne.NET.Abstractions.MnemosyneError>
+static Mnemosyne.NET.Abstractions.Validation.Check.NotDefault(Mnemosyne.NET.Abstractions.ExecutionId id, string! path) -> ZeroAlloc.Results.UnitResult<Mnemosyne.NET.Abstractions.MnemosyneError>
+static Mnemosyne.NET.Abstractions.Validation.Check.NotDefault(Mnemosyne.NET.Abstractions.ReasonletId id, string! path) -> ZeroAlloc.Results.UnitResult<Mnemosyne.NET.Abstractions.MnemosyneError>
+static Mnemosyne.NET.Abstractions.Validation.Check.NotNull(object? value, string! path) -> ZeroAlloc.Results.UnitResult<Mnemosyne.NET.Abstractions.MnemosyneError>
+static Mnemosyne.NET.Abstractions.Validation.Check.Range(int value, int min, int max, string! path) -> ZeroAlloc.Results.UnitResult<Mnemosyne.NET.Abstractions.MnemosyneError>
+static Mnemosyne.NET.Abstractions.Validation.Check.UnitInterval(double value, string! path) -> ZeroAlloc.Results.UnitResult<Mnemosyne.NET.Abstractions.MnemosyneError>
+static Mnemosyne.NET.Abstractions.Validation.Check.ValidUtf16(string? value, string! path) -> ZeroAlloc.Results.UnitResult<Mnemosyne.NET.Abstractions.MnemosyneError>
+~override Mnemosyne.NET.Abstractions.CaptureVerdict.Equals(object obj) -> bool
+~override Mnemosyne.NET.Abstractions.CaptureVerdict.ToString() -> string
+~override Mnemosyne.NET.Abstractions.ExecutionId.Equals(object obj) -> bool
+~override Mnemosyne.NET.Abstractions.MnemosyneError.Equals(object obj) -> bool
+~override Mnemosyne.NET.Abstractions.MnemosyneError.ToString() -> string
+~override Mnemosyne.NET.Abstractions.ReasonletEvaluation.Equals(object obj) -> bool
+~override Mnemosyne.NET.Abstractions.ReasonletEvaluation.ToString() -> string
+~override Mnemosyne.NET.Abstractions.ReasonletEvidence.Equals(object obj) -> bool
+~override Mnemosyne.NET.Abstractions.ReasonletEvidence.ToString() -> string
+~override Mnemosyne.NET.Abstractions.ReasonletFeedback.Equals(object obj) -> bool
+~override Mnemosyne.NET.Abstractions.ReasonletFeedback.ToString() -> string
+~override Mnemosyne.NET.Abstractions.ReasonletId.Equals(object obj) -> bool
+~override Mnemosyne.NET.Abstractions.ReasonletIntent.Equals(object obj) -> bool
+~override Mnemosyne.NET.Abstractions.ReasonletIntent.ToString() -> string
+~override Mnemosyne.NET.Abstractions.ReasonletMetrics.Equals(object obj) -> bool
+~override Mnemosyne.NET.Abstractions.ReasonletMetrics.ToString() -> string
+~override Mnemosyne.NET.Abstractions.ReasonletOutcome.Equals(object obj) -> bool
+~override Mnemosyne.NET.Abstractions.ReasonletOutcome.ToString() -> string
+~override Mnemosyne.NET.Abstractions.ReasonletScope.Equals(object obj) -> bool
+~override Mnemosyne.NET.Abstractions.ReasonletScope.ToString() -> string
+~override Mnemosyne.NET.Abstractions.ReasonletScore.Equals(object obj) -> bool
+~override Mnemosyne.NET.Abstractions.ReasonletScore.ToString() -> string

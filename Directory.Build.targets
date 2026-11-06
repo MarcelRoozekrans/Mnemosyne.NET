@@ -1,6 +1,15 @@
 <Project>
 
   <!--
+    Public API gate: the six packable projects under src/ track their public surface in
+    PublicAPI.Shipped.txt and PublicAPI.Unshipped.txt (the analyzer package picks both up by
+    convention). Tests, samples, benchmarks and the AOT smoke app are not analysed.
+  -->
+  <ItemGroup Condition="'$(IsPackable)' != 'false' And $(MSBuildProjectDirectory.StartsWith('$(MSBuildThisFileDirectory)src'))">
+    <PackageReference Include="Microsoft.CodeAnalysis.PublicApiAnalyzers" PrivateAssets="all" />
+  </ItemGroup>
+
+  <!--
     Refuses a VSTest filter on a project Microsoft.Testing.Platform runs, because the filter is
     silently ignored there and EVERY test in the assembly runs instead.
 
