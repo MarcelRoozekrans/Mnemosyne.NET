@@ -6,10 +6,7 @@
 - **Milestone:** 4, 1.0, active since 2026-11-06. Design: `docs/superpowers/specs/2026-11-06-milestone-4-design.md`, approved. Milestone 3 is archived in `docs/planning/milestones/milestone-3.md`.
 - **Branch:** `chore/start-milestone-4`, PR #62 open, Marcel merges. Another worktree may hold the branch: if `git checkout` refuses, reset a local branch to `origin/chore/start-milestone-4` and push `HEAD:chore/start-milestone-4`. Push with `git push origin chore/start-milestone-4:chore/start-milestone-4`, because `push.default` is `upstream`.
 - **Phases:** 4.1 Test and sample hygiene, 4.2 Versioning and lineage API, 4.3 Benchmarks in CI, 4.4 Public API review and freeze, 4.5 Docs completeness, 4.6 Data protection guide, 4.7 1.0.0 release. All `pending`.
-- **Groomed:** phases 4.1 to 4.4, design approved and plan written for each. Phases 4.5 to 4.7 have no design and no plan.
-
-## Grooming
-Grooming: milestone 4, next phase 4.5
+- **Groomed:** all of milestone 4, phases 4.1 to 4.7, design approved and plan written for each. Nothing is built yet.
 
 ## Decisions taken in the milestone 4 brainstorm
 - **Follow-ups:** #58 goes into phase 4.4, because it changes shipped behaviour and must settle before the freeze. #55 and #57 are phase 4.1, first. #55 and #57 close in 4.1, #58 in 4.4.
@@ -36,6 +33,11 @@ Grooming: milestone 4, next phase 4.5
 - **#58** is closed by 4.4: AI.Sentinel 5.x bump, an incomplete scan maps to `Unavailable` unless a detector blocked.
 - Guard 4.4 is in 4.2's plan. Impact analysis for 4.4 exists. 4.5 may link to `compatibility.md`.
 
+## Decisions taken while grooming 4.5 to 4.7
+- **4.5:** three new pages: `concepts/overview.md` with the package map, `concepts/variants.md` with a 1.0 / post-1.0 split and no promised API names, `guides/daedalus-and-thalos.md` as the contract from our side with host facts taken from those repos' READMEs.
+- **4.6:** `guides/data-protection.md`, organised by deployer duty mapped to features, with a not-legal-advice note, a "what Mnemosyne does not do" section and a short EU AI Act section that classifies nothing. Mechanics stay in their current pages.
+- **4.7:** the `Release-As: 1.0.0` footer goes in the squash message of the final phase PR, proven first by a release-please dry run, and the squash-merge message setting is checked. Stage B, after 1.0.0 is on nuget.org, adds `EnablePackageValidation` with baseline 1.0.0 in its own PR. Phase 4.7 completes after stage B. Marcel merges the phase PRs and the release PR; no hand tags.
+
 ## Open Decisions
 - Rulings from phase 3.2 that are still open:
   - a remember call cancelled before it starts emits `mnemosyne.guard` with outcome `exception`;
@@ -45,7 +47,6 @@ Grooming: milestone 4, next phase 4.5
 - None.
 
 ## Notes
-- **groom-milestone is mid-run.** The next session re-enters it at step 3: groom 4.5 to 4.7 in roadmap order, one design and one plan per phase, one commit per phase, no execution. Brainstorm each phase interactively: lead with a concrete proposal and use AskUserQuestion with labelled options and one marked Recommended. The scheduled `**Builds on:**` lines matter here: 4.4 builds on 4.2's API, so name 4.2's interfaces from its plan, and add the guard check to 4.2's plan.
 - **Inputs for 4.4, done:** #58 in full (bump AI.Sentinel past 4.2.0, an incomplete scan maps to `Unavailable`, update the test `AThrowingDetectorIsSkippedAndTheCaptureIsAllowed`, fix the stale 4.1.1 references, update the two "known gap" paragraphs). Repo has no PublicApiAnalyzers, package validation or BenchmarkDotNet yet.
 - **Release:** `release-please-config.json` has `bump-minor-pre-major`. Phase 4.7 must check how a 1.0.0 bump is triggered, for example a `Release-As` footer, and never tags by hand.
 - **Git trap:** `push.default` is `upstream`. Use explicit `branch:branch` refspecs.
@@ -55,6 +56,5 @@ Grooming: milestone 4, next phase 4.5
 - **Commits:** no Claude signature or session link, no nested parentheses in commit bodies, conventions in `docs/planning/CONVENTIONS.md`.
 
 ## Recommended Next Step
-1. Run `resume-work`, which routes to `groom-milestone` because of the Grooming section, at step 3 for phase 4.5.
-2. Groom 4.5 to 4.7. Then clear the Grooming section, commit and push, and tell Marcel milestone 4 is groomed.
-3. Marcel merges PR #62 whenever ready; grooming commits ride on the same branch.
+1. Marcel merges PR #62, which now carries the grooming of all seven phases.
+2. Then `start-next-phase`, or `ready-check` to queue 4.1 to 4.6 for an unattended run. Phase 4.7 needs Marcel to merge PRs, so build it attended.
