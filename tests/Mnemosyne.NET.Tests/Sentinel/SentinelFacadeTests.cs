@@ -89,12 +89,11 @@ public sealed class SentinelFacadeTests
         Assert.Equal(0, _store.Calls);
     }
 
-    // This pins AI.Sentinel 4.2.0: DetectionPipeline skips a detector that throws and counts it as clean, and PipelineResult
-    // carries no failure signal, so the guard cannot see it. Upstream fixed this in a release that adds
-    // PipelineResult.Failures and IsComplete, which 4.2.0 lacks. Adopting the fix is tracked in Mnemosyne.NET#58, and this
-    // should then flip to MnemosyneErrorCode.Unavailable.
+    // AI.Sentinel 5.1.1 reports a detector that threw through PipelineResult.Failures and IsComplete. A scan that did not
+    // finish proves nothing, so with no blocking detection the guard fails closed as Unavailable. The detail holds the count
+    // and never the detector's message, which can quote the capture.
     [Fact]
-    public async Task AThrowingDetectorIsSkippedAndTheCaptureIsAllowed()
+    public async Task AThrowingDetectorFailsTheCaptureClosedAsUnavailable()
     {
         var failures = new List<string>();
         var result = await Remember(
@@ -105,9 +104,33 @@ public sealed class SentinelFacadeTests
                 o.OnDetectorFailure = failures.Add;
             });
 
+        Assert.True(result.IsFailure);
+        Assert.Equal(MnemosyneErrorCode.Unavailable, result.Error.Code);
+        Assert.Equal(0, _store.Calls);
+        Assert.Single(failures);
+        Assert.DoesNotContain("The detector's endpoint is down.", result.Error.Detail ?? "", StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ABlockingDetectionWinsOverAFailedDetector()
+    {
+        var result = await Remember(
+            "Why does api_key=abc123def456ghi789 fail?", configure: o => o.AddDetector<ThrowingDetector>()); // gitleaks:allow - fake credential fixture
+
+        Assert.Equal(MnemosyneErrorCode.Blocked, result.Error.Code);
+        Assert.Equal("ai-sentinel/SEC-02", result.Error.Detail);
+        Assert.Equal(0, _store.Calls);
+    }
+
+    [Fact]
+    public async Task ACompleteCleanScanIsStillAllowed()
+    {
+        var failures = new List<string>();
+        var result = await Remember("Where is invoice 42?", configure: o => o.OnDetectorFailure = failures.Add);
+
         Assert.True(result.IsSuccess, result.IsFailure ? result.Error.ToString() : "");
         Assert.Equal(1, _store.Calls);
-        Assert.Single(failures);
+        Assert.Empty(failures);
     }
 
     private sealed class ThrowingDetector : IDetector
