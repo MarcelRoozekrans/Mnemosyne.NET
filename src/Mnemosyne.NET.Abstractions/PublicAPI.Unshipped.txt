@@ -1,1 +1,45 @@
 #nullable enable
+Mnemosyne.NET.Abstractions.ReasonletExecutionRecord
+Mnemosyne.NET.Abstractions.ReasonletExecutionRecord.<Clone>$() -> Mnemosyne.NET.Abstractions.ReasonletExecutionRecord!
+Mnemosyne.NET.Abstractions.ReasonletExecutionRecord.Equals(Mnemosyne.NET.Abstractions.ReasonletExecutionRecord? other) -> bool
+Mnemosyne.NET.Abstractions.ReasonletExecutionRecord.Evaluation.get -> Mnemosyne.NET.Abstractions.ReasonletEvaluation?
+Mnemosyne.NET.Abstractions.ReasonletExecutionRecord.Evaluation.init -> void
+Mnemosyne.NET.Abstractions.ReasonletExecutionRecord.ExecutedAt.get -> System.DateTimeOffset
+Mnemosyne.NET.Abstractions.ReasonletExecutionRecord.ExecutedAt.init -> void
+Mnemosyne.NET.Abstractions.ReasonletExecutionRecord.Feedback.get -> Mnemosyne.NET.Abstractions.ReasonletFeedback?
+Mnemosyne.NET.Abstractions.ReasonletExecutionRecord.Feedback.init -> void
+Mnemosyne.NET.Abstractions.ReasonletExecutionRecord.Id.get -> Mnemosyne.NET.Abstractions.ExecutionId
+Mnemosyne.NET.Abstractions.ReasonletExecutionRecord.Id.init -> void
+Mnemosyne.NET.Abstractions.ReasonletExecutionRecord.Outcome.get -> Mnemosyne.NET.Abstractions.ReasonletOutcome
+Mnemosyne.NET.Abstractions.ReasonletExecutionRecord.Outcome.init -> void
+Mnemosyne.NET.Abstractions.ReasonletExecutionRecord.Provenance.get -> Mnemosyne.NET.Abstractions.ReasonletProvenance!
+Mnemosyne.NET.Abstractions.ReasonletExecutionRecord.Provenance.init -> void
+Mnemosyne.NET.Abstractions.ReasonletExecutionRecord.ReasonletExecutionRecord() -> void
+Mnemosyne.NET.Abstractions.ReasonletExecutionRecord.ReasonletId.get -> Mnemosyne.NET.Abstractions.ReasonletId
+Mnemosyne.NET.Abstractions.ReasonletExecutionRecord.ReasonletId.init -> void
+Mnemosyne.NET.Abstractions.ReasonletExecutionRecord.Scope.get -> Mnemosyne.NET.Abstractions.ReasonletScope
+Mnemosyne.NET.Abstractions.ReasonletExecutionRecord.Scope.init -> void
+Mnemosyne.NET.Abstractions.ReasonletExecutionRecord.Success.get -> bool
+Mnemosyne.NET.Abstractions.ReasonletExecutionRecord.Success.init -> void
+Mnemosyne.NET.Abstractions.ReasonletExecutionRecord.Validate() -> ZeroAlloc.Results.UnitResult<Mnemosyne.NET.Abstractions.MnemosyneError>
+Mnemosyne.NET.Abstractions.ReasonletExecutionRecord.VerdictSource.get -> Mnemosyne.NET.Abstractions.ReasonletVerdictSource
+Mnemosyne.NET.Abstractions.ReasonletExecutionRecord.VerdictSource.init -> void
+Mnemosyne.NET.Abstractions.ReasonletRecord
+Mnemosyne.NET.Abstractions.ReasonletRecord.<Clone>$() -> Mnemosyne.NET.Abstractions.ReasonletRecord!
+Mnemosyne.NET.Abstractions.ReasonletRecord.Definition.get -> Mnemosyne.NET.Abstractions.ReasonletDefinition!
+Mnemosyne.NET.Abstractions.ReasonletRecord.Definition.init -> void
+Mnemosyne.NET.Abstractions.ReasonletRecord.Equals(Mnemosyne.NET.Abstractions.ReasonletRecord? other) -> bool
+Mnemosyne.NET.Abstractions.ReasonletRecord.Metrics.get -> Mnemosyne.NET.Abstractions.ReasonletMetrics
+Mnemosyne.NET.Abstractions.ReasonletRecord.Metrics.init -> void
+Mnemosyne.NET.Abstractions.ReasonletRecord.ReasonletRecord() -> void
+Mnemosyne.NET.Abstractions.ReasonletRecord.Validate() -> ZeroAlloc.Results.UnitResult<Mnemosyne.NET.Abstractions.MnemosyneError>
+override Mnemosyne.NET.Abstractions.ReasonletExecutionRecord.Equals(object? obj) -> bool
+override Mnemosyne.NET.Abstractions.ReasonletExecutionRecord.GetHashCode() -> int
+override Mnemosyne.NET.Abstractions.ReasonletExecutionRecord.ToString() -> string!
+override Mnemosyne.NET.Abstractions.ReasonletRecord.Equals(object? obj) -> bool
+override Mnemosyne.NET.Abstractions.ReasonletRecord.GetHashCode() -> int
+override Mnemosyne.NET.Abstractions.ReasonletRecord.ToString() -> string!
+static Mnemosyne.NET.Abstractions.ReasonletExecutionRecord.operator !=(Mnemosyne.NET.Abstractions.ReasonletExecutionRecord? left, Mnemosyne.NET.Abstractions.ReasonletExecutionRecord? right) -> bool
+static Mnemosyne.NET.Abstractions.ReasonletExecutionRecord.operator ==(Mnemosyne.NET.Abstractions.ReasonletExecutionRecord? left, Mnemosyne.NET.Abstractions.ReasonletExecutionRecord? right) -> bool
+static Mnemosyne.NET.Abstractions.ReasonletRecord.operator !=(Mnemosyne.NET.Abstractions.ReasonletRecord? left, Mnemosyne.NET.Abstractions.ReasonletRecord? right) -> bool
+static Mnemosyne.NET.Abstractions.ReasonletRecord.operator ==(Mnemosyne.NET.Abstractions.ReasonletRecord? left, Mnemosyne.NET.Abstractions.ReasonletRecord? right) -> bool
