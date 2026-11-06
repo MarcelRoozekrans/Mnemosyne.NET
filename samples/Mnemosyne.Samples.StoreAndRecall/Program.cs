@@ -43,22 +43,8 @@ static async Task<int> Run(string connectionString, CancellationToken ct)
     var scope = new ReasonletScope($"sample-{Guid.NewGuid():N}");
     Console.WriteLine($"Working in scope {scope.Value}.");
 
-    var exitCode = 1;
-    try
-    {
-        exitCode = await Walkthrough(memory, scope, ct);
-    }
-    finally
-    {
-        // 5. Erase the scope, whatever happened above, so a run leaves no Reasonlets behind. A failed erase is
-        // reported but never replaces a failure that is already on its way out.
-        if (!await SampleRunner.TryEraseAsync(memory, scope))
-        {
-            exitCode = 1;
-        }
-    }
-
-    return exitCode;
+    // 5. Erase the scope, whatever happened in the walkthrough, so a run leaves no Reasonlets behind.
+    return await EraseAfterAsync(memory, scope, Console.Out, Console.Error, () => Walkthrough(memory, scope, ct));
 }
 
 static async Task<int> Walkthrough(IReasonletMemory memory, ReasonletScope scope, CancellationToken ct)

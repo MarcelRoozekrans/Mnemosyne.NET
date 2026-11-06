@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using Microsoft.Extensions.AI;
 using Mnemosyne.NET.Abstractions;
 using Npgsql;
 using Xunit;

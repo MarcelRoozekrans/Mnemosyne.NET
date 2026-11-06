@@ -1,4 +1,3 @@
-using Microsoft.Extensions.AI;
 using Mnemosyne.NET.Abstractions;
 using Xunit;
 using ZeroAlloc.Results;

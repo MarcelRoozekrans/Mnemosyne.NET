@@ -46,26 +46,49 @@ public static class SampleRunner
         }
     }
 
+    /// <summary>
+    /// Runs <paramref name="walkthrough"/>, then erases the scope whatever happened, so a run leaves no Reasonlets behind.
+    /// A failed erase is reported and turns a passing run into exit code 1, but never replaces a failure that is already on its way out.
+    /// </summary>
+    public static async Task<int> EraseAfterAsync(
+        IReasonletMemory memory, ReasonletScope scope, TextWriter output, TextWriter error, Func<Task<int>> walkthrough)
+    {
+        var exitCode = 1;
+        try
+        {
+            exitCode = await walkthrough();
+        }
+        finally
+        {
+            if (!await TryEraseAsync(memory, scope, output, error))
+            {
+                exitCode = 1;
+            }
+        }
+
+        return exitCode;
+    }
+
     // Runs in a finally block, so it must not throw: an exception here would hide the one that got the sample there.
     // The erase does not take the run's token, so a timed-out run still cleans up.
     /// <summary>Erases the scope and reports whether that worked; a failed or throwing erase is reported, never thrown.</summary>
-    public static async Task<bool> TryEraseAsync(IReasonletMemory memory, ReasonletScope scope)
+    public static async Task<bool> TryEraseAsync(IReasonletMemory memory, ReasonletScope scope, TextWriter output, TextWriter error)
     {
         try
         {
             var erased = await memory.EraseAsync(new ReasonletErasure(scope, null), CancellationToken.None);
             if (erased.IsFailure)
             {
-                Console.Error.WriteLine($"Erase failed: {erased.Error.Code}: {erased.Error.Message}");
+                error.WriteLine($"Erase failed: {erased.Error.Code}: {erased.Error.Message}");
                 return false;
             }
 
-            Console.WriteLine($"Erased the scope: {erased.Value.Reasonlets} Reasonlets and {erased.Value.Executions} executions deleted.");
+            output.WriteLine($"Erased the scope: {erased.Value.Reasonlets} Reasonlets and {erased.Value.Executions} executions deleted.");
             return true;
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"Erase threw {ex.GetType().Name}: {ex.Message}");
+            error.WriteLine($"Erase threw {ex.GetType().Name}: {ex.Message}");
             return false;
         }
     }

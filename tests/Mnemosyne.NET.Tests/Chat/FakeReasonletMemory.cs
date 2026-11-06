@@ -6,7 +6,7 @@ namespace Mnemosyne.NET.Tests.Chat;
 
 /// <summary>
 /// A hand-written <see cref="IReasonletMemory"/> that records every recall query and capture, and replies with what the test
-/// configures: a handler per call, or an exception. Only recall and remember are used by the chat code, so the rest throws.
+/// configures: a handler per call, or an exception. Recall, remember and erase are configurable, and the rest throws.
 /// </summary>
 internal sealed class FakeReasonletMemory : IReasonletMemory
 {
@@ -22,6 +22,10 @@ internal sealed class FakeReasonletMemory : IReasonletMemory
     /// <summary>Gets or sets the reply to each remember. The default throws, so a test that expects captures configures it.</summary>
     public Func<ReasonletCapture, CancellationToken, Task<Result<ReasonletReceipt, MnemosyneError>>> RememberHandler { get; set; } =
         (_, _) => throw new InvalidOperationException("No RememberHandler configured.");
+
+    /// <summary>Gets or sets the reply to each erase. The default throws, so a test that erases configures it.</summary>
+    public Func<ReasonletErasure, CancellationToken, Task<Result<ReasonletErasureResult, MnemosyneError>>> EraseHandler { get; set; } =
+        (_, _) => throw new NotSupportedException();
 
     /// <summary>Gets the query of every recall, in call order.</summary>
     public IReadOnlyList<ReasonletQuery> Queries => [.. _queries];
@@ -78,7 +82,7 @@ internal sealed class FakeReasonletMemory : IReasonletMemory
         throw new NotSupportedException();
 
     public ValueTask<Result<ReasonletErasureResult, MnemosyneError>> EraseAsync(ReasonletErasure erasure, CancellationToken ct) =>
-        throw new NotSupportedException();
+        new(EraseHandler(erasure, ct));
 
     public ValueTask<UnitResult<MnemosyneError>> ApproveAsync(ReasonletScope scope, ReasonletId id, CancellationToken ct) =>
         throw new NotSupportedException();
