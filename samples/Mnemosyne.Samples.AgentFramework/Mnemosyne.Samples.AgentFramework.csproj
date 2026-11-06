@@ -11,8 +11,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- The offline stand-ins, shared by the samples: embeddings, a scripted chat client and a capture watcher. -->
+    <!-- The offline stand-ins, shared by the samples: embeddings, a scripted chat client, a capture watcher and the sample runner. -->
     <Compile Include="../Shared/HashingEmbeddingGenerator.cs" Link="HashingEmbeddingGenerator.cs" />
+    <Compile Include="../Shared/SampleRunner.cs" Link="SampleRunner.cs" />
     <Compile Include="../Shared/ScriptedChatClient.cs" Link="ScriptedChatClient.cs" />
     <Compile Include="../Shared/CaptureRunWatcher.cs" Link="CaptureRunWatcher.cs" />
   </ItemGroup>
