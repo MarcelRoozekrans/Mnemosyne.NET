@@ -7,7 +7,7 @@ using Mnemosyne.NET.PostgreSql;
 using Mnemosyne.NET.Sentinel;
 using Mnemosyne.Samples;
 using Npgsql;
-using ZeroAlloc.Results;
+using static Mnemosyne.Samples.SampleRunner;
 
 // Runs a chat pipeline offline and shows what Mnemosyne does with each exchange. A scripted client stands in for the
 // model, so the sample needs no API key. The pipeline is UseReasonlets over UseFunctionInvocation. AI.Sentinel guards
@@ -30,28 +30,8 @@ var connectionString = Environment.GetEnvironmentVariable("MNEMOSYNE_SAMPLE_PG")
     ? configured
     : DefaultConnectionString;
 
-using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(2));
-var ct = cts.Token;
-
-try
-{
-    return await Run(connectionString, ct);
-}
-catch (SampleFailure failure)
-{
-    Console.Error.WriteLine($"FAILED: {failure.Message}");
-    return 1;
-}
-catch (OperationCanceledException) when (cts.IsCancellationRequested)
-{
-    Console.Error.WriteLine("FAILED: the sample did not finish within 2 minutes.");
-    return 1;
-}
-catch (TimeoutException ex)
-{
-    Console.Error.WriteLine($"FAILED: {ex.Message}");
-    return 1;
-}
+// Qualified, because this file has its own RunAsync for the chat client.
+return await SampleRunner.RunAsync(ct => Run(connectionString, ct), TimeSpan.FromMinutes(2), Console.Error);
 
 static async Task<int> Run(string connectionString, CancellationToken ct)
 {
@@ -75,45 +55,8 @@ static async Task<int> Run(string connectionString, CancellationToken ct)
     var scope = new ReasonletScope($"sample-{Guid.NewGuid():N}");
     Console.WriteLine($"Working in scope {scope.Value}.");
 
-    var exitCode = 1;
-    try
-    {
-        exitCode = await Walkthrough(provider, memory, scope, ct);
-    }
-    finally
-    {
-        // 4. Erase the scope, whatever happened above, so a run leaves no Reasonlets behind. A failed erase is
-        // reported but never replaces a failure that is already on its way out.
-        if (!await TryErase(memory, scope))
-        {
-            exitCode = 1;
-        }
-    }
-
-    return exitCode;
-}
-
-// Runs in a finally block, so it must not throw: an exception here would hide the one that got the sample there.
-// The erase does not take the run's token, so a timed-out run still cleans up.
-static async Task<bool> TryErase(IReasonletMemory memory, ReasonletScope scope)
-{
-    try
-    {
-        var erased = await memory.EraseAsync(new ReasonletErasure(scope, null), CancellationToken.None);
-        if (erased.IsFailure)
-        {
-            Console.Error.WriteLine($"Erase failed: {erased.Error.Code}: {erased.Error.Message}");
-            return false;
-        }
-
-        Console.WriteLine($"Erased the scope: {erased.Value.Reasonlets} Reasonlets and {erased.Value.Executions} executions deleted.");
-        return true;
-    }
-    catch (Exception ex)
-    {
-        Console.Error.WriteLine($"Erase threw {ex.GetType().Name}: {ex.Message}");
-        return false;
-    }
+    // 4. Erase the scope, whatever happened in the walkthrough, so a run leaves no Reasonlets behind.
+    return await EraseAfterAsync(memory, scope, Console.Out, Console.Error, () => Walkthrough(provider, memory, scope, ct));
 }
 
 static async Task<int> Walkthrough(IServiceProvider provider, IReasonletMemory memory, ReasonletScope scope, CancellationToken ct)
@@ -215,25 +158,3 @@ static async Task<string> RunAsync(IChatClient client, string question, Cancella
     var response = await client.GetResponseAsync(question, options, ct);
     return response.Text;
 }
-
-static void RequireEqual<T>(T actual, T expected, string what)
-{
-    if (!EqualityComparer<T>.Default.Equals(actual, expected))
-    {
-        throw new SampleFailure($"{what} was {actual}, not {expected}.");
-    }
-}
-
-static T Require<T>(Result<T, MnemosyneError> result, string what) =>
-    result.IsSuccess ? result.Value : throw new SampleFailure($"{what} failed: {result.Error.Code}: {result.Error.Message}");
-
-static void RequireSuccess(UnitResult<MnemosyneError> result, string what)
-{
-    if (result.IsFailure)
-    {
-        throw new SampleFailure($"{what} failed: {result.Error.Code}: {result.Error.Message}");
-    }
-}
-
-/// <summary>A call the sample depends on failed; the message says which.</summary>
-internal sealed class SampleFailure(string message) : Exception(message);

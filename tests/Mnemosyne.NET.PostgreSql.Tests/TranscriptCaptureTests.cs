@@ -71,18 +71,4 @@ public sealed class TranscriptCaptureTests(PgVectorFixture fixture) : IClassFixt
 
     private static ChatMessage Failed(string id) =>
         new(ChatRole.Tool, [new FunctionResultContent(id, null) { Exception = new TimeoutException() }]);
-
-    /// <summary>An embedding generator that gives every text the same vector.</summary>
-    private sealed class ConstantEmbeddings : IEmbeddingGenerator<string, Embedding<float>>
-    {
-        public Task<GeneratedEmbeddings<Embedding<float>>> GenerateAsync(
-            IEnumerable<string> values, EmbeddingGenerationOptions? options = null, CancellationToken cancellationToken = default) =>
-            Task.FromResult(new GeneratedEmbeddings<Embedding<float>>(values.Select(_ => new Embedding<float>(new float[] { 1f, 0.5f, -0.25f }))));
-
-        public object? GetService(Type serviceType, object? serviceKey = null) => null;
-
-        public void Dispose()
-        {
-        }
-    }
 }

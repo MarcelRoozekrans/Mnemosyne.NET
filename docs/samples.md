@@ -5,6 +5,8 @@ sidebar_position: 3
 
 # Samples
 
+All four samples run through one shared runner. It gives each run two minutes, and turns a failed check, a database error or a timeout into a `FAILED:` line and exit code 1.
+
 ## Store and recall
 
 [`samples/Mnemosyne.Samples.StoreAndRecall`](https://github.com/MarcelRoozekrans/Mnemosyne.NET/tree/main/samples/Mnemosyne.Samples.StoreAndRecall) is a console app that walks through the whole loop. It needs only Docker and the .NET 10 SDK. It needs no API key and no embedding model.

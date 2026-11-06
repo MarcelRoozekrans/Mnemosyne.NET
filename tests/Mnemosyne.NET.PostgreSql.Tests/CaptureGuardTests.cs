@@ -1,4 +1,3 @@
-using Microsoft.Extensions.AI;
 using Mnemosyne.NET.Abstractions;
 using Xunit;
 using ZeroAlloc.Results;
@@ -66,19 +65,5 @@ public sealed class CaptureGuardTests(PgVectorFixture fixture) : IClassFixture<P
                 capture.Question.Contains("secret", StringComparison.OrdinalIgnoreCase)
                     ? CaptureVerdict.Block("test-guard", "secret")
                     : CaptureVerdict.Allow("test-guard"));
-    }
-
-    /// <summary>An embedding generator that gives every text the same vector.</summary>
-    private sealed class ConstantEmbeddings : IEmbeddingGenerator<string, Embedding<float>>
-    {
-        public Task<GeneratedEmbeddings<Embedding<float>>> GenerateAsync(
-            IEnumerable<string> values, EmbeddingGenerationOptions? options = null, CancellationToken cancellationToken = default) =>
-            Task.FromResult(new GeneratedEmbeddings<Embedding<float>>(values.Select(_ => new Embedding<float>(new float[] { 1f, 0.5f, -0.25f }))));
-
-        public object? GetService(Type serviceType, object? serviceKey = null) => null;
-
-        public void Dispose()
-        {
-        }
     }
 }

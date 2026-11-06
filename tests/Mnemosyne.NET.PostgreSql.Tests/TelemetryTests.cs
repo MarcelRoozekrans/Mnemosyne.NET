@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using Microsoft.Extensions.AI;
 using Mnemosyne.NET.Abstractions;
 using Npgsql;
 using Xunit;
@@ -666,23 +665,6 @@ public sealed class TelemetryTests(PgVectorFixture fixture) : IClassFixture<PgVe
         public ValueTask<Result<ReasonletEvaluation, MnemosyneError>> EvaluateAsync(
             ReasonletEvaluationRequest request, CancellationToken ct) =>
             Throw is { } thrown ? throw thrown : ValueTask.FromResult(Answer);
-    }
-
-    /// <summary>An embedding generator that answers the same three-value embedding for every text.</summary>
-    private sealed class ConstantEmbeddings : IEmbeddingGenerator<string, Embedding<float>>
-    {
-        public Task<GeneratedEmbeddings<Embedding<float>>> GenerateAsync(
-            IEnumerable<string> values,
-            EmbeddingGenerationOptions? options = null,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult(new GeneratedEmbeddings<Embedding<float>>(
-                values.Select(_ => new Embedding<float>(new float[] { 1f, 0.5f, -0.25f }))));
-
-        public object? GetService(Type serviceType, object? serviceKey = null) => null;
-
-        public void Dispose()
-        {
-        }
     }
 
     private static IEnumerable<string?> Flatten(IEnumerable<KeyValuePair<string, object?>> tags) =>
