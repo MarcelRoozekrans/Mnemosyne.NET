@@ -304,6 +304,25 @@ public class LeafRecordTests
             "LineageId");
 
     [Fact]
+    public void ReasonletMatchWithKeepsTheLineageId()
+    {
+        var lineage = ReasonletId.New();
+        var match = new ReasonletMatch
+        {
+            Reasonlet = TestData.Definition(),
+            Score = default,
+            Evidence = default,
+            LineageId = lineage,
+        };
+
+        var copy = match with { Reasonlet = TestData.Definition() with { Name = "renamed" } };
+
+        Assert.Equal(lineage, copy.LineageId);
+        Assert.Equal("renamed", copy.Reasonlet.Name);
+        Assert.True(copy.Validate().IsSuccess);
+    }
+
+    [Fact]
     public void ReasonletCandidateValidateRejectsADefaultLineageId() =>
         AssertInvalid(
             new ReasonletCandidate

@@ -171,4 +171,23 @@ public class CaptureAndQueryTests
         Assert.Equal(ReasonletVerdictSource.Agent, r.Source);
         Assert.False(r.Success);
     }
+
+    [Fact]
+    public void RunReceipt_WithCopiesTheOtherMembers()
+    {
+        var exec = ExecutionId.New();
+        var r = new ReasonletRunReceipt
+        {
+            Execution = exec,
+            Source = ReasonletVerdictSource.Agent,
+            Success = false,
+        };
+
+        var judged = r with { Source = ReasonletVerdictSource.Evaluator };
+
+        Assert.Equal(exec, judged.Execution);
+        Assert.Equal(ReasonletVerdictSource.Evaluator, judged.Source);
+        Assert.False(judged.Success);
+        Assert.Equal(ReasonletVerdictSource.Agent, r.Source);
+    }
 }
