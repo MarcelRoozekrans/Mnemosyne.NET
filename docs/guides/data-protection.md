@@ -69,29 +69,9 @@ while (true)
 
     afterReasonlet = page.Value[^1].Definition.Id;
 }
-
-ExecutionId? afterRun = null;
-while (true)
-{
-    var page = await memory.ListSubjectRunsAsync(scope, subject, 100, afterRun, ct);
-    if (page.IsFailure)
-    {
-        throw new InvalidOperationException(page.Error.Message);
-    }
-
-    if (page.Value.Count == 0)
-    {
-        break;
-    }
-
-    foreach (var run in page.Value)
-    {
-        // Serialise run into your export.
-    }
-
-    afterRun = page.Value[^1].Id;
-}
 ```
+
+The runs loop has the same shape, with `ListSubjectRunsAsync`, an `ExecutionId?` cursor and the `Id` of the last run.
 
 Notes on what comes back:
 
