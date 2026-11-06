@@ -24,13 +24,14 @@ See the [milestone design](../superpowers/specs/2026-11-06-milestone-4-design.md
 - [ ] 1.0.0 is on NuGet, released by release-please
 
 ## Phases
-1. Phase 4.1 — Test and sample hygiene [pending]
-2. Phase 4.2 — Versioning and lineage API [pending]
-3. Phase 4.3 — Benchmarks in CI [pending]
-4. Phase 4.4 — Public API review and freeze [pending]
-5. Phase 4.5 — Docs completeness [pending]
-6. Phase 4.6 — Data protection guide [pending]
-7. Phase 4.7 — 1.0.0 release [pending]
+1. Phase 4.1 — Test and sample hygiene [complete]
+2. Phase 4.2 — Versioning and lineage API [complete]
+3. Phase 4.3 — Benchmarks in CI [complete]
+4. Phase 4.4 — Public API review and freeze [complete]
+5. Phase 4.5 — Docs completeness [complete]
+6. Phase 4.6 — Data protection guide [complete]
+7. Phase 4.7 — Subject export [pending]
+8. Phase 4.8 — 1.0.0 release [pending]
 
 ## Audit History
 | Date | Verdict | Gaps |
