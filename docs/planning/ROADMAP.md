@@ -189,7 +189,7 @@ Design: [roadmap design](../superpowers/specs/2026-10-21-roadmap-design.md), bui
 **Goal:** Share the scripted model and embedding stubs across the PostgreSQL tests (#55) and the self-check runner across the four samples (#57).
 **Surface:** Refactor
 **HelpWanted:** no
-**Plan:** _to be written_
+**Plan:** `docs/superpowers/plans/2026-11-06-phase-4.1-test-sample-hygiene.md`
 
 ### Phase 4.2: Versioning and lineage API [status: pending]
 **Goal:** Settle the versioning and lineage API so variant selection fits later.

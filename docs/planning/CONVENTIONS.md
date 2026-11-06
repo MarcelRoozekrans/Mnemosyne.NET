@@ -10,6 +10,8 @@
 **Package manager:** NuGet (central package management)
 **Framework:** none (library; Microsoft.Extensions.AI for embeddings)
 **Datastore:** PostgreSQL + pgvector
+**Build:** `dotnet build Mnemosyne.NET.slnx -c Release`
+**Test:** `dotnet test tests/Mnemosyne.NET.Tests -c Release`
 
 ## Commits
 
