@@ -283,6 +283,25 @@ internal sealed partial class ReasonletRepository(IAsyncDbConnection connection)
     public partial Task<List<PendingRow>> ListPendingAsync(string scope, Guid? after, int limit, CancellationToken ct);
 
     /// <summary>
+    /// One page of a subject's Reasonlets in the scope, in every status, ordered by id, each with its own execution
+    /// metrics. The subject id matches exactly. A null <c>after</c> starts at the beginning. A Reasonlet without a
+    /// counter row reads as no runs and its last execution as its creation time.
+    /// </summary>
+    [Query("""
+        SELECT r.id, r.scope, r.name, r.intent, r.version, r.graph, r.parent_id, r.status,
+               r.source, r.run_id, r.subject_id, r.tags, r.created_at,
+               coalesce(m.runs, 0), coalesce(m.successes, 0), m.last_success_at,
+               coalesce(m.last_executed_at, r.created_at),
+               coalesce(m.judged_runs, 0), coalesce(m.judged_successes, 0)
+        FROM mnemosyne.reasonlets r
+        LEFT JOIN mnemosyne.reasonlet_metrics m ON m.reasonlet_id = r.id AND m.scope = r.scope
+        WHERE r.scope = @scope AND r.subject_id = @subjectId AND (@after::uuid IS NULL OR r.id > @after)
+        ORDER BY r.id
+        LIMIT @limit
+        """)]
+    public partial Task<List<PendingRow>> ListSubjectReasonletsAsync(string scope, string subjectId, Guid? after, int limit, CancellationToken ct);
+
+    /// <summary>
     /// Sets a pending Reasonlet of the scope to Active, and answers its id, or null when no pending Reasonlet of that id is
     /// in the scope. An Active one is left alone, so an approve that repeats writes no new row version.
     /// </summary>
