@@ -1,0 +1,94 @@
+name: Benchmarks
+
+# Reports numbers and never gates on them: a shared runner is too noisy for a threshold.
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "benchmarks/**"
+      - "Directory.Packages.props"
+      - ".github/workflows/benchmarks.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  benchmarks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    # The search benchmark runs against a real pgvector server (0.8.0 or later).
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v6
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj', 'Directory.Build.props', 'Directory.Packages.props') }}
+          restore-keys: ${{ runner.os }}-nuget-
+
+      # The search benchmark migrates the schema with 256 dimensions, so it gets a database of its own.
+      - name: Create the benchmark database
+        env:
+          PGPASSWORD: postgres
+        run: psql -h localhost -U postgres -c 'CREATE DATABASE mnemosyne_bench'
+
+      - name: Run the benchmarks
+        env:
+          MNEMOSYNE_BENCH_PG: Host=localhost;Port=5432;Username=postgres;Password=postgres;Database=mnemosyne_bench
+        run: >-
+          dotnet run -c Release --project benchmarks/Mnemosyne.NET.Benchmarks --
+          --filter '*' --job short --exporters github json --artifacts benchmarks/results
+
+      - name: Publish the report
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "## Benchmarks"
+            echo
+            echo "The runner is shared, so absolute numbers vary between runs. Compare numbers within one run only."
+            echo
+            reports=()
+            if [ -d benchmarks/results ]; then
+              while IFS= read -r -d '' report; do reports+=("$report"); done \
+                < <(find benchmarks/results -name '*-report-github.md' -print0 | sort -z)
+            fi
+            if [ "${#reports[@]}" -gt 0 ]; then
+              cat "${reports[@]}"
+            else
+              echo "No report was produced. Check the log of the run step for the cause."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload the results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: benchmark-results
+          path: benchmarks/results
+          if-no-files-found: warn
