@@ -247,6 +247,7 @@ Once the quickstart runs, pick how your agent will use memory:
 
 ## Next steps
 
+- [Overview](concepts/overview.md) maps the six packages and shows where a call goes.
 - [The store-and-recall sample](samples.md) builds a track record, captures a new version and shows it ranking first.
 - [Reasonlets](concepts/reasonlets.md) covers what a capture holds.
 - [Evaluation](concepts/evaluation.md) covers how a run is judged, and [the evaluation sample](samples.md#evaluation) shows a verdict changing the ranking.
