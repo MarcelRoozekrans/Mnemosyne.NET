@@ -85,6 +85,7 @@ Most applications reference `Mnemosyne.NET` and `Mnemosyne.NET.PostgreSql`, and 
 - [Getting started](getting-started.md) wires Mnemosyne into a console app, then remembers, recalls and records a run.
 - [Reasonlets](concepts/reasonlets.md) explains what is stored.
 - [Ranking](concepts/ranking.md) explains how recall orders its matches.
+- [Compatibility](concepts/compatibility.md) says what stays stable across releases: the public API and the graph format.
 - [The chat pipeline](guides/chat-pipeline.md) adds recall and background capture to a chat client.
 - [Capture, redaction and review](guides/capture-and-review.md) covers the capture guard, the AI.Sentinel adapter and the review gate.
 - [Agent Framework](guides/agent-framework.md) adds memory to an Agent Framework agent.
