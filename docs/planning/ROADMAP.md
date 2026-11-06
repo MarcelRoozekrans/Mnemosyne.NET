@@ -207,7 +207,7 @@ Design: [roadmap design](../superpowers/specs/2026-10-21-roadmap-design.md), bui
 **Goal:** Review the public API, adopt the AI.Sentinel fix (#58), add the PublicApiAnalyzers baselines and package validation, and set the graph schema compatibility policy.
 **Surface:** Refactor
 **HelpWanted:** no
-**Plan:** _to be written_
+**Plan:** `docs/superpowers/plans/2026-11-06-phase-4.4-public-api-review-freeze.md`
 
 ### Phase 4.5: Docs completeness [status: pending]
 **Goal:** Concepts, the variants vision, and the Daedalus and Thalos guide.
