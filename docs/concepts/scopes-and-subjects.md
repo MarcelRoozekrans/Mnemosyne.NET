@@ -39,7 +39,7 @@ var provenance = new ReasonletProvenance
 };
 ```
 
-Set it whenever a record is about a person, for example because the question or the graph holds something they said. It is optional; leave it out for records that are not about anyone.
+Set it whenever a record is about a person, for example because the question or the graph holds something they said. It is optional; leave it out for records that are not about anyone. [Data protection](../guides/data-protection.md) lists which duties a subject id helps you meet.
 
 ## Erasure
 

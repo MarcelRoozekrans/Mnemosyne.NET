@@ -10,7 +10,7 @@ Stored procedures don't live forever. A tenant leaves, a person asks to have the
 - **Erasure** removes data on request: everything in a scope, or everything about one subject in a scope. It is `EraseAsync`, on `IReasonletMemory` and on the store.
 - **Retention** removes data that is old or unused, on a schedule. It is `PruneAsync`, on the store only.
 
-[Scopes and subjects](../concepts/scopes-and-subjects.md) explains what scopes and subjects are. This page covers what each tool removes, what it keeps, and how it behaves alongside other writes.
+[Scopes and subjects](../concepts/scopes-and-subjects.md) explains what scopes and subjects are. This page covers what each tool removes, what it keeps, and how it behaves alongside other writes. [Data protection](data-protection.md) maps erasure, retention and the review gate to the duties of a deployer under the GDPR.
 
 ## The review gate
 
