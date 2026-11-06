@@ -225,7 +225,7 @@ Design: [roadmap design](../superpowers/specs/2026-10-21-roadmap-design.md), bui
 **Goal:** Release 1.0.0 through release-please.
 **Surface:** Infra
 **HelpWanted:** no
-**Plan:** _to be written_
+**Plan:** `docs/superpowers/plans/2026-11-06-phase-4.7-1-0-release.md`
 
 ## Milestone 5: Variants [status: pending]
 **Goal:** Choose between sibling versions of a procedure, post-1.0 (handover phase 4).
