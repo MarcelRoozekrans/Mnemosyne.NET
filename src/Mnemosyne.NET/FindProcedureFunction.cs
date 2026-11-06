@@ -85,6 +85,7 @@ public sealed class FindProcedureFunction : AIFunction
         match.Reasonlet.Id.ToString(),
         match.Reasonlet.Name,
         match.Reasonlet.Version,
+        match.LineageId.ToString(),
         match.Score.Similarity,
         match.Score.SuccessRate,
         match.Evidence.Runs,

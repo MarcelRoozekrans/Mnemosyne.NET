@@ -91,6 +91,20 @@ public sealed class FindProcedureFunctionTests
     }
 
     [Fact]
+    public async Task TheResultCarriesTheLineageIdOfEachItem()
+    {
+        var memory = new FakeReasonletMemory();
+        var match = Match();
+        memory.Returns(match);
+        var function = ReasonletTools.CreateFindProcedure(memory, Scope);
+
+        var result = await function.InvokeAsync(Args(("question", "refund")), CancellationToken.None);
+
+        var item = Assert.Single(Assert.IsType<JsonElement>(result).EnumerateArray());
+        Assert.Equal(match.LineageId.ToString(), item.GetProperty("lineageId").GetString());
+    }
+
+    [Fact]
     public async Task NoMatchesReturnsAnEmptyArray()
     {
         var function = ReasonletTools.CreateFindProcedure(new FakeReasonletMemory(), Scope);

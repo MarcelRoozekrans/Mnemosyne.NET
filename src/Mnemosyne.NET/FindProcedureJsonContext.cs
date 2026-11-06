@@ -6,6 +6,7 @@ namespace Mnemosyne.NET;
 /// <param name="Id">The Reasonlet's id.</param>
 /// <param name="Name">The Reasonlet's name.</param>
 /// <param name="Version">The Reasonlet's version.</param>
+/// <param name="LineageId">The id of the root of the Reasonlet's version tree, its own id when it is the root.</param>
 /// <param name="Similarity">How well the Reasonlet matched the question, in [0, 1].</param>
 /// <param name="SuccessRate">How often the Reasonlet succeeded, in [0, 1].</param>
 /// <param name="Runs">How many times the Reasonlet ran.</param>
@@ -14,6 +15,7 @@ internal sealed record FindProcedureItem(
     string Id,
     string Name,
     string Version,
+    string LineageId,
     double Similarity,
     double SuccessRate,
     int Runs,

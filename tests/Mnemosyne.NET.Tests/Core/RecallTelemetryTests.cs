@@ -79,11 +79,12 @@ public sealed class RecallTelemetryTests
         var candidates = new[] { Candidate(0.9), Candidate(0.8) };
         _store.SearchResult = Result<IReadOnlyList<ReasonletCandidate>, MnemosyneError>.Success(candidates);
         var chosen = candidates[1].Reasonlet with { Version = "2.1.0" };
+        var lineage = ReasonletId.New();
         _selector.Result = Result<IReadOnlyList<ReasonletMatch>, MnemosyneError>.Success(
             [
                 new()
                 {
-                    LineageId = ReasonletId.New(),
+                    LineageId = lineage,
                     Reasonlet = chosen,
                     Score = new ReasonletScore(0.8, 1, 1, 0.77),
                     Evidence = default,
@@ -107,6 +108,7 @@ public sealed class RecallTelemetryTests
             [
                 new("mnemosyne.recall.candidates", 2),
                 new("mnemosyne.recall.chosen.id", chosen.Id.Value.ToString()),
+                new("mnemosyne.recall.chosen.lineage_id", lineage.Value.ToString()),
                 new("mnemosyne.recall.chosen.score", 0.77),
                 new("mnemosyne.recall.chosen.version", "2.1.0"),
                 new("mnemosyne.recall.intent_filtered", true),
@@ -120,6 +122,30 @@ public sealed class RecallTelemetryTests
         Assert.Equal(2, returned.Value);
         Assert.Empty(returned.Tags);
         Assert.Empty(capture.Of("mnemosyne.recall.empty"));
+    }
+
+    [Fact]
+    public async Task ASuccessfulRecallTagsTheChosenLineage()
+    {
+        var candidate = Candidate();
+        _store.SearchResult = Result<IReadOnlyList<ReasonletCandidate>, MnemosyneError>.Success([candidate]);
+        var lineage = ReasonletId.New();
+        _selector.Result = Result<IReadOnlyList<ReasonletMatch>, MnemosyneError>.Success(
+            [
+                new()
+                {
+                    LineageId = lineage,
+                    Reasonlet = candidate.Reasonlet,
+                    Score = new ReasonletScore(0.9, 0, 0, 0.45),
+                    Evidence = default,
+                },
+            ]);
+        using var capture = new TelemetryCapture();
+
+        await Memory().RecallAsync(TestData.Query(), Ct);
+
+        var activity = Single(capture);
+        Assert.Equal(lineage.Value.ToString(), activity.GetTagItem("mnemosyne.recall.chosen.lineage_id"));
     }
 
     [Fact]
