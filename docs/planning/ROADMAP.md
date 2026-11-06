@@ -219,7 +219,7 @@ Design: [roadmap design](../superpowers/specs/2026-10-21-roadmap-design.md), bui
 **Goal:** How scope, provenance, redaction, erasure, retention and telemetry support a deployer's GDPR duties, and a short note on where the EU AI Act does and does not apply.
 **Surface:** Docs
 **HelpWanted:** no
-**Plan:** _to be written_
+**Plan:** `docs/superpowers/plans/2026-11-06-phase-4.6-data-protection-guide.md`
 
 ### Phase 4.7: 1.0.0 release [status: pending]
 **Goal:** Release 1.0.0 through release-please.
