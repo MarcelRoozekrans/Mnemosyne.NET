@@ -7,7 +7,7 @@ using Mnemosyne.NET.PostgreSql;
 using Mnemosyne.Samples;
 using Mnemosyne.Samples.Evaluation;
 using Npgsql;
-using ZeroAlloc.Results;
+using static Mnemosyne.Samples.SampleRunner;
 
 // Judge runs offline and watch the verdicts move the ranking. A rule-based evaluator checks each answer, so a run counts
 // as the evaluator judged it rather than as the agent reported it, and a person can overrule the evaluator afterwards.
@@ -29,23 +29,7 @@ var connectionString = Environment.GetEnvironmentVariable("MNEMOSYNE_SAMPLE_PG")
     ? configured
     : DefaultConnectionString;
 
-using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(2));
-var ct = cts.Token;
-
-try
-{
-    return await Run(connectionString, ct);
-}
-catch (SampleFailure failure)
-{
-    Console.Error.WriteLine($"FAILED: {failure.Message}");
-    return 1;
-}
-catch (OperationCanceledException) when (cts.IsCancellationRequested)
-{
-    Console.Error.WriteLine("FAILED: the sample did not finish within 2 minutes.");
-    return 1;
-}
+return await SampleRunner.RunAsync(ct => Run(connectionString, ct), TimeSpan.FromMinutes(2), Console.Error);
 
 static async Task<int> Run(string connectionString, CancellationToken ct)
 {
@@ -77,36 +61,13 @@ static async Task<int> Run(string connectionString, CancellationToken ct)
     {
         // 4. Erase the scope, whatever happened above, so a run leaves no Reasonlets behind. A failed erase is
         // reported but never replaces a failure that is already on its way out.
-        if (!await TryErase(memory, scope))
+        if (!await SampleRunner.TryEraseAsync(memory, scope))
         {
             exitCode = 1;
         }
     }
 
     return exitCode;
-}
-
-// Runs in a finally block, so it must not throw: an exception here would hide the one that got the sample there.
-// The erase does not take the run's token, so a timed-out run still cleans up.
-static async Task<bool> TryErase(IReasonletMemory memory, ReasonletScope scope)
-{
-    try
-    {
-        var erased = await memory.EraseAsync(new ReasonletErasure(scope, null), CancellationToken.None);
-        if (erased.IsFailure)
-        {
-            Console.Error.WriteLine($"Erase failed: {erased.Error.Code}: {erased.Error.Message}");
-            return false;
-        }
-
-        Console.WriteLine($"Erased the scope: {erased.Value.Reasonlets} Reasonlets and {erased.Value.Executions} executions deleted.");
-        return true;
-    }
-    catch (Exception ex)
-    {
-        Console.Error.WriteLine($"Erase threw {ex.GetType().Name}: {ex.Message}");
-        return false;
-    }
 }
 
 static async Task<int> Walkthrough(IReasonletMemory memory, ReasonletScope scope, CancellationToken ct)
@@ -296,17 +257,3 @@ static ReasonletGraph Graph(params (string Id, string Tool)[] steps)
     var edges = nodes.Zip(nodes.Skip(1), (from, to) => new ReasonletEdge { From = from.Id, To = to.Id }).ToArray();
     return new ReasonletGraph { Nodes = nodes, Edges = edges, SchemaVersion = ReasonletGraph.CurrentSchemaVersion };
 }
-
-static T Require<T>(Result<T, MnemosyneError> result, string what) =>
-    result.IsSuccess ? result.Value : throw new SampleFailure($"{what} failed: {result.Error.Code}: {result.Error.Message}");
-
-static void RequireSuccess(UnitResult<MnemosyneError> result, string what)
-{
-    if (result.IsFailure)
-    {
-        throw new SampleFailure($"{what} failed: {result.Error.Code}: {result.Error.Message}");
-    }
-}
-
-/// <summary>A call the sample depends on failed; the message says which.</summary>
-internal sealed class SampleFailure(string message) : Exception(message);

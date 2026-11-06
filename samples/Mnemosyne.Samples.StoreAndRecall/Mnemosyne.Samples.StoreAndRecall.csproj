@@ -9,8 +9,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- The offline embedding stand-in, shared by the samples. -->
+    <!-- The offline embedding stand-in and the sample runner, shared by the samples. -->
     <Compile Include="../Shared/HashingEmbeddingGenerator.cs" Link="HashingEmbeddingGenerator.cs" />
+    <Compile Include="../Shared/SampleRunner.cs" Link="SampleRunner.cs" />
   </ItemGroup>
 
   <ItemGroup>
