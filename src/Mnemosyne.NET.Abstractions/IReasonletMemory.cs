@@ -175,7 +175,6 @@ public interface IReasonletMemory
     /// owns, whatever the run's own subject. This is the set <see cref="EraseAsync"/> removes for the same scope and subject.
     /// A run on another owner's Reasonlet carries only its <see cref="ReasonletExecutionRecord.ReasonletId"/>; that owner's definition is never returned.
     /// A run another person recorded on one of the subject's Reasonlets is in the set with that person's <c>Provenance</c>. Redact or drop it before the export reaches the subject.
-    /// A run another person recorded on one of the subject's Reasonlets is in the set with that person's <c>Provenance</c>. Redact or drop it before the export reaches the subject.
     /// Reads bypass the capture guard and the review gate. Returns up to <paramref name="limit"/> rows with an id above
     /// <paramref name="after"/>, ordered by id. Ids are version 7 GUIDs, so this is creation order. Pass the last id of a page as the
     /// next <paramref name="after"/>, and <see langword="null"/> to start. Ids are made by clients, so a row stored while an export
