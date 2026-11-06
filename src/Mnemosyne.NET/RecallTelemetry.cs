@@ -47,6 +47,7 @@ internal static class RecallTelemetry
     private const string CandidatesTag = "mnemosyne.recall.candidates";
     private const string ReturnedTag = "mnemosyne.recall.returned";
     private const string ChosenIdTag = "mnemosyne.recall.chosen.id";
+    private const string ChosenLineageIdTag = "mnemosyne.recall.chosen.lineage_id";
     private const string ChosenVersionTag = "mnemosyne.recall.chosen.version";
     private const string ChosenScoreTag = "mnemosyne.recall.chosen.score";
 
@@ -181,6 +182,7 @@ internal static class RecallTelemetry
             var chosen = matches[0];
             activity?.SetTag(ChosenIdTag, chosen.Reasonlet.Id.Value.ToString());
             activity?.SetTag(ChosenVersionTag, chosen.Reasonlet.Version);
+            activity?.SetTag(ChosenLineageIdTag, chosen.LineageId.Value.ToString());
             activity?.SetTag(ChosenScoreTag, chosen.Score.Total);
         }
         else

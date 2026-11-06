@@ -179,10 +179,10 @@ static async Task<IReadOnlyList<ReasonletMatch>> RecallAndPrint(IReasonletMemory
     Console.WriteLine($"  {"#",-2} {"Reasonlet",-24} {"Similarity",10} {"Success",8} {"Total",7} {"Runs",5} {"Judged",7}");
     for (var i = 0; i < matches.Count; i++)
     {
-        var (reasonlet, score, evidence) = matches[i];
+        var match = matches[i];
         Console.WriteLine(string.Create(
             CultureInfo.InvariantCulture,
-            $"  {i + 1,-2} {reasonlet.Name,-24} {score.Similarity,10:F3} {score.SuccessRate,8:F3} {score.Total,7:F3} {evidence.Runs,5} {evidence.JudgedRuns,7}"));
+            $"  {i + 1,-2} {match.Reasonlet.Name,-24} {match.Score.Similarity,10:F3} {match.Score.SuccessRate,8:F3} {match.Score.Total,7:F3} {match.Evidence.Runs,5} {match.Evidence.JudgedRuns,7}"));
     }
 
     return matches;

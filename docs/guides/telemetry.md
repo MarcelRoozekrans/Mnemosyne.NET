@@ -85,6 +85,7 @@ There is one activity per operation, with these tags:
 | `mnemosyne.recall.returned` | on success: how many matches recall returned |
 | `mnemosyne.recall.chosen.id` | on success, when at least one match is returned: the first match's id |
 | `mnemosyne.recall.chosen.version` | on success, when at least one match is returned: the first match's version |
+| `mnemosyne.recall.chosen.lineage_id` | on success, when at least one match is returned: the id of the root of the first match's version tree |
 | `mnemosyne.recall.chosen.score` | on success, when at least one match is returned: the first match's total score |
 
 The candidate and returned counts show how much the [cut-off](../concepts/ranking.md#the-cut-off) drops, which helps when you tune it for your embedding model.

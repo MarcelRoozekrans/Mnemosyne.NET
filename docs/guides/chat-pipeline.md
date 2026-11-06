@@ -116,7 +116,7 @@ services.AddChatClient(inner)
 
 - **When to expose it.** The injected recall offers one match, the best (the recall asks for `Top = 1`) for the user's question. Expose the tool when the model should be able to look for more, for example with a different wording or for a sub-task. It is off by default because it adds a tool the model sees.
 - **What it takes.** A `question`, and optionally `top`, from 1 to 5, which defaults to 3.
-- **What it returns.** A JSON array of matches, each with its id, name, version, similarity, success rate, runs and steps. A step is a tool name with its argument names.
+- **What it returns.** A JSON array of matches, each with its id, name, version, lineage id, similarity, success rate, runs and steps. A step is a tool name with its argument names.
 - **What it never shows.** The intent, because it is text extracted from one user's question and the users of a scope would see each other's. Argument values are not there either.
 - **When it fails.** It returns `{"error":"unavailable"}`. The model learns only that the tool is unavailable, never why, so no store detail reaches the prompt. Arguments it cannot use give `{"error":"invalid_arguments"}`.
 

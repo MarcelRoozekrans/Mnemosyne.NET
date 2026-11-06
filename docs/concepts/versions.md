@@ -69,6 +69,28 @@ A new version starts with one run, so on its own record it would look unproven n
 
 Inheritance goes one level, to the parent only, because the parent is the version this one replaced. [Ranking](ranking.md#a-new-version-inherits-upward-only) has the formula and a worked example.
 
+## The lineage id
+
+Every match from a recall carries a `LineageId`. It is the id of the root of the version tree the match belongs to, found by following `ParentId` within the scope. A root's lineage id is its own id, so every version in a tree reports the same one, whatever its depth.
+
+```csharp
+var matches = await memory.RecallAsync(query, ct);
+if (!matches.IsSuccess) return;
+foreach (var match in matches.Value)
+{
+    // Versions of one procedure share a lineage id; unrelated procedures do not.
+    Console.WriteLine($"{match.Reasonlet.Id} belongs to lineage {match.LineageId}");
+}
+```
+
+The `LineageId` is also on the candidates a store hands to a selector, the first match's in the recall span, and in the `find_procedure` result. [Telemetry](../guides/telemetry.md) and the [chat pipeline](../guides/chat-pipeline.md) name the exact fields.
+
+The version label, such as `1.2`, is opaque. Use it to display a version and to order versions within one lineage. Don't parse it, and don't compare labels from different lineages: the number only counts versions inside its own tree.
+
+A lineage ends where a link is cut. When an erase removes a parent, the kept child becomes its own root, and its `LineageId` is its own id from then on.
+
+A selector can use the lineage id to treat versions as one procedure. The tests hold an illustration, `LineageVariantSelector`, which wraps the default selector and keeps the best match of each lineage. It shows that a variant strategy plugs in through `IReasonletSelector`, with nothing added to the library.
+
 ## What erasure does to a lineage
 
 Erasing a scope removes every Reasonlet in it, so whole lineages go. Erasing by subject is more selective: it removes that person's Reasonlets, with all their runs and feedback, and keeps everyone else's. A kept child of an erased Reasonlet is not erased with it. Instead, its link to its parent is cut, and it becomes the root of a lineage of its own.
