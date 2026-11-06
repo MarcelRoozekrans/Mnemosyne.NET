@@ -11,4 +11,11 @@ else
     benchmarks.Add(typeof(SearchBenchmarks));
 }
 
-BenchmarkSwitcher.FromTypes([.. benchmarks]).Run(args);
+// BenchmarkDotNet exits 0 even when a benchmark throws in setup, so read the summaries and fail the run here.
+var summaries = BenchmarkSwitcher.FromTypes([.. benchmarks]).Run(args).ToList();
+var failed = summaries.Count == 0 || summaries.Any(summary =>
+    summary.HasCriticalValidationErrors
+    || summary.BenchmarksCases.Length == 0
+    || summary.Reports.Length < summary.BenchmarksCases.Length
+    || summary.Reports.Any(report => !report.Success));
+return failed ? 1 : 0;

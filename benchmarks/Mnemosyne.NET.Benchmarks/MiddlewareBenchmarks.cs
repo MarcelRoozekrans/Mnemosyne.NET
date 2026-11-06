@@ -14,8 +14,14 @@ public class MiddlewareBenchmarks
 
     private sealed class NoOpChatClient : IChatClient
     {
-        public Task<ChatResponse> GetResponseAsync(IEnumerable<ChatMessage> messages, ChatOptions? options = null, CancellationToken cancellationToken = default) =>
-            Task.FromResult(Response);
+        /// <summary>Gets the number of messages in the last request, so setup can check the suggestion was injected.</summary>
+        public int LastMessageCount { get; private set; }
+
+        public Task<ChatResponse> GetResponseAsync(IEnumerable<ChatMessage> messages, ChatOptions? options = null, CancellationToken cancellationToken = default)
+        {
+            LastMessageCount = messages.Count();
+            return Task.FromResult(Response);
+        }
 
         public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
             IEnumerable<ChatMessage> messages, ChatOptions? options = null, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
@@ -66,6 +72,13 @@ public class MiddlewareBenchmarks
         var options = new ReasonletChatOptions { DefaultScope = BenchmarkData.Scope, Capture = false };
         _wrapped = Build(new StubMemory([]), options);
         _wrappedWithRecall = Build(new StubMemory(Matches()), options);
+
+        // A recall that injects nothing would make WrappedWithRecall measure the same as Wrapped, so fail the run instead.
+        _wrappedWithRecall.GetResponseAsync(Messages).GetAwaiter().GetResult();
+        if (_inner.LastMessageCount <= Messages.Length)
+        {
+            throw new InvalidOperationException("The middleware did not add the recalled suggestion to the request.");
+        }
     }
 
     private IChatClient Build(IReasonletMemory memory, ReasonletChatOptions options)
@@ -74,8 +87,9 @@ public class MiddlewareBenchmarks
         return new ChatClientBuilder(_inner).UseReasonlets(options).Build(services);
     }
 
+    // One match: the middleware uses only the first.
     private static ReasonletMatch[] Matches() =>
-        BenchmarkData.Candidates(2).Select((candidate, i) => new ReasonletMatch
+        BenchmarkData.Candidates(1).Select((candidate, i) => new ReasonletMatch
         {
             LineageId = candidate.LineageId,
             Reasonlet = candidate.Reasonlet,

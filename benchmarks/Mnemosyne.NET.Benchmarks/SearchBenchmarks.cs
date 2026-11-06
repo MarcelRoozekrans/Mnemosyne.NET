@@ -57,13 +57,28 @@ public class SearchBenchmarks
 
             parent = receipt.Value.Id;
         }
+
+        // A benchmark of an empty search measures nothing, so fail the run instead.
+        var probe = await _store.SearchAsync(_scope, _query, null, 10, CancellationToken.None);
+        if (probe.IsFailure || probe.Value.Count == 0)
+        {
+            throw new InvalidOperationException("The search returned no candidates after seeding.");
+        }
     }
 
     [GlobalCleanup]
     public async Task CleanupAsync()
     {
-        await _store.EraseAsync(new ReasonletErasure(_scope, null), CancellationToken.None);
-        await _dataSource.DisposeAsync();
+        // A setup that failed early leaves these unset; do not hide its exception behind a NullReferenceException.
+        if (_store is not null)
+        {
+            await _store.EraseAsync(new ReasonletErasure(_scope, null), CancellationToken.None);
+        }
+
+        if (_dataSource is not null)
+        {
+            await _dataSource.DisposeAsync();
+        }
     }
 
     [Benchmark]
