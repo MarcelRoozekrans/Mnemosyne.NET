@@ -157,6 +157,8 @@ Recall asks the store for the candidates nearest to the question's embedding, in
 - **Exact ties have no order.** Candidates at exactly the same distance come back in an unspecified order.
 - **The embedding needs a nonzero, finite norm.** Cosine similarity is undefined for an all-zero vector, and pgvector sums the squares in single precision, so they can overflow. The store answers `Validation` to a search or remember whose embedding has a zero norm or squares that overflow. Through `IReasonletMemory` you see `Unavailable` instead, because the facade checks the embedding it generated before it calls the store.
 
+After the nearest-neighbour select, the store walks up `parent_id` from each candidate, in the same transaction, to find its lineage root. A search that finds no rows skips the walk. The cost is the sum of the candidates' lineage depths, one index probe per step.
+
 Each candidate's metrics, its runs, successes and last success, come from a counter row the store keeps in step with every run it records, so search doesn't aggregate runs.
 
 ## Errors

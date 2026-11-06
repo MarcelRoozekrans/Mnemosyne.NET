@@ -63,8 +63,19 @@ public sealed class ReasonletSelector : IReasonletSelector
             var freshness = Clamp(Freshness(now - candidate.Metrics.LastExecutedAt, _options.FreshnessHalfLife));
             var total = Clamp(
                 (_options.SimilarityWeight * similarity) + (_options.SuccessRateWeight * successRate) + (_options.FreshnessWeight * freshness));
-            var evidence = new ReasonletEvidence(candidate.Metrics.Runs, candidate.Metrics.JudgedRuns, rate.UsesParentPrior);
-            scored.Add(new ReasonletMatch(candidate.Reasonlet, new ReasonletScore(similarity, successRate, freshness, total), evidence));
+            var evidence = new ReasonletEvidence
+            {
+                Runs = candidate.Metrics.Runs,
+                JudgedRuns = candidate.Metrics.JudgedRuns,
+                UsesParentPrior = rate.UsesParentPrior,
+            };
+            scored.Add(new ReasonletMatch
+            {
+                Reasonlet = candidate.Reasonlet,
+                Score = new ReasonletScore(similarity, successRate, freshness, total),
+                Evidence = evidence,
+                LineageId = candidate.LineageId,
+            });
         }
 
         scored.Sort(Compare);

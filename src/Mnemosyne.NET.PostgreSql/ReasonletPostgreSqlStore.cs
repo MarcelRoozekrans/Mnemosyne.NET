@@ -853,6 +853,16 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
         await using var transaction = await connection.BeginTransactionAsync(IsolationLevel.ReadCommitted, ct).ConfigureAwait(false);
         await ApplySearchSettingsAsync(connection, transaction, limit, ct).ConfigureAwait(false);
         var rows = await new ReasonletRepository(connection).SearchAsync(scope.Value, ToArray(embedding), intent, limit, transaction, ct).ConfigureAwait(false);
+        var roots = new Dictionary<Guid, Guid>();
+        if (rows.Count > 0)
+        {
+            var found = await new ReasonletRepository(connection).ResolveLineageRootsAsync(scope.Value, [.. rows.Select(r => r.Id)], transaction, ct).ConfigureAwait(false);
+            foreach (var link in found)
+            {
+                roots[link.StartId] = link.RootId;
+            }
+        }
+
         await transaction.CommitAsync(ct).ConfigureAwait(false);
         var candidates = new List<ReasonletCandidate>(rows.Count);
         foreach (var row in rows)
@@ -867,11 +877,14 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
                     row.ParentJudgedRuns!.Value,
                     row.ParentJudgedSuccesses!.Value)
                 : (ReasonletMetrics?)null;
-            candidates.Add(new ReasonletCandidate(
-                ToDefinition(row.ToReasonletRow()),
-                row.Similarity,
-                new ReasonletMetrics(row.Runs, row.Successes, row.LastSuccessAt, row.LastExecutedAt, row.JudgedRuns, row.JudgedSuccesses),
-                parent));
+            candidates.Add(new ReasonletCandidate
+            {
+                Reasonlet = ToDefinition(row.ToReasonletRow()),
+                Similarity = row.Similarity,
+                Metrics = new ReasonletMetrics(row.Runs, row.Successes, row.LastSuccessAt, row.LastExecutedAt, row.JudgedRuns, row.JudgedSuccesses),
+                ParentMetrics = parent,
+                LineageId = new ReasonletId(roots.TryGetValue(row.Id, out var root) ? root : row.Id),
+            });
         }
 
         return candidates;

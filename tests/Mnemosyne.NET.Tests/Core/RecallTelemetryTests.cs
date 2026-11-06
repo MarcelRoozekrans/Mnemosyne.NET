@@ -35,7 +35,13 @@ public sealed class RecallTelemetryTests
         new(store ?? _store, _selector, _generator, extractor, evaluator, new MnemosyneOptions());
 
     private static ReasonletCandidate Candidate(double similarity = 0.9) =>
-        new(TestData.Definition(), similarity, new ReasonletMetrics(0, 0, null, DateTimeOffset.UnixEpoch));
+        new()
+        {
+            LineageId = ReasonletId.New(),
+            Reasonlet = TestData.Definition(),
+            Similarity = similarity,
+            Metrics = new ReasonletMetrics(0, 0, null, DateTimeOffset.UnixEpoch),
+        };
 
     [Fact]
     public void TheSourceAndTheMeterUseThePublicNames()
@@ -73,8 +79,24 @@ public sealed class RecallTelemetryTests
         var candidates = new[] { Candidate(0.9), Candidate(0.8) };
         _store.SearchResult = Result<IReadOnlyList<ReasonletCandidate>, MnemosyneError>.Success(candidates);
         var chosen = candidates[1].Reasonlet with { Version = "2.1.0" };
+        var lineage = ReasonletId.New();
         _selector.Result = Result<IReadOnlyList<ReasonletMatch>, MnemosyneError>.Success(
-            [new(chosen, new ReasonletScore(0.8, 1, 1, 0.77), default), new(candidates[0].Reasonlet, new ReasonletScore(0.9, 0, 0, 0.45), default)]);
+            [
+                new()
+                {
+                    LineageId = lineage,
+                    Reasonlet = chosen,
+                    Score = new ReasonletScore(0.8, 1, 1, 0.77),
+                    Evidence = default,
+                },
+                new()
+                {
+                    LineageId = ReasonletId.New(),
+                    Reasonlet = candidates[0].Reasonlet,
+                    Score = new ReasonletScore(0.9, 0, 0, 0.45),
+                    Evidence = default,
+                },
+            ]);
         using var capture = new TelemetryCapture();
 
         var result = await Memory().RecallAsync(TestData.Query() with { Intent = "caller", Top = 4 }, Ct);
@@ -86,6 +108,7 @@ public sealed class RecallTelemetryTests
             [
                 new("mnemosyne.recall.candidates", 2),
                 new("mnemosyne.recall.chosen.id", chosen.Id.Value.ToString()),
+                new("mnemosyne.recall.chosen.lineage_id", lineage.Value.ToString()),
                 new("mnemosyne.recall.chosen.score", 0.77),
                 new("mnemosyne.recall.chosen.version", "2.1.0"),
                 new("mnemosyne.recall.intent_filtered", true),
@@ -99,6 +122,30 @@ public sealed class RecallTelemetryTests
         Assert.Equal(2, returned.Value);
         Assert.Empty(returned.Tags);
         Assert.Empty(capture.Of("mnemosyne.recall.empty"));
+    }
+
+    [Fact]
+    public async Task ASuccessfulRecallTagsTheChosenLineage()
+    {
+        var candidate = Candidate();
+        _store.SearchResult = Result<IReadOnlyList<ReasonletCandidate>, MnemosyneError>.Success([candidate]);
+        var lineage = ReasonletId.New();
+        _selector.Result = Result<IReadOnlyList<ReasonletMatch>, MnemosyneError>.Success(
+            [
+                new()
+                {
+                    LineageId = lineage,
+                    Reasonlet = candidate.Reasonlet,
+                    Score = new ReasonletScore(0.9, 0, 0, 0.45),
+                    Evidence = default,
+                },
+            ]);
+        using var capture = new TelemetryCapture();
+
+        await Memory().RecallAsync(TestData.Query(), Ct);
+
+        var activity = Single(capture);
+        Assert.Equal(lineage.Value.ToString(), activity.GetTagItem("mnemosyne.recall.chosen.lineage_id"));
     }
 
     [Fact]
@@ -336,7 +383,13 @@ public sealed class RecallTelemetryTests
         var query = TestData.Query() with { Scope = scope, Question = $"question-{token}", Intent = $"intent-{token}" };
         var definition = TestData.Definition() with { Scope = scope, Name = $"name-{token}", Intent = $"intent-{token}" };
         _store.SearchResult = Result<IReadOnlyList<ReasonletCandidate>, MnemosyneError>.Success(
-            [new ReasonletCandidate(definition, 0.9, new ReasonletMetrics(0, 0, null, DateTimeOffset.UnixEpoch))]);
+            [new ReasonletCandidate
+            {
+                LineageId = ReasonletId.New(),
+                Reasonlet = definition,
+                Similarity = 0.9,
+                Metrics = new ReasonletMetrics(0, 0, null, DateTimeOffset.UnixEpoch),
+            }]);
         using var capture = new TelemetryCapture();
 
         Assert.Single((await Memory().RecallAsync(query, Ct)).Value);

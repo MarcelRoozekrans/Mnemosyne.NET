@@ -102,6 +102,10 @@ prior = max(parent's success rate, 0.5)
 
 As the version runs, its own successes and failures outweigh the inherited prior, just as they outweigh the neutral one.
 
+### Versions of one lineage
+
+Recall ranks every version as a match of its own. Two versions of one procedure can both reach the result, each with its own score, and nothing in the default ranking merges them. Each match carries a `LineageId`, the id of the root of its version tree, so a selector can group versions of one lineage, for example to keep only the best of each. See [The lineage id](versions.md#the-lineage-id).
+
 ### Freshness
 
 Freshness halves every 30 days since the procedure last ran:

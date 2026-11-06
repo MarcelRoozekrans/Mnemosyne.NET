@@ -194,7 +194,7 @@ A recall that hits `RecallTimeout` stops waiting, even if the memory ignores the
 
 ### find_procedure
 
-Set `ExposeFindProcedure` and the model gets a `find_procedure` tool, bound to the call's scope, that looks up procedures that worked before for a question. It returns a JSON array of matches, each with its id, name, version, similarity, success rate, runs and steps. The intent is left out, because the users of a scope would see each other's question text. It returns `{"error":"unavailable"}` when the lookup fails. A tool of that name already in `ChatOptions.Tools` is kept. It is off by default because it adds a tool the model sees.
+Set `ExposeFindProcedure` and the model gets a `find_procedure` tool, bound to the call's scope, that looks up procedures that worked before for a question. It returns a JSON array of matches, each with its id, name, version, lineage id, similarity, success rate, runs and steps. The intent is left out, because the users of a scope would see each other's question text. It returns `{"error":"unavailable"}` when the lookup fails. A tool of that name already in `ChatOptions.Tools` is kept. It is off by default because it adds a tool the model sees.
 
 To manage the tool list yourself, create the function with `ReasonletTools.CreateFindProcedure(memory, scope)`. The middleware does not see lookups made through your own instance, so they are removed from captures but do not set a parent.
 

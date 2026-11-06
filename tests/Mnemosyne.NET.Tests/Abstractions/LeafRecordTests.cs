@@ -207,8 +207,8 @@ public class LeafRecordTests
     public void Evidence_Valid_Passes()
     {
         Assert.True(default(ReasonletEvidence).Validate().IsSuccess);
-        Assert.True(new ReasonletEvidence(5, 5, true).Validate().IsSuccess);
-        Assert.True(new ReasonletEvidence(5, 0, false).Validate().IsSuccess);
+        Assert.True(new ReasonletEvidence { Runs = 5, JudgedRuns = 5, UsesParentPrior = true }.Validate().IsSuccess);
+        Assert.True(new ReasonletEvidence { Runs = 5, JudgedRuns = 0, UsesParentPrior = false }.Validate().IsSuccess);
     }
 
     [Theory]
@@ -216,7 +216,7 @@ public class LeafRecordTests
     [InlineData(2, -1, "JudgedRuns")]
     [InlineData(2, 3, "JudgedRuns")]
     public void Evidence_Invalid_Fails(int runs, int judgedRuns, string path) =>
-        AssertInvalid(new ReasonletEvidence(runs, judgedRuns, false).Validate(), path);
+        AssertInvalid(new ReasonletEvidence { Runs = runs, JudgedRuns = judgedRuns, UsesParentPrior = false }.Validate(), path);
 
     [Fact]
     public void Metrics_LastExecutedAt_RoundTrips()
@@ -287,4 +287,28 @@ public class LeafRecordTests
         AssertInvalid(new ReasonletReview(TestData.Definition(), new ReasonletMetrics(1, 2, null, DateTimeOffset.UnixEpoch)).Validate(), "Metrics.Successes");
         AssertInvalid(new ReasonletReview(null!, metrics).Validate(), "Definition");
     }
+
+    [Fact]
+    public void ReasonletMatchValidateRejectsADefaultLineageId() =>
+        AssertInvalid(
+            new ReasonletMatch
+            {
+                Reasonlet = TestData.Definition(),
+                Score = default,
+                Evidence = default,
+                LineageId = default,
+            }.Validate(),
+            "LineageId");
+
+    [Fact]
+    public void ReasonletCandidateValidateRejectsADefaultLineageId() =>
+        AssertInvalid(
+            new ReasonletCandidate
+            {
+                Reasonlet = TestData.Definition(),
+                Similarity = 0.5,
+                Metrics = default,
+                LineageId = default,
+            }.Validate(),
+            "LineageId");
 }
