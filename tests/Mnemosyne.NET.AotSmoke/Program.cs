@@ -963,6 +963,10 @@ internal sealed class UnreachableStore : IReasonletStore
     public ValueTask<UnitResult<MnemosyneError>> RejectAsync(ReasonletScope scope, ReasonletId id, CancellationToken ct) => throw new InvalidOperationException();
 
     public ValueTask<Result<IReadOnlyList<ReasonletReview>, MnemosyneError>> ListPendingAsync(ReasonletScope scope, int limit, ReasonletId? after, CancellationToken ct) => throw new InvalidOperationException();
+
+    public ValueTask<Result<IReadOnlyList<ReasonletRecord>, MnemosyneError>> ListSubjectReasonletsAsync(ReasonletScope scope, string subjectId, int limit, ReasonletId? after, CancellationToken ct) => throw new InvalidOperationException();
+
+    public ValueTask<Result<IReadOnlyList<ReasonletExecutionRecord>, MnemosyneError>> ListSubjectRunsAsync(ReasonletScope scope, string subjectId, int limit, ExecutionId? after, CancellationToken ct) => throw new InvalidOperationException();
 }
 
 /// <summary>An embedding generator that throws, for a path that must stop before the embedding.</summary>
@@ -1104,6 +1108,10 @@ internal sealed class RecordingMemory(ReasonletGraph graph) : IReasonletMemory
     public ValueTask<UnitResult<MnemosyneError>> RejectAsync(ReasonletScope scope, ReasonletId id, CancellationToken ct) => throw new NotSupportedException();
 
     public ValueTask<Result<IReadOnlyList<ReasonletReview>, MnemosyneError>> ListPendingAsync(ReasonletScope scope, int limit, ReasonletId? after, CancellationToken ct) => throw new NotSupportedException();
+
+    public ValueTask<Result<IReadOnlyList<ReasonletRecord>, MnemosyneError>> ListSubjectReasonletsAsync(ReasonletScope scope, string subjectId, int limit, ReasonletId? after, CancellationToken ct) => throw new NotSupportedException();
+
+    public ValueTask<Result<IReadOnlyList<ReasonletExecutionRecord>, MnemosyneError>> ListSubjectRunsAsync(ReasonletScope scope, string subjectId, int limit, ExecutionId? after, CancellationToken ct) => throw new NotSupportedException();
 }
 
 /// <summary>A tool written by hand, so that nothing goes through reflection under native AOT.</summary>

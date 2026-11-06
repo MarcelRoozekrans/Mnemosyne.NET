@@ -1000,6 +1000,16 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
     }
 
     /// <inheritdoc />
+    public ValueTask<Result<IReadOnlyList<ReasonletRecord>, MnemosyneError>> ListSubjectReasonletsAsync(
+        ReasonletScope scope, string subjectId, int limit, ReasonletId? after, CancellationToken ct) =>
+        throw new NotImplementedException(); // Tasks 3 and 4
+
+    /// <inheritdoc />
+    public ValueTask<Result<IReadOnlyList<ReasonletExecutionRecord>, MnemosyneError>> ListSubjectRunsAsync(
+        ReasonletScope scope, string subjectId, int limit, ExecutionId? after, CancellationToken ct) =>
+        throw new NotImplementedException(); // Tasks 3 and 4
+
+    /// <inheritdoc />
     public ValueTask<UnitResult<MnemosyneError>> ApproveAsync(ReasonletScope scope, ReasonletId id, CancellationToken ct) =>
         StoreTelemetry.RunAsync("approve", activity => ApproveOperationAsync(scope, id, activity, ct));
 

@@ -148,6 +148,32 @@ internal sealed class FakeStore : IReasonletStore
         Listed = (scope, limit, after, ct);
         return ValueTask.FromResult(ListPendingResult);
     }
+
+    public (ReasonletScope Scope, string SubjectId, int Limit, ReasonletId? After, CancellationToken Ct)? ListedSubjectReasonlets { get; private set; }
+
+    public Result<IReadOnlyList<ReasonletRecord>, MnemosyneError> ListSubjectReasonletsResult { get; set; } =
+        Result<IReadOnlyList<ReasonletRecord>, MnemosyneError>.Success([]);
+
+    public ValueTask<Result<IReadOnlyList<ReasonletRecord>, MnemosyneError>> ListSubjectReasonletsAsync(
+        ReasonletScope scope, string subjectId, int limit, ReasonletId? after, CancellationToken ct)
+    {
+        Calls++;
+        ListedSubjectReasonlets = (scope, subjectId, limit, after, ct);
+        return ValueTask.FromResult(ListSubjectReasonletsResult);
+    }
+
+    public (ReasonletScope Scope, string SubjectId, int Limit, ExecutionId? After, CancellationToken Ct)? ListedSubjectRuns { get; private set; }
+
+    public Result<IReadOnlyList<ReasonletExecutionRecord>, MnemosyneError> ListSubjectRunsResult { get; set; } =
+        Result<IReadOnlyList<ReasonletExecutionRecord>, MnemosyneError>.Success([]);
+
+    public ValueTask<Result<IReadOnlyList<ReasonletExecutionRecord>, MnemosyneError>> ListSubjectRunsAsync(
+        ReasonletScope scope, string subjectId, int limit, ExecutionId? after, CancellationToken ct)
+    {
+        Calls++;
+        ListedSubjectRuns = (scope, subjectId, limit, after, ct);
+        return ValueTask.FromResult(ListSubjectRunsResult);
+    }
 }
 
 /// <summary>A selector that records what it was asked to rank and answers with a configurable result.</summary>
