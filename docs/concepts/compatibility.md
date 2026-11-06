@@ -7,6 +7,10 @@ sidebar_position: 6
 
 This page says what you can rely on across releases: the public API of the six packages, and the graph document format. Both follow [Semantic Versioning](https://semver.org).
 
+## Before 1.0.0
+
+The packages are at 0.x. Until 1.0.0 a minor release may break the public API, and release-please bumps the minor version for a breaking change. The baseline diff in the pull request is still the review gate: a reviewer sees every changed line. The rules below, where only a major release breaks, start at 1.0.0.
+
 ## The promise
 
 From 1.0.0, each package follows SemVer on its own version line.
@@ -38,7 +42,7 @@ The PublicApiAnalyzers rules run as build errors. A public member without a base
 
 ## How a breaking change is made
 
-A breaking change goes into a major release. The pull request that makes it shows the baseline diff, so a reviewer sees each removed or changed line in `PublicAPI.Shipped.txt` and the commit says `BREAKING CHANGE:` in its footer. A breaking change that is not in a major release is a bug, and the fix is to revert it.
+From 1.0.0, a breaking change goes into a major release. The pull request that makes it shows the baseline diff, so a reviewer sees each removed or changed line in `PublicAPI.Shipped.txt` and the commit says `BREAKING CHANGE:` in its footer. From 1.0.0, a breaking change that is not in a major release is a bug, and the fix is to revert it.
 
 ## Graph schema v1
 

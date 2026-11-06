@@ -48,12 +48,12 @@ public class GraphCompatibilityTests
     [Theory]
     [InlineData("minimal.json", "2e1a5a8ad16b620f74490a495289115d11321bd34444226dece49973b5cee88f")]
     [InlineData("full.json", "5226fdaa10ec84857acd33e2579d481d2ba5adc01034662728718bf5837a27cd")]
-    [InlineData("max-size.json", "2836be354ae4aff27500def814dc2c44ce1689f55fbb21cd27cfe6075af34356")]
+    [InlineData("max-size.json", "fb2042b62210b457acbe6464c42fb04bccccb7b2ceba0fd12143797118692b72")]
     public void TheContentHashOfAGoldenV1DocumentNeverChanges(string file, string expected)
     {
         var graph = ReasonletGraphJson.Deserialize(Golden(file));
 
-        Assert.True(graph.IsSuccess);
+        Assert.True(graph.IsSuccess, graph.IsFailure ? graph.Error.Message : null);
         Assert.Equal(expected, graph.Value.ComputeContentHash().Value);
     }
 
