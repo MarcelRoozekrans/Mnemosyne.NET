@@ -227,7 +227,7 @@ Design: [roadmap design](../superpowers/specs/2026-10-21-roadmap-design.md), bui
 **Plan:** `docs/superpowers/plans/2026-11-06-phase-4.6-data-protection-guide.md`
 **Completed:** 2026-11-06
 
-### Phase 4.7: Subject export [status: pending]
+### Phase 4.7: Subject export [status: active]
 **Goal:** Hosts can read and export everything a subject owns through the store port and facade (#69).
 **Surface:** Backend
 **HelpWanted:** no

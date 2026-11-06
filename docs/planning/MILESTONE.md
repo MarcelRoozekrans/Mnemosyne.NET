@@ -30,7 +30,7 @@ See the [milestone design](../superpowers/specs/2026-11-06-milestone-4-design.md
 4. Phase 4.4 — Public API review and freeze [complete]
 5. Phase 4.5 — Docs completeness [complete]
 6. Phase 4.6 — Data protection guide [complete]
-7. Phase 4.7 — Subject export [pending]
+7. Phase 4.7 — Subject export [active]
 8. Phase 4.8 — 1.0.0 release [pending]
 
 ## Audit History
