@@ -201,7 +201,7 @@ Design: [roadmap design](../superpowers/specs/2026-10-21-roadmap-design.md), bui
 **Goal:** BenchmarkDotNet suite for ranking, search and middleware overhead, running in CI.
 **Surface:** Infra
 **HelpWanted:** no
-**Plan:** _to be written_
+**Plan:** `docs/superpowers/plans/2026-11-06-phase-4.3-benchmarks-in-ci.md`
 
 ### Phase 4.4: Public API review and freeze [status: pending]
 **Goal:** Review the public API, adopt the AI.Sentinel fix (#58), add the PublicApiAnalyzers baselines and package validation, and set the graph schema compatibility policy.
