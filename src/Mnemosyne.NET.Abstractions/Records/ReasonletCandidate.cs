@@ -19,7 +19,7 @@ public sealed record ReasonletCandidate
     /// <summary>Gets the execution metrics of the Reasonlet's parent, or null for a root or a Reasonlet whose lineage link was cut.</summary>
     public ReasonletMetrics? ParentMetrics { get; init; }
 
-    /// <summary>Gets the id of the root of the Reasonlet's version tree, reached by <c>ParentId</c> within the scope. A root's is its own id, and so is that of a version whose parent was erased or lies outside the scope.</summary>
+    /// <summary>Gets the id of the root of the Reasonlet's version tree, reached by <c>ParentId</c> within the scope. A root's is its own id, and so is that of a version whose parent was erased.</summary>
     public required ReasonletId LineageId { get; init; }
 
     /// <summary>Validates the candidate.</summary>

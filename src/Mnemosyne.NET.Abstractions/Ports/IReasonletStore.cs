@@ -99,6 +99,8 @@ public interface IReasonletStore
     /// the runs an evaluator or a human judged and how many of them succeeded. Zero is the valid value for "nothing judged",
     /// so a store that leaves them at zero makes the default selector rank every run as one only the agent judged, at
     /// <c>ReasonletRankingOptions.AgentVerdictWeight</c>.
+    /// Each candidate must also carry <see cref="ReasonletCandidate.LineageId"/>, the id of the root reached by following <c>ParentId</c>
+    /// within the scope. A root's is its own id, and so is that of a version whose parent link was cut. A <c>default</c> id fails validation.
     /// Error codes: <see cref="MnemosyneErrorCode.Validation"/> when the limit is not positive or an argument breaks another invariant, such as a <c>default</c> scope,
     /// <see cref="MnemosyneErrorCode.Unavailable"/> when the backing store fails.
     /// </remarks>

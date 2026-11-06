@@ -83,11 +83,11 @@ foreach (var match in matches.Value)
 }
 ```
 
-The `LineageId` is also on the candidates a store hands to a selector, in the recall span and in the `find_procedure` result. [Telemetry](../guides/telemetry.md) and the [chat pipeline](../guides/chat-pipeline.md) name the exact fields.
+The `LineageId` is also on the candidates a store hands to a selector, the first match's in the recall span, and in the `find_procedure` result. [Telemetry](../guides/telemetry.md) and the [chat pipeline](../guides/chat-pipeline.md) name the exact fields.
 
 The version label, such as `1.2`, is opaque. Use it to display a version and to order versions within one lineage. Don't parse it, and don't compare labels from different lineages: the number only counts versions inside its own tree.
 
-A lineage ends where a link is cut. When an erase removes a parent, the kept child becomes its own root, and its `LineageId` is its own id from then on. The same holds for a version whose parent lies outside the scope.
+A lineage ends where a link is cut. When an erase removes a parent, the kept child becomes its own root, and its `LineageId` is its own id from then on.
 
 A selector can use the lineage id to treat versions as one procedure. The tests hold an illustration, `LineageVariantSelector`, which wraps the default selector and keeps the best match of each lineage. It shows that a variant strategy plugs in through `IReasonletSelector`, with nothing added to the library.
 
