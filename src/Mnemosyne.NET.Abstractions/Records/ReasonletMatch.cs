@@ -16,7 +16,7 @@ public sealed record ReasonletMatch
     /// <summary>Gets the evidence behind the score's success rate.</summary>
     public required ReasonletEvidence Evidence { get; init; }
 
-    /// <summary>Gets the id of the root of the Reasonlet's version tree, reached by <c>ParentId</c> within the scope. A root's is its own id, and so is that of a version whose parent was erased.</summary>
+    /// <summary>Gets the id of the root of the Reasonlet's version tree, reached by <c>ParentId</c> within the scope. A root's is its own id, and so is that of a version whose parent was erased or lies outside the scope.</summary>
     public required ReasonletId LineageId { get; init; }
 
     /// <summary>Validates the match.</summary>
