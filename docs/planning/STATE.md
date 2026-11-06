@@ -4,7 +4,7 @@
 
 ## Current Position
 - **Milestone:** 4, 1.0, active since 2026-11-06. Design: `docs/superpowers/specs/2026-11-06-milestone-4-design.md`, approved. Milestone 3 is archived in `docs/planning/milestones/milestone-3.md`.
-- **Branch:** `chore/start-milestone-4`, PR #62 open, Marcel merges. Another worktree may hold the branch: if `git checkout` refuses, reset a local branch to `origin/chore/start-milestone-4` and push `HEAD:chore/start-milestone-4`. Push with `git push origin chore/start-milestone-4:chore/start-milestone-4`, because `push.default` is `upstream`.
+- **Branch:** PR #62 is merged, so work starts from the latest `main`. One feature branch and PR per phase, never commit to `main`. Push with explicit `branch:branch` refspecs, because `push.default` is `upstream`.
 - **Phases:** 4.1 Test and sample hygiene, 4.2 Versioning and lineage API, 4.3 Benchmarks in CI, 4.4 Public API review and freeze, 4.5 Docs completeness, 4.6 Data protection guide, 4.7 1.0.0 release. All `pending`.
 - **Groomed:** all of milestone 4, phases 4.1 to 4.7, design approved and plan written for each. Nothing is built yet.
 
@@ -56,5 +56,5 @@
 - **Commits:** no Claude signature or session link, no nested parentheses in commit bodies, conventions in `docs/planning/CONVENTIONS.md`.
 
 ## Recommended Next Step
-1. Marcel merges PR #62, which now carries the grooming of all seven phases.
-2. Then `start-next-phase`, or `ready-check` to queue 4.1 to 4.6 for an unattended run. Phase 4.7 needs Marcel to merge PRs, so build it attended.
+1. Phases 4.1 to 4.6 are queued in `.claude/unattended-queue.json`, stacked 4.1, 4.2, 4.3, 4.4, 4.5, 4.6. Marcel starts the run and merges the phase PRs in order.
+2. Then `start-next-phase` for 4.7, attended: it needs Marcel to merge the final phase PR and the release PR.
