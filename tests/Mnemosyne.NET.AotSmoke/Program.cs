@@ -400,6 +400,13 @@ static async Task<int> FacadeSmoke(NpgsqlDataSource dataSource, ReasonletGraph g
         return 25;
     }
 
+    // The remembered Reasonlet is a root, so its lineage is its own id. This is the native-AOT run of the lineage query.
+    if (recalled.Value[0].LineageId != recalled.Value[0].Reasonlet.Id)
+    {
+        Console.Error.WriteLine($"Recall reported lineage {recalled.Value[0].LineageId} for a root with id {recalled.Value[0].Reasonlet.Id}");
+        return 26;
+    }
+
     // The evidence travels with every match: the remember is one run, judged by the agent alone, and there is no parent.
     if (recalled.Value[0].Evidence.Runs < 1
         || recalled.Value[0].Evidence != new ReasonletEvidence { Runs = 1, JudgedRuns = 0, UsesParentPrior = false })
