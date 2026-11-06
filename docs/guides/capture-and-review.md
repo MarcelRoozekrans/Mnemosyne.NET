@@ -144,7 +144,7 @@ A review screen reads the pending list from the start each time, because ids fol
 ## Limits
 
 - The guard is as good as its detectors. It sees the question, intent and name, and not the answer or the graph.
-- A throwing detector fails the capture closed as `Unavailable`, unless another detector blocked. See the section above.
+- Any detector failure AI.Sentinel reports fails the capture closed as `Unavailable`, unless another detector blocked. See the section above.
 - A capture the guard cannot inspect is lost. The chat pipeline does not retry it.
 - Only `RememberAsync` is guarded. `RecordExecutionAsync` and direct writes to the store are not, and the question and answer of a run pass to the evaluator unguarded.
 - The gate holds back new Reasonlets and new versions. It does not review runs.
