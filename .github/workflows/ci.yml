@@ -143,7 +143,7 @@ jobs:
   # Conventional commits, enforced mechanically: release-please derives versions from commit
   # messages. Lints only the commits a pull request adds, never the existing history.
   commitlint:
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' && github.actor != 'dependabot[bot]'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
