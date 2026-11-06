@@ -74,12 +74,18 @@ It also needs PostgreSQL 15 or later with pgvector 0.8.0 or later. There is no i
 | `Mnemosyne.NET.Abstractions` | The records, such as the capture, query and graph, and the interfaces: the `IReasonletMemory` facade and the store, selector and intent-extractor ports. |
 | `Mnemosyne.NET` | The default facade, `ReasonletMemory`, and the default ranking, `ReasonletSelector`, with the `AddMnemosyne` registration. |
 | `Mnemosyne.NET.PostgreSql` | The PostgreSQL and pgvector store, with its migrations and the `AddMnemosynePostgreSql` registration. |
+| `Mnemosyne.NET.Minos` | A Reasonlet evaluator that judges each run with a Minos.NET decision model. |
+| `Mnemosyne.NET.Sentinel` | A capture guard that runs AI.Sentinel's detectors over a capture before the Reasonlet is stored. |
+| `Mnemosyne.NET.AgentFramework` | Reasonlet memory for Microsoft Agent Framework agents. |
 
-Most applications reference `Mnemosyne.NET` and `Mnemosyne.NET.PostgreSql`, and get the abstractions with them. Embeddings come from any `IEmbeddingGenerator<string, Embedding<float>>` from Microsoft.Extensions.AI, so you pick the model. All three packages target .NET 10 and are compatible with native AOT and trimming.
+Most applications reference `Mnemosyne.NET` and `Mnemosyne.NET.PostgreSql`, and get the abstractions with them. Embeddings come from any `IEmbeddingGenerator<string, Embedding<float>>` from Microsoft.Extensions.AI, so you pick the model. All six packages target .NET 10 and are compatible with native AOT and trimming.
 
 ## Where to go next
 
 - [Getting started](getting-started.md) wires Mnemosyne into a console app, then remembers, recalls and records a run.
 - [Reasonlets](concepts/reasonlets.md) explains what is stored.
 - [Ranking](concepts/ranking.md) explains how recall orders its matches.
+- [The chat pipeline](guides/chat-pipeline.md) adds recall and background capture to a chat client.
+- [Capture, redaction and review](guides/capture-and-review.md) covers the capture guard, the AI.Sentinel adapter and the review gate.
+- [Agent Framework](guides/agent-framework.md) adds memory to an Agent Framework agent.
 - [Samples](samples.md) has a complete program you can run with only Docker and the .NET SDK.

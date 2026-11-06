@@ -5,7 +5,7 @@ sidebar_position: 1
 
 # Reasonlets
 
-A Reasonlet is one stored procedure: the question it answered, the steps that answered it, and the record of how well it works.
+A Reasonlet is one stored procedure: the steps that answered a question, an embedding of that question, and the record of how well it works.
 
 ```text
 Question → Procedure → Answer
@@ -15,7 +15,7 @@ Question → Procedure → Answer
 
 | Part | What it is |
 |---|---|
-| **Question** | The question the procedure answered, in the user's words. Mnemosyne embeds it, so recall can find the Reasonlet for a question worded differently. |
+| **Question** | The question the procedure answered, in the user's words. Mnemosyne embeds it and stores only the embedding, not the text, so recall can find the Reasonlet for a question worded differently. |
 | **Graph** | The procedure: a graph of steps that typically ends in an answer. |
 | **Intent** | A short label for the kind of problem, such as `refund`. Recall can filter on it. |
 | **Name** | A readable name for people and logs. |
@@ -77,7 +77,7 @@ A wrong filter would hide every right answer, so recall filters only on an inten
 
 When the capture has no `Name`, Mnemosyne takes the first line of the question that isn't blank, trims it, cuts it to 200 Unicode code points, and trims the end again. A cut never splits a character that takes two UTF-16 units, such as an emoji.
 
-The `UseReasonlets` chat middleware always sets a name, so its captures never take the question's first line. The name is the run's tools in order, joined by ` → `, such as `orders.get → payments.refund`, cut to 200 code points the same way. A recalled Reasonlet's name is shown to other users of the scope, and this keeps one user's question out of it.
+The `UseReasonlets` chat middleware always sets a name, so its captures never take the question's first line. The name is the run's tools in order, joined by ` → `, such as `orders_get → payments_refund`, cut to 200 code points the same way. A recalled Reasonlet's name is shown to other users of the scope, and this keeps one user's question out of it.
 
 The stored Reasonlet carries the resolved intent and name, so what recall returns is what remember decided.
 

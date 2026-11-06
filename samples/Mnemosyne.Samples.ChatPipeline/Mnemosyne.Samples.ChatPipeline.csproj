@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <!-- AI.Sentinel pulls in ZeroAlloc.Authorization, whose bundled generator would emit a registration type into this
+         exe. The sample declares no policies, so it uses the package's own switch, as Mnemosyne.NET.Sentinel does. -->
+    <ZeroAllocAuthorizationDisableBundledAnalyzer>true</ZeroAllocAuthorizationDisableBundledAnalyzer>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="AI.Sentinel" />
+    <PackageReference Include="Microsoft.Extensions.AI" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The offline stand-ins, shared by the samples: embeddings, a scripted chat client and a capture watcher. -->
+    <Compile Include="../Shared/HashingEmbeddingGenerator.cs" Link="HashingEmbeddingGenerator.cs" />
+    <Compile Include="../Shared/ScriptedChatClient.cs" Link="ScriptedChatClient.cs" />
+    <Compile Include="../Shared/CaptureRunWatcher.cs" Link="CaptureRunWatcher.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/Mnemosyne.NET.Abstractions/Mnemosyne.NET.Abstractions.csproj" />
+    <ProjectReference Include="../../src/Mnemosyne.NET/Mnemosyne.NET.csproj" />
+    <ProjectReference Include="../../src/Mnemosyne.NET.PostgreSql/Mnemosyne.NET.PostgreSql.csproj" />
+    <ProjectReference Include="../../src/Mnemosyne.NET.Sentinel/Mnemosyne.NET.Sentinel.csproj" />
+  </ItemGroup>
+
+</Project>

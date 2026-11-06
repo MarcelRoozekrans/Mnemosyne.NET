@@ -147,3 +147,128 @@ The sample checks all of this itself, and the repository's CI runs it. If a chan
 A word check is not how to judge real answers. In an application, implement `IReasonletEvaluator` over whatever decides whether an answer worked. The [custom evaluator guide](guides/custom-evaluator.md) shows the contract.
 
 The sample also uses the same offline embedding stand-in as store and recall, so [the same caveat applies](#the-embedding-generator-is-a-stand-in).
+
+## Chat pipeline
+
+[`samples/Mnemosyne.Samples.ChatPipeline`](https://github.com/MarcelRoozekrans/Mnemosyne.NET/tree/main/samples/Mnemosyne.Samples.ChatPipeline) is a console app that shows `UseReasonlets` with the review gate and AI.Sentinel. It needs only Docker and the .NET 10 SDK. It needs no API key and no model.
+
+### What it does
+
+1. Registers the PostgreSQL store, an embedding generator, AI.Sentinel with `AddMnemosyneSentinel`, the facade with `RequireReview = true` and the capture queue, and runs the migrations. Each chat client is `UseReasonlets` outside `UseFunctionInvocation`.
+2. Asks three questions through a scripted client that plays the model:
+   - **Act 1**, "How do I refund an order?": the model calls `orders_get` and `payments_refund`. The capture is stored as a pending review, and recall for the same question finds nothing;
+   - **Act 2**, "How do I refund an order for a customer?", after a person approves the Reasonlet: the first call to the model carries the recalled Reasonlet in its system text;
+   - **Act 3**, a question with a card number, through a client with another tool shape: AI.Sentinel blocks the capture.
+3. Waits for each capture to finish with a listener on the `mnemosyne.capture.runs` counter, so it never sleeps for a fixed time.
+4. Checks every reply, outcome and count shown below, and exits with code 1 if not.
+5. Erases the scope, so a run leaves nothing behind.
+
+### Run it
+
+Clone the repository, then from the sample's folder:
+
+```bash
+cd samples/Mnemosyne.Samples.ChatPipeline
+docker compose up -d --wait
+dotnet run
+docker compose down
+```
+
+The database listens on port 5434, so it can run next to the other samples' databases. To use another server, set the `MNEMOSYNE_SAMPLE_PG` environment variable to its connection string. The server needs PostgreSQL 15 or later with pgvector 0.8.0 or later.
+
+### The output
+
+```text
+Act 1. Ask "How do I refund an order?" and let the capture run in the background.
+  Capture outcome: new_reasonlet. Pending reviews: 1 ("orders_get → payments_refund"). Matches for the same question: 0.
+
+Act 2. A person approves the Reasonlet. Then ask "How do I refund an order for a customer?".
+  The first call to the model carried the recalled Reasonlet "orders_get → payments_refund" in its system text.
+  Capture outcome: execution_only. Pending reviews: 0.
+
+Act 3. Ask "Which invoice was paid with card 4111 1111 1111 1111?" through a client with a different tool shape (invoices_get).
+  Capture outcome: Blocked. Pending reviews: 0. Matches for the card question: 0.
+```
+
+- **Act 1.** The capture is a new procedure, so `RequireReview` stores it as pending. A pending Reasonlet is never recalled, so the same question finds no match.
+- **Act 2.** Once approved, the Reasonlet is recalled for a differently worded question and offered to the model. The run only adds an execution to it, so there is nothing new to review.
+- **Act 3.** The question holds a card number. The capture is blocked at the guard's default of `High`, so the store never sees it.
+
+The sample checks the `Blocked` outcome, that no review is pending and that recall for the question finds nothing. It also checks the other receipts of acts 1 and 2, and exits with code 1 if one differs.
+
+The rest was observed by hand and is not checked. AI.Sentinel's PII detector rates a card number Critical. This tool shape is new, so without the guard it would be a second pending review. The detector matches the digit pattern and does not check the Luhn sum: 16-digit numbers blocked whether or not the sum was valid, and numbers of 12, 15 and 17 digits did not block.
+
+The repository's CI runs the sample on every pull request to `main` and every push to `main`, so a change that broke these receipts would fail CI.
+
+### The model is a stand-in
+
+`ScriptedChatClient` is not a model. It replays a fixed script of tool calls and an answer. In an application, register a real chat model through Microsoft.Extensions.AI and build the pipeline on it, for example with an Ollama or OpenAI `IChatClient`:
+
+```csharp
+IChatClient client = new ChatClientBuilder(realClient)
+    .UseReasonlets(new ReasonletChatOptions { DefaultScope = new ReasonletScope("support") })
+    .UseFunctionInvocation()
+    .Build(provider);
+```
+
+The sample also uses the same offline embedding stand-in as store and recall, so [the same caveat applies](#the-embedding-generator-is-a-stand-in).
+
+## Agent Framework
+
+[`samples/Mnemosyne.Samples.AgentFramework`](https://github.com/MarcelRoozekrans/Mnemosyne.NET/tree/main/samples/Mnemosyne.Samples.AgentFramework) is a console app that shows `ReasonletContextProvider` on a Microsoft Agent Framework agent. It needs only Docker and the .NET 10 SDK. It needs no API key and no model.
+
+### What it does
+
+1. Registers the PostgreSQL store, an embedding generator, the facade with `AddMnemosyne` and the capture queue. The review gate is off. Then it runs the migrations.
+2. Builds a `ChatClientAgent` with a `ReasonletContextProvider` in its `AIContextProviders`, and runs it twice through a scripted client that plays the model:
+   - **Run 1**, "How do I refund an order?": the model calls `orders_get` and `payments_refund`. The capture stores a new Reasonlet, and the first call to the model carried no recalled Reasonlet;
+   - **Run 2**, "How do I refund an order for a customer?" on a fresh session: the provider recalls the Reasonlet and adds it to the run's instructions. The sample checks that the name is in the instructions of the first call and in no message of any role.
+3. After each run, waits for its capture with a listener on the `mnemosyne.capture.runs` counter, so it never sleeps for a fixed time. It checks every reply, outcome and count shown below along the way, and exits with code 1 if not.
+4. Erases the scope, so a run leaves nothing behind.
+
+### Run it
+
+Clone the repository, then from the sample's folder:
+
+```bash
+cd samples/Mnemosyne.Samples.AgentFramework
+docker compose up -d --wait
+dotnet run
+docker compose down
+```
+
+The database listens on port 5435, so it can run next to the other samples' databases. To use another server, set the `MNEMOSYNE_SAMPLE_PG` environment variable to its connection string. The server needs PostgreSQL 15 or later with pgvector 0.8.0 or later.
+
+### The output
+
+```text
+Run 1. Ask "How do I refund an order?" and let the capture run in the background.
+  Capture outcome: new_reasonlet. Matches for the same question: 1 ("orders_get → payments_refund", 1 run).
+
+Run 2. Ask "How do I refund an order for a customer?" on a fresh session.
+  The first call to the model carried the recalled Reasonlet "orders_get → payments_refund" in its instructions, and no message did.
+  Capture outcome: execution_only. Runs of the Reasonlet: 2.
+```
+
+- **Run 1.** Nothing is known yet, so the first call carries no recalled Reasonlet. The capture is a new procedure, and it is recallable at once because the review gate is off.
+- **Run 2.** The provider recalls the Reasonlet for a differently worded question and returns it as the run's instructions. The sample finds it in the instructions of the first call and in no message of any role. The run only adds an execution to the Reasonlet, which now has 2 runs.
+
+The sample scopes its Reasonlets with a `ScopeResolver` that returns a fixed scope. Without one, the provider uses the agent's name as the scope.
+
+The sample checks all of this itself and exits with code 1 if a receipt differs. What it asserts about the provider is the recall, which must find the Reasonlet for the second question, and the instructions, which must carry its name on the first call and in no message. A change to the provider that broke either would fail the run.
+
+The repository's CI runs the sample on every pull request to `main` and every push to `main`, so a change that broke the recall or the instructions would fail CI.
+
+### The model is a stand-in
+
+`ScriptedChatClient` is not a model. It replays a fixed script of tool calls and an answer. In an application, build the agent on a real chat client from Microsoft.Extensions.AI, for example an Ollama or OpenAI `IChatClient`:
+
+```csharp
+var agent = new ChatClientAgent(realClient, new ChatClientAgentOptions
+{
+    Name = "support-agent",
+    AIContextProviders = [new ReasonletContextProvider(provider, new ReasonletAgentOptions())],
+});
+```
+
+The sample also uses the same offline embedding stand-in as store and recall, so [the same caveat applies](#the-embedding-generator-is-a-stand-in).
