@@ -668,23 +668,6 @@ public sealed class TelemetryTests(PgVectorFixture fixture) : IClassFixture<PgVe
             Throw is { } thrown ? throw thrown : ValueTask.FromResult(Answer);
     }
 
-    /// <summary>An embedding generator that answers the same three-value embedding for every text.</summary>
-    private sealed class ConstantEmbeddings : IEmbeddingGenerator<string, Embedding<float>>
-    {
-        public Task<GeneratedEmbeddings<Embedding<float>>> GenerateAsync(
-            IEnumerable<string> values,
-            EmbeddingGenerationOptions? options = null,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult(new GeneratedEmbeddings<Embedding<float>>(
-                values.Select(_ => new Embedding<float>(new float[] { 1f, 0.5f, -0.25f }))));
-
-        public object? GetService(Type serviceType, object? serviceKey = null) => null;
-
-        public void Dispose()
-        {
-        }
-    }
-
     private static IEnumerable<string?> Flatten(IEnumerable<KeyValuePair<string, object?>> tags) =>
         tags.SelectMany(tag => new[] { tag.Key, Convert.ToString(tag.Value, System.Globalization.CultureInfo.InvariantCulture) });
 
