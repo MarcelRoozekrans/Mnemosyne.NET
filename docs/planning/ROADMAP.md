@@ -165,12 +165,13 @@ Design: [roadmap design](../superpowers/specs/2026-10-21-roadmap-design.md), bui
 **Plan:** `docs/superpowers/plans/2026-11-05-phase-3.6-agent-context-provider.md`
 **Completed:** 2026-11-05
 
-### Phase 3.7: Integration docs and samples [status: active]
+### Phase 3.7: Integration docs and samples [status: complete]
 **Goal:** Docsite pages and samples for each integration.
 **Surface:** Docs
 **HelpWanted:** no
 **Design:** `docs/superpowers/specs/2026-11-05-phase-3.7-integration-docs-samples-design.md`
 **Plan:** `docs/superpowers/plans/2026-11-05-phase-3.7-integration-docs-samples.md`
+**Completed:** 2026-11-06
 
 ## Milestone 4: 1.0 [status: pending]
 **Goal:** Ship 1.0.0: stable public API, versioning ready for variants, benchmarks in CI, complete docs.
