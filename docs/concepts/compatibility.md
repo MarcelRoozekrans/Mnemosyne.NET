@@ -13,13 +13,13 @@ The packages are at 0.x. Until 1.0.0 a minor release may break the public API, a
 
 ## The promise
 
-From 1.0.0, each package follows SemVer on its own version line.
+From 1.0.0, the six packages share one version number, and it follows SemVer. A breaking change in any package is a major release for all six.
 
 - A **patch** release fixes bugs. It changes no public member.
 - A **minor** release adds. It may add public types and members, and it never removes or changes one that shipped.
 - A **major** release may break. It is the only release that removes a public member, changes a signature, or changes behavior a caller could rely on.
 
-Package validation, which compares each package with its previous release at pack time, arrives with 1.0.0 as well. Until then the baseline files described below are the gate.
+Package validation, which compares each package with its previous release at pack time, is turned on after 1.0.0 is published, with 1.0.0 as its baseline. Until then the baseline files described below are the gate.
 
 ## What counts as public
 
@@ -37,7 +37,7 @@ The PublicApiAnalyzers rules run as build errors. A public member without a base
 ## How the baselines move
 
 1. A change that adds public API adds its lines to `PublicAPI.Unshipped.txt`.
-2. When a release is cut, the unshipped lines move to `PublicAPI.Shipped.txt`, and `Unshipped` is empty again.
+2. The maintainer moves the unshipped lines to `PublicAPI.Shipped.txt` in the release-please pull request, before merging it, so `Unshipped` is empty again once the release is cut. Release-please and the workflows do not do this.
 3. A shipped line is never edited or deleted in a minor or patch release.
 
 ## How a breaking change is made
