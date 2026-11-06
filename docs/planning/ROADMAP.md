@@ -213,7 +213,7 @@ Design: [roadmap design](../superpowers/specs/2026-10-21-roadmap-design.md), bui
 **Goal:** Concepts, the variants vision, and the Daedalus and Thalos guide.
 **Surface:** Docs
 **HelpWanted:** no
-**Plan:** _to be written_
+**Plan:** `docs/superpowers/plans/2026-11-06-phase-4.5-docs-completeness.md`
 
 ### Phase 4.6: Data protection guide [status: pending]
 **Goal:** How scope, provenance, redaction, erasure, retention and telemetry support a deployer's GDPR duties, and a short note on where the EU AI Act does and does not apply.
