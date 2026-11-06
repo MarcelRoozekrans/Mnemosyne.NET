@@ -6,7 +6,7 @@
 - **Milestone:** 4, 1.0, active since 2026-11-06. Design: `docs/superpowers/specs/2026-11-06-milestone-4-design.md`, approved.
 - **Built and on `main`:** phases 4.1 to 4.6, from the unattended run. #63 landed 4.1. #71 re-landed 4.2 to 4.6 with one commit per phase, because the stacked PRs had merged into their base branches. The plans are ticked, but ROADMAP.md and MILESTONE.md still show them as `pending`: `start-next-phase` step 1 closes them.
 - **Released:** 0.8.0 (#72) is on nuget.org for all five packages. It does not include the #58 fix.
-- **Open:** PR #74 on `fix/phase-4.4-sentinel-fail-closed` closes #58 (Phase 4.4 Tasks 1 and 2, parked in the run until AI.Sentinel 5.x reached NuGet). It bumps AI.Sentinel to 5.1.1 and fails closed when a scan is incomplete. All checks are green, it is behind main but merges cleanly, and Marcel merges it. Renovate #75 makes the same AI.Sentinel bump; close it after #74 merges.
+- **#58 fixed:** PR #74 merged as 3c59d29 and closed #58; Renovate #75 is closed. Release PR #77 (0.8.1) lists the fix. Marcel decides whether to ship 0.8.1 now or let 1.0.0 carry it.
 - **Branch:** start each phase from the latest `main`, one feature branch and PR per phase. Push with explicit `branch:branch` refspecs, because `push.default` is `upstream`.
 
 ## Decisions
@@ -34,7 +34,7 @@
 - Two more API-hiding proposals are in the 4.4 review notes, waiting on Marcel's call. Decide them with the #69 phase, before the freeze becomes 1.0.
 
 ## Blockers
-- #74 must merge before the 1.0.0 release, because the milestone's DoD needs #58 closed.
+- None.
 
 ## Notes
 - **Tests:** the repo refuses `dotnet test --filter`. Build first, then run the test exe with `-class <FQN>`.
