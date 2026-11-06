@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.1](https://github.com/MarcelRoozekrans/Mnemosyne.NET/compare/v0.8.0...v0.8.1) (2026-11-06)
+
+
+### Bug Fixes
+
+* fail closed when a Sentinel scan is incomplete ([#74](https://github.com/MarcelRoozekrans/Mnemosyne.NET/issues/74)) ([3c59d29](https://github.com/MarcelRoozekrans/Mnemosyne.NET/commit/3c59d29d11d61d48b747c02d45a784fab14ed1b3))
+
 ## [0.8.0](https://github.com/MarcelRoozekrans/Mnemosyne.NET/compare/v0.7.0...v0.8.0) (2026-11-06)
 
 
