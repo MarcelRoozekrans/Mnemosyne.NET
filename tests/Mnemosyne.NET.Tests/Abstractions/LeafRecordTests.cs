@@ -282,10 +282,13 @@ public class LeafRecordTests
     public void ReviewValidatesItsParts()
     {
         var metrics = new ReasonletMetrics(0, 0, null, DateTimeOffset.UnixEpoch);
-        Assert.True(new ReasonletReview(TestData.Definition(), metrics).Validate().IsSuccess);
-        AssertInvalid(new ReasonletReview(TestData.Definition() with { Name = " " }, metrics).Validate(), "Definition.Name");
-        AssertInvalid(new ReasonletReview(TestData.Definition(), new ReasonletMetrics(1, 2, null, DateTimeOffset.UnixEpoch)).Validate(), "Metrics.Successes");
-        AssertInvalid(new ReasonletReview(null!, metrics).Validate(), "Definition");
+        var review = new ReasonletReview { Definition = TestData.Definition(), Metrics = metrics };
+        Assert.True(review.Validate().IsSuccess);
+        AssertInvalid((review with { Definition = TestData.Definition() with { Name = " " } }).Validate(), "Definition.Name");
+        AssertInvalid(
+            (review with { Metrics = new ReasonletMetrics(1, 2, null, DateTimeOffset.UnixEpoch) }).Validate(),
+            "Metrics.Successes");
+        AssertInvalid((review with { Definition = null! }).Validate(), "Definition");
     }
 
     [Fact]

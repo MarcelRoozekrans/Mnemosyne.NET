@@ -698,7 +698,12 @@ public sealed class ReasonletMemoryTests
         using var cts = new CancellationTokenSource();
         var run = Run();
 
-        var receipt = new ReasonletRunReceipt(ExecutionId.New(), ReasonletVerdictSource.Agent, false);
+        var receipt = new ReasonletRunReceipt
+        {
+            Execution = ExecutionId.New(),
+            Source = ReasonletVerdictSource.Agent,
+            Success = false,
+        };
         _store.ExecutionResult = receipt;
 
         var result = await Memory().RecordExecutionAsync(run, cts.Token);
@@ -712,7 +717,12 @@ public sealed class ReasonletMemoryTests
     {
         var result = await Memory().RecordExecutionAsync(Run() with { Question = "question", Answer = AnswerSentinel }, CancellationToken.None);
 
-        Assert.Equal(new ReasonletRunReceipt(FakeStore.ExecutionIdentifier, ReasonletVerdictSource.Agent, false), result.Value);
+        Assert.Equal(new ReasonletRunReceipt
+        {
+            Execution = FakeStore.ExecutionIdentifier,
+            Source = ReasonletVerdictSource.Agent,
+            Success = false,
+        }, result.Value);
     }
 
     [Fact]
@@ -858,7 +868,12 @@ public sealed class ReasonletMemoryTests
         var result = await Memory(evaluator: evaluator).RecordExecutionAsync(run, cts.Token);
 
         // The judge says it worked, though the agent said it did not, and the receipt carries the judge's verdict.
-        Assert.Equal(new ReasonletRunReceipt(FakeStore.ExecutionIdentifier, ReasonletVerdictSource.Evaluator, true), result.Value);
+        Assert.Equal(new ReasonletRunReceipt
+        {
+            Execution = FakeStore.ExecutionIdentifier,
+            Source = ReasonletVerdictSource.Evaluator,
+            Success = true,
+        }, result.Value);
         Assert.Equal((run.Scope, run.Id, cts.Token), _store.Got);
         var request = Assert.Single(evaluator.Requests);
         Assert.Same(definition.Graph, request.Graph);

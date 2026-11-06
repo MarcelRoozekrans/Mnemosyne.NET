@@ -57,8 +57,16 @@ internal static class CaptureTestData
     public static ReasonletGraph GraphOf(IEnumerable<ChatMessage> messages) => ReasonletTranscript.ToGraph(messages).Value;
 
     public static Result Receipt(ReasonletCaptureKind kind = ReasonletCaptureKind.NewReasonlet) => Result.Success(
-        new ReasonletReceipt(
-            ReasonletId.New(), "1.0.0", new ExecutionId(Guid.NewGuid()), kind, ReasonletStatus.Active, ReasonletVerdictSource.Agent, true));
+        new ReasonletReceipt
+        {
+            Id = ReasonletId.New(),
+            Version = "1.0.0",
+            Execution = new ExecutionId(Guid.NewGuid()),
+            Kind = kind,
+            Status = ReasonletStatus.Active,
+            Source = ReasonletVerdictSource.Agent,
+            Success = true,
+        });
 
     public static FakeReasonletMemory Memory(ReasonletCaptureKind kind = ReasonletCaptureKind.NewReasonlet)
     {

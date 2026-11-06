@@ -47,19 +47,21 @@ internal static class Entries
         ReasonletId? parentId = null,
         ReadOnlyMemory<float>? embedding = null,
         ReasonletProvenance? provenance = null,
-        ReasonletOutcome? outcome = null) => new(
-        new ReasonletCapture
+        ReasonletOutcome? outcome = null) => new ReasonletStoreEntry
         {
-            Scope = scope,
-            Question = "How do I find it?",
-            Graph = graph ?? Graph(),
-            Outcome = outcome ?? new ReasonletOutcome(true, TimeSpan.FromMilliseconds(1234.5), 0.75),
-            Provenance = provenance ?? Provenance(),
-            ParentId = parentId,
-        },
-        "find-it",
-        "Find it",
-        embedding ?? new float[] { 1f, 0.5f, -0.25f });
+            Capture = new ReasonletCapture
+            {
+                Scope = scope,
+                Question = "How do I find it?",
+                Graph = graph ?? Graph(),
+                Outcome = outcome ?? new ReasonletOutcome(true, TimeSpan.FromMilliseconds(1234.5), 0.75),
+                Provenance = provenance ?? Provenance(),
+                ParentId = parentId,
+            },
+            Intent = "find-it",
+            Name = "Find it",
+            Embedding = embedding ?? new float[] { 1f, 0.5f, -0.25f },
+        };
 
     public static async Task<T> ScalarAsync<T>(NpgsqlDataSource dataSource, string sql, params object[] parameters)
     {
