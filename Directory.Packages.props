@@ -5,6 +5,7 @@
   <ItemGroup>
     <PackageVersion Include="AdoNet.Async" Version="1.5.6" />
     <PackageVersion Include="AdoNet.Async.Adapters" Version="1.5.6" />
+    <PackageVersion Include="BenchmarkDotNet" Version="0.15.8" />
     <PackageVersion Include="AI.Sentinel" Version="4.2.0" />
     <PackageVersion Include="JsonSchema.Net" Version="9.6.0" />
     <PackageVersion Include="Microsoft.Agents.AI" Version="1.24.0" />

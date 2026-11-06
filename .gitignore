@@ -27,3 +27,6 @@ artifacts/
 node_modules/
 /build/
 /.docusaurus/
+
+# BenchmarkDotNet output
+BenchmarkDotNet.Artifacts/
