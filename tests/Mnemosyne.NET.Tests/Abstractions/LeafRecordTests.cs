@@ -291,12 +291,24 @@ public class LeafRecordTests
     [Fact]
     public void ReasonletMatchValidateRejectsADefaultLineageId() =>
         AssertInvalid(
-            new ReasonletMatch { Reasonlet = TestData.Definition(), Score = default, Evidence = default, LineageId = default }.Validate(),
+            new ReasonletMatch
+            {
+                Reasonlet = TestData.Definition(),
+                Score = default,
+                Evidence = default,
+                LineageId = default,
+            }.Validate(),
             "LineageId");
 
     [Fact]
     public void ReasonletCandidateValidateRejectsADefaultLineageId() =>
         AssertInvalid(
-            new ReasonletCandidate { Reasonlet = TestData.Definition(), Similarity = 0.5, Metrics = default, LineageId = default }.Validate(),
+            new ReasonletCandidate
+            {
+                Reasonlet = TestData.Definition(),
+                Similarity = 0.5,
+                Metrics = default,
+                LineageId = default,
+            }.Validate(),
             "LineageId");
 }

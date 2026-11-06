@@ -168,7 +168,13 @@ public sealed class ServiceCollectionTests
         var first = new MnemosyneOptions { CandidatePool = 5, Ranking = new ReasonletRankingOptions { MinSimilarity = 0.9 } };
         var second = new MnemosyneOptions { CandidatePool = 9, Ranking = new ReasonletRankingOptions { MinSimilarity = 0.1 } };
         _store.SearchResult = ZeroAlloc.Results.Result<IReadOnlyList<ReasonletCandidate>, MnemosyneError>.Success(
-            [new ReasonletCandidate { LineageId = ReasonletId.New(), Reasonlet = TestData.Definition(), Similarity = 0.5, Metrics = new ReasonletMetrics(0, 0, null, DateTimeOffset.UnixEpoch) }]);
+            [new ReasonletCandidate
+            {
+                LineageId = ReasonletId.New(),
+                Reasonlet = TestData.Definition(),
+                Similarity = 0.5,
+                Metrics = new ReasonletMetrics(0, 0, null, DateTimeOffset.UnixEpoch),
+            }]);
         using var provider = Services().AddMnemosyne(first).AddMnemosyne(second).BuildServiceProvider();
 
         var result = await provider.GetRequiredService<IReasonletMemory>().RecallAsync(TestData.Query(), CancellationToken.None);
