@@ -3,7 +3,7 @@
 Records and interfaces for Reasonlets, procedural memory for .NET agents.
 
 The package holds the record types (scope, provenance, outcome, graph, capture, query, receipt) and the contracts.
-`IReasonletMemory` is the caller-facing facade: remember, recall, record executions and feedback, erase.
+`IReasonletMemory` is the caller-facing facade: remember, recall, record executions and feedback, erase, and list a data subject's Reasonlets and runs with `ListSubjectReasonletsAsync` and `ListSubjectRunsAsync`.
 A recall returns `ReasonletMatch` records, built from the `ReasonletCandidate` records a store supplies, with a `ReasonletEvidence` on each match. All three are init-only records, and the candidate and the match carry a `LineageId`: the id of the root of the version tree, its own id for a root.
 The ports are `IReasonletStore`, `IReasonletSelector`, `IIntentExtractor` and `IReasonletEvaluator`; they carry no dependencies beyond ZeroAlloc.Results.
 Implementations come in `Mnemosyne.NET` and `Mnemosyne.NET.PostgreSql`.
