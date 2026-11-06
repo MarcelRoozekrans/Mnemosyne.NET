@@ -9,7 +9,7 @@ This guide is for the author of an application that hosts agents and wants them 
 
 ## The two hosts
 
-- [Thalos.NET](https://github.com/MarcelRoozekrans/Thalos.NET) is a Hermes-style, ZeroAlloc-native agent framework for .NET on Microsoft Agent Framework, with AI.Sentinel security and MCP tools.
+- [Thalos.NET](https://github.com/MarcelRoozekrans/Thalos.NET) is an agent framework for .NET on Microsoft Agent Framework, with AI.Sentinel security and MCP tools. Its repository description also calls it "Hermes-style, ZeroAlloc-native", which this guide does not rely on.
 - [Daedalus.NET](https://github.com/MarcelRoozekrans/Daedalus.NET) is a .NET 10 application for AI-driven task execution. A person plans work on a task board and starts a manufacture run for a task. Its agents run on Thalos.NET.
 
 Neither repository's public README mentions Mnemosyne today. This guide therefore says what Mnemosyne offers a host, and leaves the wiring in each host to that host's repository.
@@ -43,7 +43,7 @@ Whether a Thalos or Daedalus release wires Mnemosyne in, and under which registr
 ## A checklist for a new host
 
 - **Scope and subject per run.** Return a stable scope, usually the tenant, and the person's id as the subject when erasure by person matters. A renamed agent starts a new scope under the default resolver. See [Scopes and subjects](../concepts/scopes-and-subjects.md).
-- **A judge.** Without an evaluator the agent's own verdict counts for every run, and an agent-only verdict weighs less in ranking. Pick [Minos](minos-evaluator.md) or [a chat model](chat-evaluator.md), or [write your own](custom-evaluator.md). [Evaluation](../concepts/evaluation.md) says who decides whether a run worked.
+- **A judge.** Without an evaluator the agent's own verdict counts for every run unless a person gives feedback, and an agent-only verdict weighs less in ranking. Pick [Minos](minos-evaluator.md) or [a chat model](chat-evaluator.md), or [write your own](custom-evaluator.md). [Evaluation](../concepts/evaluation.md) says who decides whether a run worked.
 - **A capture guard.** `Mnemosyne.NET.Sentinel` runs AI.Sentinel's detectors over a capture before it is stored. A detector that throws is skipped and its result counts as clean, so read [A known limit: a throwing detector](capture-and-review.md#a-known-limit-a-throwing-detector) before relying on the guard.
 - **Retention.** Schedule `PruneAsync` with a `ReasonletRetention` policy that fits how long runs are useful. See [Retention](data-lifecycle.md#retention).
 - **Telemetry.** Add the `Mnemosyne.NET` activity source and meter to your OpenTelemetry setup. See [Telemetry](telemetry.md#turn-it-on) and its [Privacy](telemetry.md#privacy) section.

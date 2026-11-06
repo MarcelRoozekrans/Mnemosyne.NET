@@ -5,11 +5,11 @@ sidebar_position: 7
 
 # Variants
 
-A variant is one version of a procedure, seen next to its siblings. This page says what Mnemosyne 1.0 ships for variants, what it leaves to the host, and which direction comes after 1.0.
+A variant is one version of a procedure, seen next to the other versions of its lineage. This page says what Mnemosyne 1.0 ships for variants, what it leaves to the host, and which direction comes after 1.0.
 
 ## What a variant is
 
-When an agent improves a procedure, Mnemosyne stores the improvement as a new version with the old one as its parent. Versions that descend from one root form a lineage. Two versions of the same parent are siblings, and each of them is a variant of the other. [Versions and lineage](versions.md) describes how a version is made and numbered.
+When an agent improves a procedure, Mnemosyne stores the improvement as a new version with the old one as its parent. Versions that descend from one root form a lineage, and every version in it is a variant of the others. Two versions of the same parent are siblings, the common case, and each is a variant of the other. [Versions and lineage](versions.md) describes how a version is made and numbered.
 
 ## What 1.0 ships
 
