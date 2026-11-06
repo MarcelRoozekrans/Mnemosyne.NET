@@ -55,6 +55,12 @@ public class SearchBenchmarks
                 throw new InvalidOperationException($"Seeding entry {i} failed: {receipt.Error.Message}");
             }
 
+            var expected = parent is null ? ReasonletCaptureKind.NewReasonlet : ReasonletCaptureKind.NewVersion;
+            if (receipt.Value.Kind != expected)
+            {
+                throw new InvalidOperationException($"Entry {i} was stored as {receipt.Value.Kind}, expected {expected}.");
+            }
+
             parent = receipt.Value.Id;
         }
 
@@ -63,6 +69,12 @@ public class SearchBenchmarks
         if (probe.IsFailure || probe.Value.Count == 0)
         {
             throw new InvalidOperationException("The search returned no candidates after seeding.");
+        }
+
+        // At depth above 1 some hit must be a later version, or the benchmark does not measure the lineage walk.
+        if (LineageDepth > 1 && probe.Value.All(hit => hit.LineageId.Value == hit.Reasonlet.Id.Value))
+        {
+            throw new InvalidOperationException("No search hit is a later version, so no version chain formed.");
         }
     }
 

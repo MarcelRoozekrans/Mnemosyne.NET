@@ -28,10 +28,10 @@ Add `--job short` for a quick pass. Results land in `BenchmarkDotNet.Artifacts`,
 export MNEMOSYNE_BENCH_PG='Host=localhost;Port=5432;Username=postgres;Password=postgres;Database=mnemosyne_bench'
 ```
 
-Use a database of its own: the benchmark migrates the `mnemosyne` schema with 256 dimensions. Without the variable the search benchmark is skipped and the other two run.
+Use a database of its own: the benchmark migrates the `mnemosyne` schema with 256 dimensions. Without the variable the search benchmark is skipped and the other two run. Running only the search benchmark without the variable exits 1, because nothing was measured.
 
 ## In CI
 
-The `Benchmarks` workflow runs on pull requests that touch `src`, `benchmarks` or `Directory.Packages.props`, and on demand. It writes the report to the job summary and uploads the results as an artifact.
+The `Benchmarks` workflow runs on pull requests that touch `src`, `benchmarks`, `Directory.Packages.props` or the workflow file itself, and on demand. It writes the report to the job summary and uploads the results as an artifact.
 
 It reports and does not gate. A hosted runner is shared, so a number from one run says little about a number from another. To compare two versions, run both on the same machine, one after the other.

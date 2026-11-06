@@ -89,11 +89,11 @@ public class MiddlewareBenchmarks
 
     // One match: the middleware uses only the first.
     private static ReasonletMatch[] Matches() =>
-        BenchmarkData.Candidates(1).Select((candidate, i) => new ReasonletMatch
+        BenchmarkData.Candidates(1).Select(candidate => new ReasonletMatch
         {
             LineageId = candidate.LineageId,
             Reasonlet = candidate.Reasonlet,
-            Score = new ReasonletScore(0.9 - (i * 0.1), 0.8, 0.7, 0.8 - (i * 0.1)),
+            Score = new ReasonletScore(0.9, 0.8, 0.7, 0.8),
             Evidence = new ReasonletEvidence { Runs = 10, JudgedRuns = 4, UsesParentPrior = false },
         }).ToArray();
 

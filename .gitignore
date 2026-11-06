@@ -30,3 +30,4 @@ node_modules/
 
 # BenchmarkDotNet output
 BenchmarkDotNet.Artifacts/
+benchmarks/results/

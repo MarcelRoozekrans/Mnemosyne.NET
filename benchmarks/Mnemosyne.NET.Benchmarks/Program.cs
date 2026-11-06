@@ -12,6 +12,8 @@ else
 }
 
 // BenchmarkDotNet exits 0 even when a benchmark throws in setup, so read the summaries and fail the run here.
+// No summaries also counts as a failure: a filter that matches nothing, such as the search benchmark without its
+// database, measures nothing.
 var summaries = BenchmarkSwitcher.FromTypes([.. benchmarks]).Run(args).ToList();
 var failed = summaries.Count == 0 || summaries.Any(summary =>
     summary.HasCriticalValidationErrors
