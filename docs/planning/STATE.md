@@ -6,10 +6,10 @@
 - **Milestone:** 4, 1.0, active since 2026-11-06. Design: `docs/superpowers/specs/2026-11-06-milestone-4-design.md`, approved. Milestone 3 is archived in `docs/planning/milestones/milestone-3.md`.
 - **Branch:** `chore/start-milestone-4`, PR #62 open, Marcel merges. Another worktree may hold the branch: if `git checkout` refuses, reset a local branch to `origin/chore/start-milestone-4` and push `HEAD:chore/start-milestone-4`. Push with `git push origin chore/start-milestone-4:chore/start-milestone-4`, because `push.default` is `upstream`.
 - **Phases:** 4.1 Test and sample hygiene, 4.2 Versioning and lineage API, 4.3 Benchmarks in CI, 4.4 Public API review and freeze, 4.5 Docs completeness, 4.6 Data protection guide, 4.7 1.0.0 release. All `pending`.
-- **Groomed:** phases 4.1, 4.2 and 4.3, design approved and plan written for each. Phases 4.4 to 4.7 have no design and no plan.
+- **Groomed:** phases 4.1 to 4.4, design approved and plan written for each. Phases 4.5 to 4.7 have no design and no plan.
 
 ## Grooming
-Grooming: milestone 4, next phase 4.4
+Grooming: milestone 4, next phase 4.5
 
 ## Decisions taken in the milestone 4 brainstorm
 - **Follow-ups:** #58 goes into phase 4.4, because it changes shipped behaviour and must settle before the freeze. #55 and #57 are phase 4.1, first. #55 and #57 close in 4.1, #58 in 4.4.
@@ -29,8 +29,14 @@ Grooming: milestone 4, next phase 4.4
 - **Report-only benchmarks.** `benchmarks/Mnemosyne.NET.Benchmarks`, not packable, outside the AOT gate. Three classes: ranking, chat middleware overhead, PostgreSQL search with lineage depth 1 and 20. The search class runs only when `MNEMOSYNE_BENCH_PG` is set, and the CI job supplies a pgvector service container. The workflow never fails on a number.
 - **4.3 builds on 4.2.** Its `**Builds on:**` line names `LineageId` and the init-only candidate and match. `guard 4.3:` is already in 4.2's `## Checks`. Phase 4.4 must keep the benchmark project compiling, since it is in the solution.
 
+## Decisions taken while grooming 4.4
+- **Records:** `ReasonletReceipt`, `ReasonletReview`, `ReasonletStoreEntry` and `ReasonletRunReceipt` become init-only. `ReasonletSuggestion`, `ReasonletAgentScope`, `ReasonletCallScope` and `ReasonletErasure` stay positional.
+- **Lock:** PublicApiAnalyzers with `PublicAPI.Shipped.txt` per packable `src` project, rules as errors, plus a CI step asserting each baseline is non-empty. **`EnablePackageValidation` is deferred to phase 4.7** with `PackageValidationBaselineVersion` 1.0.0, because no pre-1.0 baseline is meaningful. 4.7 must add it.
+- **Graph schema v1 is frozen.** Any change means `schemaVersion` 2 with its own schema file. Policy page `docs/concepts/compatibility.md` (written in 4.4), golden-document test.
+- **#58** is closed by 4.4: AI.Sentinel 5.x bump, an incomplete scan maps to `Unavailable` unless a detector blocked.
+- Guard 4.4 is in 4.2's plan. Impact analysis for 4.4 exists. 4.5 may link to `compatibility.md`.
+
 ## Open Decisions
-- Phase 4.4 is `Surface: Refactor`, so its pre-plan hook, `refactor-analysis`, must run there. The one for 4.1 ran: `docs/superpowers/specs/2026-11-06-phase-4.1-test-sample-hygiene-impact-analysis.md`.
 - Rulings from phase 3.2 that are still open:
   - a remember call cancelled before it starts emits `mnemosyne.guard` with outcome `exception`;
   - `Abandon` takes `Task?`.
@@ -39,8 +45,8 @@ Grooming: milestone 4, next phase 4.4
 - None.
 
 ## Notes
-- **groom-milestone is mid-run.** The next session re-enters it at step 3: groom 4.4 to 4.7 in roadmap order, one design and one plan per phase, one commit per phase, no execution. Brainstorm each phase interactively: lead with a concrete proposal and use AskUserQuestion with labelled options and one marked Recommended. The scheduled `**Builds on:**` lines matter here: 4.4 builds on 4.2's API, so name 4.2's interfaces from its plan, and add the guard check to 4.2's plan.
-- **Inputs for 4.4:** #58 in full (bump AI.Sentinel past 4.2.0, an incomplete scan maps to `Unavailable`, update the test `AThrowingDetectorIsSkippedAndTheCaptureIsAllowed`, fix the stale 4.1.1 references, update the two "known gap" paragraphs). Repo has no PublicApiAnalyzers, package validation or BenchmarkDotNet yet.
+- **groom-milestone is mid-run.** The next session re-enters it at step 3: groom 4.5 to 4.7 in roadmap order, one design and one plan per phase, one commit per phase, no execution. Brainstorm each phase interactively: lead with a concrete proposal and use AskUserQuestion with labelled options and one marked Recommended. The scheduled `**Builds on:**` lines matter here: 4.4 builds on 4.2's API, so name 4.2's interfaces from its plan, and add the guard check to 4.2's plan.
+- **Inputs for 4.4, done:** #58 in full (bump AI.Sentinel past 4.2.0, an incomplete scan maps to `Unavailable`, update the test `AThrowingDetectorIsSkippedAndTheCaptureIsAllowed`, fix the stale 4.1.1 references, update the two "known gap" paragraphs). Repo has no PublicApiAnalyzers, package validation or BenchmarkDotNet yet.
 - **Release:** `release-please-config.json` has `bump-minor-pre-major`. Phase 4.7 must check how a 1.0.0 bump is triggered, for example a `Release-As` footer, and never tags by hand.
 - **Git trap:** `push.default` is `upstream`. Use explicit `branch:branch` refspecs.
 - **Tests:** the repo refuses `dotnet test --filter`. Build first, then run the test exe with `-class <FQN>`.
@@ -49,6 +55,6 @@ Grooming: milestone 4, next phase 4.4
 - **Commits:** no Claude signature or session link, no nested parentheses in commit bodies, conventions in `docs/planning/CONVENTIONS.md`.
 
 ## Recommended Next Step
-1. Run `resume-work`, which routes to `groom-milestone` because of the Grooming section, at step 3 for phase 4.4.
-2. Groom 4.4 to 4.7. Then clear the Grooming section, commit and push, and tell Marcel milestone 4 is groomed.
+1. Run `resume-work`, which routes to `groom-milestone` because of the Grooming section, at step 3 for phase 4.5.
+2. Groom 4.5 to 4.7. Then clear the Grooming section, commit and push, and tell Marcel milestone 4 is groomed.
 3. Marcel merges PR #62 whenever ready; grooming commits ride on the same branch.
