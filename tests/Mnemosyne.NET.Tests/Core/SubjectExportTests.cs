@@ -48,53 +48,37 @@ public sealed class SubjectExportTests
     }
 
     [Fact]
-    public async Task RejectsInvalidArgumentsWithoutCallingTheStore()
+    public async Task RejectsInvalidArgumentsWithTheExactMessageWithoutCallingTheStore()
     {
         var memory = Memory();
         var ct = CancellationToken.None;
+        const string LimitText = "limit: must be from 1 to 100";
+        const string BlankText = "subjectId: must not be blank";
+        (string Case, ReasonletScope Scope, string? Subject, int Limit, bool DefaultCursor, string Expected)[] cases =
+        [
+            ("default scope", default, "s", 10, false, "scope.Value: must not be blank"),
+            ("null subject", Scope, null, 10, false, BlankText),
+            ("empty subject", Scope, "", 10, false, BlankText),
+            ("blank subject", Scope, "  ", 10, false, BlankText),
+            ("limit zero", Scope, "s", 0, false, LimitText),
+            ("limit above the maximum", Scope, "s", 101, false, LimitText),
+            ("default cursor", Scope, "s", 10, true, "after: must not be the default id"),
+        ];
 
-        var results = new List<MnemosyneError>
+        foreach (var (name, scope, subject, limit, defaultCursor, expected) in cases)
         {
-            (await memory.ListSubjectReasonletsAsync(default, "s", 10, null, ct)).Error,
-            (await memory.ListSubjectReasonletsAsync(Scope, null!, 10, null, ct)).Error,
-            (await memory.ListSubjectReasonletsAsync(Scope, "", 10, null, ct)).Error,
-            (await memory.ListSubjectReasonletsAsync(Scope, "  ", 10, null, ct)).Error,
-            (await memory.ListSubjectReasonletsAsync(Scope, "s", 0, null, ct)).Error,
-            (await memory.ListSubjectReasonletsAsync(Scope, "s", 101, null, ct)).Error,
-            (await memory.ListSubjectReasonletsAsync(Scope, "s", 10, default(ReasonletId), ct)).Error,
-            (await memory.ListSubjectRunsAsync(default, "s", 10, null, ct)).Error,
-            (await memory.ListSubjectRunsAsync(Scope, null!, 10, null, ct)).Error,
-            (await memory.ListSubjectRunsAsync(Scope, "", 10, null, ct)).Error,
-            (await memory.ListSubjectRunsAsync(Scope, "  ", 10, null, ct)).Error,
-            (await memory.ListSubjectRunsAsync(Scope, "s", 0, null, ct)).Error,
-            (await memory.ListSubjectRunsAsync(Scope, "s", 101, null, ct)).Error,
-            (await memory.ListSubjectRunsAsync(Scope, "s", 10, default(ExecutionId), ct)).Error,
-        };
+            var reasonlets = await memory.ListSubjectReasonletsAsync(scope, subject!, limit, defaultCursor ? default(ReasonletId) : null, ct);
+            var runs = await memory.ListSubjectRunsAsync(scope, subject!, limit, defaultCursor ? default(ExecutionId) : null, ct);
 
-        Assert.All(results, error => Assert.Equal(MnemosyneErrorCode.Validation, error.Code));
+            Assert.True(reasonlets.IsFailure, name);
+            Assert.True(runs.IsFailure, name);
+            Assert.Equal(MnemosyneErrorCode.Validation, reasonlets.Error.Code);
+            Assert.Equal(MnemosyneErrorCode.Validation, runs.Error.Code);
+            Assert.Equal(expected, reasonlets.Error.Message);
+            Assert.Equal(expected, runs.Error.Message);
+        }
+
         Assert.Equal(0, _store.Calls);
-    }
-
-    [Theory]
-    [InlineData(0)]
-    [InlineData(101)]
-    public async Task PinsTheLimitText(int limit)
-    {
-        var reasonlets = await Memory().ListSubjectReasonletsAsync(Scope, "s", limit, null, CancellationToken.None);
-        var runs = await Memory().ListSubjectRunsAsync(Scope, "s", limit, null, CancellationToken.None);
-
-        Assert.Equal("limit: must be from 1 to 100", reasonlets.Error.Message);
-        Assert.Equal("limit: must be from 1 to 100", runs.Error.Message);
-    }
-
-    [Fact]
-    public async Task PinsTheSubjectAndCursorTexts()
-    {
-        var memory = Memory();
-        var ct = CancellationToken.None;
-
-        Assert.Equal("subjectId: must not be blank", (await memory.ListSubjectRunsAsync(Scope, " ", 10, null, ct)).Error.Message);
-        Assert.Equal("after: must not be the default id", (await memory.ListSubjectRunsAsync(Scope, "s", 10, default(ExecutionId), ct)).Error.Message);
     }
 
     [Fact]

@@ -487,12 +487,17 @@ static async Task<int> FacadeSmoke(NpgsqlDataSource dataSource, ReasonletGraph g
     var exportedReasonlets = await memory.ListSubjectReasonletsAsync(scope, "smoke-export", 10, null, ct);
     var exportedRuns = await memory.ListSubjectRunsAsync(scope, "smoke-export", 10, null, ct);
     if (exportedReasonlets.IsFailure || exportedReasonlets.Value.Count != 1
-        || exportedReasonlets.Value[0].Definition.Id != exported.Value.Id
-        || exportedRuns.IsFailure || exportedRuns.Value.Count != 1
+        || exportedReasonlets.Value[0].Definition.Id != exported.Value.Id)
+    {
+        Console.Error.WriteLine($"The subject export returned the wrong Reasonlets: {(exportedReasonlets.IsFailure ? exportedReasonlets.Error.Message : $"{exportedReasonlets.Value.Count} Reasonlets")}");
+        return 62;
+    }
+
+    if (exportedRuns.IsFailure || exportedRuns.Value.Count != 1
         || exportedRuns.Value[0].ReasonletId != exported.Value.Id)
     {
-        Console.Error.WriteLine($"The subject export returned the wrong pages: {(exportedReasonlets.IsFailure ? exportedReasonlets.Error.Message : exportedRuns.IsFailure ? exportedRuns.Error.Message : $"{exportedReasonlets.Value.Count} Reasonlets, {exportedRuns.Value.Count} runs")}");
-        return 62;
+        Console.Error.WriteLine($"The subject export returned the wrong runs: {(exportedRuns.IsFailure ? exportedRuns.Error.Message : $"{exportedRuns.Value.Count} runs")}");
+        return 64;
     }
 
     var exportErased = await memory.EraseAsync(new ReasonletErasure(scope, "smoke-export"), ct);

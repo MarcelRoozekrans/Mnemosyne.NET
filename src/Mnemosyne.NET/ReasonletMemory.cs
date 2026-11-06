@@ -426,9 +426,7 @@ public sealed class ReasonletMemory : IReasonletMemory
     {
         var valid = Check.All(
             () => Check.Nested(scope.Validate(), nameof(scope)),
-            () => limit is < 1 or > MaxPendingLimit
-                ? new MnemosyneError(MnemosyneErrorCode.Validation, $"limit: must be from 1 to {MaxPendingLimit}")
-                : UnitResult<MnemosyneError>.Success(),
+            () => ValidateListLimit(limit),
             () => after is { } cursor ? Check.NotDefault(cursor, nameof(after)) : UnitResult<MnemosyneError>.Success());
         return valid.IsFailure
             ? ValueTask.FromResult(Result<IReadOnlyList<ReasonletReview>, MnemosyneError>.Failure(valid.Error))
@@ -440,9 +438,7 @@ public sealed class ReasonletMemory : IReasonletMemory
         ReasonletScope scope, string subjectId, int limit, ReasonletId? after, CancellationToken ct)
     {
         var valid = Check.All(
-            () => Check.Nested(scope.Validate(), nameof(scope)),
-            () => Check.NotBlank(subjectId, nameof(subjectId)),
-            () => ValidateExportLimit(limit),
+            () => ValidateSubjectList(scope, subjectId, limit),
             () => after is { } cursor ? Check.NotDefault(cursor, nameof(after)) : UnitResult<MnemosyneError>.Success());
         return valid.IsFailure
             ? ValueTask.FromResult(Result<IReadOnlyList<ReasonletRecord>, MnemosyneError>.Failure(valid.Error))
@@ -454,16 +450,19 @@ public sealed class ReasonletMemory : IReasonletMemory
         ReasonletScope scope, string subjectId, int limit, ExecutionId? after, CancellationToken ct)
     {
         var valid = Check.All(
-            () => Check.Nested(scope.Validate(), nameof(scope)),
-            () => Check.NotBlank(subjectId, nameof(subjectId)),
-            () => ValidateExportLimit(limit),
+            () => ValidateSubjectList(scope, subjectId, limit),
             () => after is { } cursor ? Check.NotDefault(cursor, nameof(after)) : UnitResult<MnemosyneError>.Success());
         return valid.IsFailure
             ? ValueTask.FromResult(Result<IReadOnlyList<ReasonletExecutionRecord>, MnemosyneError>.Failure(valid.Error))
             : _store.ListSubjectRunsAsync(scope, subjectId, limit, after, ct);
     }
 
-    private static UnitResult<MnemosyneError> ValidateExportLimit(int limit) =>
+    private static UnitResult<MnemosyneError> ValidateSubjectList(ReasonletScope scope, string subjectId, int limit) => Check.All(
+        () => Check.Nested(scope.Validate(), nameof(scope)),
+        () => Check.NotBlank(subjectId, nameof(subjectId)),
+        () => ValidateListLimit(limit));
+
+    private static UnitResult<MnemosyneError> ValidateListLimit(int limit) =>
         limit is < 1 or > MaxPendingLimit
             ? new MnemosyneError(MnemosyneErrorCode.Validation, $"limit: must be from 1 to {MaxPendingLimit}")
             : UnitResult<MnemosyneError>.Success();
