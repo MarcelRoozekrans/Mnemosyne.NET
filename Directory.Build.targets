@@ -5,7 +5,7 @@
     PublicAPI.Shipped.txt and PublicAPI.Unshipped.txt (the analyzer package picks both up by
     convention). Tests, samples, benchmarks and the AOT smoke app are not analysed.
   -->
-  <ItemGroup Condition="'$(IsPackable)' != 'false' And $(MSBuildProjectDirectory.StartsWith('$(MSBuildThisFileDirectory)src'))">
+  <ItemGroup Condition="'$(IsPackable)' != 'false' And $(MSBuildProjectDirectory.StartsWith('$(MSBuildThisFileDirectory)src$([System.IO.Path]::DirectorySeparatorChar)'))">
     <PackageReference Include="Microsoft.CodeAnalysis.PublicApiAnalyzers" PrivateAssets="all" />
   </ItemGroup>
 
