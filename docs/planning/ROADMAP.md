@@ -195,7 +195,7 @@ Design: [roadmap design](../superpowers/specs/2026-10-21-roadmap-design.md), bui
 **Goal:** Settle the versioning and lineage API so variant selection fits later.
 **Surface:** Backend
 **HelpWanted:** no
-**Plan:** _to be written_
+**Plan:** `docs/superpowers/plans/2026-11-06-phase-4.2-versioning-lineage-api.md`
 
 ### Phase 4.3: Benchmarks in CI [status: pending]
 **Goal:** BenchmarkDotNet suite for ranking, search and middleware overhead, running in CI.
