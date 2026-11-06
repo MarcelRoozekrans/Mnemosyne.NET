@@ -1,15 +1,12 @@
-# Session State — 2026-11-05
+# Session State — 2026-11-06
 
-**Date:** 2026-11-05
+**Date:** 2026-11-06
 
 ## Current Position
-- **Milestone:** 3, Off-the-shelf integrations. Active since 2026-10-30. Design: `docs/superpowers/specs/2026-10-30-milestone-3-design.md`.
-- **Phase:** 3.7, integration docs and samples. **Implementation done, PR open**, on branch `feat/phase-3.7-integration-docs-samples`. ROADMAP still shows it `active`: run `complete-phase` after the PR checks are green.
-  - Design: `docs/superpowers/specs/2026-11-05-phase-3.7-integration-docs-samples-design.md`. Plan: `docs/superpowers/plans/2026-11-05-phase-3.7-integration-docs-samples.md`, all 9 tasks done and ticked.
-  - Each task had a task review and a fix round for its findings, Minors included. An Opus whole-branch review followed, then one fix wave with a scoped re-review. The pre-push review passed: `docs/superpowers/reviews/pre-push-review-2026-11-05-2255.md`.
-  - main at 0.7.0 is merged into the branch. Unit 1582, PostgreSQL 313, the docsite builds, and all four samples exit 0 against Docker.
-- **Next phase:** milestone 3 has no phase left after 3.7. After the merge, run `audit-milestone` then `complete-milestone` for milestone 3.
-- **Previous phase:** 3.6 merged as PR #54 and is released in 0.7.0.
+- **Milestone:** 3, Off-the-shelf integrations, complete on 2026-11-06. Audit: `docs/superpowers/reviews/2026-11-06-milestone-3-audit.md`, PASS. No tag: release-please owns releases.
+- **Phase:** 3.7, integration docs and samples, merged as PR #59 and marked complete. Pre-push review: `docs/superpowers/reviews/pre-push-review-2026-11-05-2255.md`.
+- **Next:** milestone 4 (1.0) is pending. Run `new-milestone` once the close PR for milestone 3 is merged.
+- The 3.7 README and docs changes ship with the next release: PR #59 was titled `docs:`, so release-please opened no release PR for it.
 
 ## Delivered in 3.7
 - Two offline, self-checking, CI-gated samples: `samples/Mnemosyne.Samples.ChatPipeline` (port 5434) and `samples/Mnemosyne.Samples.AgentFramework` (port 5435). Shared stand-ins in `samples/Shared`: `ScriptedChatClient` and `CaptureRunWatcher`, both unit-tested.
@@ -41,6 +38,5 @@
 - **Docker:** the samples need Docker and PostgreSQL with pgvector.
 
 ## Recommended Next Step
-1. Wait for the PR checks, both codecov checks included. Marcel merges.
-2. After the merge, check that the PR's `feat:` and `docs:` entries appear in the release-please PR.
-3. Run `complete-phase` for 3.7, then `audit-milestone` for milestone 3.
+1. Marcel merges the PR that closes milestone 3.
+2. Run `new-milestone` for milestone 4, 1.0.

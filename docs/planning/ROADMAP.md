@@ -105,18 +105,19 @@ Design: [roadmap design](../superpowers/specs/2026-10-21-roadmap-design.md), bui
 **Plan:** `docs/superpowers/plans/2026-10-28-phase-2.5-evaluation-docs.md`
 **Completed:** 2026-10-28
 
-## Milestone 3: Off-the-shelf integrations [status: active]
+## Milestone 3: Off-the-shelf integrations [status: complete]
 **Goal:** Any `IChatClient` app or Agent Framework agent gets recall, capture and learning without writing Mnemosyne-specific code.
 **Started:** 2026-10-30
+**Completed:** 2026-11-06
 **Design:** [milestone 3 design](../superpowers/specs/2026-10-30-milestone-3-design.md)
 **Definition of Done:**
-- [ ] A tool-calling chat transcript becomes a tool-shape graph, stored as a new Reasonlet, a new version or an execution of the recalled one
-- [ ] Captured content passes a redaction hook; a flagged capture is dropped and leaves a telemetry event without the content
-- [ ] With the review gate on, captured procedures stay out of recall until approved, and can be approved or rejected
-- [ ] `Mnemosyne.NET.Sentinel` runs AI.Sentinel's detectors as the redaction hook
-- [ ] `UseReasonlets()` recalls, injects the best match, and captures and judges in the background in an `IChatClient` pipeline; the `find_procedure` tool is shipped
-- [ ] An Agent Framework `AIContextProvider` gives an agent the same recall and capture over its thread
-- [ ] Docs and samples cover every integration
+- [x] A tool-calling chat transcript becomes a tool-shape graph, stored as a new Reasonlet, a new version or an execution of the recalled one
+- [x] Captured content passes a redaction hook; a flagged capture is dropped and leaves a telemetry event without the content
+- [x] With the review gate on, captured procedures stay out of recall until approved, and can be approved or rejected
+- [x] `Mnemosyne.NET.Sentinel` runs AI.Sentinel's detectors as the redaction hook
+- [x] `UseReasonlets()` recalls, injects the best match, and captures and judges in the background in an `IChatClient` pipeline; the `find_procedure` tool is shipped
+- [x] An Agent Framework `AIContextProvider` gives an agent the same recall and capture over its thread
+- [x] Docs and samples cover every integration
 
 ### Phase 3.1: Capture [status: complete]
 **Goal:** Turn a chat transcript's tool calls into a tool-shape graph: the tools called, in order, with argument names but not values. Capture it as a new Reasonlet, a new version or an execution of the recalled one.
@@ -165,12 +166,13 @@ Design: [roadmap design](../superpowers/specs/2026-10-21-roadmap-design.md), bui
 **Plan:** `docs/superpowers/plans/2026-11-05-phase-3.6-agent-context-provider.md`
 **Completed:** 2026-11-05
 
-### Phase 3.7: Integration docs and samples [status: active]
+### Phase 3.7: Integration docs and samples [status: complete]
 **Goal:** Docsite pages and samples for each integration.
 **Surface:** Docs
 **HelpWanted:** no
 **Design:** `docs/superpowers/specs/2026-11-05-phase-3.7-integration-docs-samples-design.md`
 **Plan:** `docs/superpowers/plans/2026-11-05-phase-3.7-integration-docs-samples.md`
+**Completed:** 2026-11-06
 
 ## Milestone 4: 1.0 [status: pending]
 **Goal:** Ship 1.0.0: stable public API, versioning ready for variants, benchmarks in CI, complete docs.
