@@ -26,10 +26,12 @@ namespace Mnemosyne.NET.Sentinel;
 /// propagate.
 /// </para>
 /// <para>
-/// An incomplete scan fails closed. When a detector throws and no detector blocked, AI.Sentinel 5.1.1 reports the failure
-/// through <c>PipelineResult.Failures</c> and <c>IsComplete</c>, and the guard returns <c>Unavailable</c> with the count of
-/// failed detectors as the detail, never a detector's message. A blocking detection wins over a failed detector. A timeout
-/// through the facade's guard timeout takes the same <c>Unavailable</c> handling.
+/// An incomplete scan fails closed. When a detector fails and no detector blocked, AI.Sentinel 5.1.1 reports the failure
+/// through <c>PipelineResult.Failures</c> and <c>IsComplete</c>, and the guard returns <c>Unavailable</c> with the message
+/// "The Sentinel scan did not complete." and the count of failed detectors as the detail, never a detector's message. This
+/// covers any failure AI.Sentinel reports: a detector that throws or times out, texts or examples it could not embed, and a
+/// review that failed. A blocking detection wins over a failed detector. The facade keeps only the code of this error, so
+/// <c>RememberAsync</c> fails with <c>Unavailable</c> and the facade's own message, as it does for a timeout.
 /// </para>
 /// </remarks>
 public sealed class SentinelCaptureGuard : ICaptureGuard
@@ -101,7 +103,7 @@ public sealed class SentinelCaptureGuard : ICaptureGuard
             return Result<CaptureVerdict, MnemosyneError>.Failure(new MnemosyneError(
                 MnemosyneErrorCode.Unavailable,
                 "The Sentinel scan did not complete.",
-                $"{result.Failures.Count} detectors failed"));
+                result.Failures.Count == 1 ? "1 detector failed" : $"{result.Failures.Count} detectors failed"));
         }
 
         return Result<CaptureVerdict, MnemosyneError>.Success(CaptureVerdict.Allow(_options.GuardName));

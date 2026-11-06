@@ -108,18 +108,26 @@ public sealed class SentinelFacadeTests
         Assert.Equal(MnemosyneErrorCode.Unavailable, result.Error.Code);
         Assert.Equal(0, _store.Calls);
         Assert.Single(failures);
-        Assert.DoesNotContain("The detector's endpoint is down.", result.Error.Detail ?? "", StringComparison.Ordinal);
+        Assert.Equal("The capture guard failed.", result.Error.Message);
+        Assert.Null(result.Error.Detail);
     }
 
     [Fact]
     public async Task ABlockingDetectionWinsOverAFailedDetector()
     {
+        var failures = new List<string>();
         var result = await Remember(
-            "Why does api_key=abc123def456ghi789 fail?", configure: o => o.AddDetector<ThrowingDetector>()); // gitleaks:allow - fake credential fixture
+            "Why does api_key=abc123def456ghi789 fail?", // gitleaks:allow - fake credential fixture
+            configure: o =>
+            {
+                o.AddDetector<ThrowingDetector>();
+                o.OnDetectorFailure = failures.Add;
+            });
 
         Assert.Equal(MnemosyneErrorCode.Blocked, result.Error.Code);
         Assert.Equal("ai-sentinel/SEC-02", result.Error.Detail);
         Assert.Equal(0, _store.Calls);
+        Assert.Single(failures);
     }
 
     [Fact]
