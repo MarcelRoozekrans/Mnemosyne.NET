@@ -64,6 +64,7 @@ The guard, the evaluator and the Agent Framework provider are optional. Without 
 | Judge runs | [Evaluation](evaluation.md) | [Judging runs with Minos](../guides/minos-evaluator.md) or [with a chat model](../guides/chat-evaluator.md) |
 | Scope per tenant | [Scopes and subjects](scopes-and-subjects.md) | [Agent Framework](../guides/agent-framework.md#scope-and-subject) or [the chat pipeline](../guides/chat-pipeline.md#scope) |
 | Erase a person | [Scopes and subjects](scopes-and-subjects.md#erasure) | [Data lifecycle](../guides/data-lifecycle.md#erasure) |
+| Meet data-protection duties | [Scopes and subjects](scopes-and-subjects.md#subjects) | [Data protection](../guides/data-protection.md) |
 | Block or review captures | [Reasonlets](reasonlets.md#status-active-and-pendingreview) | [Capture, redaction and review](../guides/capture-and-review.md) |
 | Keep versions of a procedure | [Versions and lineage](versions.md) and [Variants](variants.md) | [Capture, redaction and review](../guides/capture-and-review.md#the-three-outcomes) |
 | Plan an upgrade | [Compatibility](compatibility.md) | [PostgreSQL store](../guides/postgresql.md#upgrading) |

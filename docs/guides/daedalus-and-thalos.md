@@ -48,4 +48,5 @@ Whether a Thalos or Daedalus release wires Mnemosyne in, and under which registr
 - **Retention.** Schedule `PruneAsync` with a `ReasonletRetention` policy that fits how long runs are useful. See [Retention](data-lifecycle.md#retention).
 - **Telemetry.** Add the `Mnemosyne.NET` activity source and meter to your OpenTelemetry setup. See [Telemetry](telemetry.md#turn-it-on) and its [Privacy](telemetry.md#privacy) section.
 - **Erasure.** Decide who may call `EraseAsync`, and test an erase of a scope and of a subject against a copy of your data. See [Erasure](data-lifecycle.md#erasure) and [What erasure leaves on disk](postgresql.md#what-erasure-leaves-on-disk).
+- **Data protection.** [Data protection](data-protection.md) lists the duties a deployer carries and what Mnemosyne does not do for you.
 - **Upgrades.** Stop every instance of the old release before you migrate. See [Upgrading](postgresql.md#upgrading) and [Compatibility](../concepts/compatibility.md).
