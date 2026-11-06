@@ -74,6 +74,7 @@ public sealed class ReasonletSelector : IReasonletSelector
                 Reasonlet = candidate.Reasonlet,
                 Score = new ReasonletScore(similarity, successRate, freshness, total),
                 Evidence = evidence,
+                LineageId = candidate.LineageId,
             });
         }
 

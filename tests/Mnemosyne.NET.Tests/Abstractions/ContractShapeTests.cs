@@ -164,7 +164,7 @@ public class ContractShapeTests
     {
         Assert.False(typeof(ReasonletMatch).IsValueType);
         Assert.Equal(
-            ["ReasonletDefinition Reasonlet", "ReasonletScore Score", "ReasonletEvidence Evidence"],
+            ["ReasonletDefinition Reasonlet", "ReasonletScore Score", "ReasonletEvidence Evidence", "ReasonletId LineageId"],
             InitShape(typeof(ReasonletMatch)));
     }
 

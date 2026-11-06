@@ -51,6 +51,7 @@ internal static class CaptureTestData
         Reasonlet = TestData.Definition() with { Id = ReasonletId.New(), Graph = graph ?? TestData.Graph() },
         Score = default,
         Evidence = default,
+        LineageId = ReasonletId.New(),
     };
 
     public static ReasonletGraph GraphOf(IEnumerable<ChatMessage> messages) => ReasonletTranscript.ToGraph(messages).Value;

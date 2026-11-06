@@ -1076,6 +1076,7 @@ internal sealed class RecordingMemory(ReasonletGraph graph) : IReasonletMemory
                 },
                 Score = new ReasonletScore(0.9, 0.8, 1, 0.9),
                 Evidence = new ReasonletEvidence { Runs = 3, JudgedRuns = 0, UsesParentPrior = false },
+                LineageId = MatchId,
             },
         ];
         return ValueTask.FromResult<Result<IReadOnlyList<ReasonletMatch>, MnemosyneError>>(Result<IReadOnlyList<ReasonletMatch>, MnemosyneError>.Success(matches));

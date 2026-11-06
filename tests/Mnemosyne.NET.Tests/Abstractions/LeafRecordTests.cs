@@ -287,4 +287,16 @@ public class LeafRecordTests
         AssertInvalid(new ReasonletReview(TestData.Definition(), new ReasonletMetrics(1, 2, null, DateTimeOffset.UnixEpoch)).Validate(), "Metrics.Successes");
         AssertInvalid(new ReasonletReview(null!, metrics).Validate(), "Definition");
     }
+
+    [Fact]
+    public void ReasonletMatchValidateRejectsADefaultLineageId() =>
+        AssertInvalid(
+            new ReasonletMatch { Reasonlet = TestData.Definition(), Score = default, Evidence = default, LineageId = default }.Validate(),
+            "LineageId");
+
+    [Fact]
+    public void ReasonletCandidateValidateRejectsADefaultLineageId() =>
+        AssertInvalid(
+            new ReasonletCandidate { Reasonlet = TestData.Definition(), Similarity = 0.5, Metrics = default, LineageId = default }.Validate(),
+            "LineageId");
 }

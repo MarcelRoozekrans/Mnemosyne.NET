@@ -132,6 +132,7 @@ public sealed class ReasonletPromptFormatterTests
         },
         Score = new ReasonletScore(Similarity: 0.82, SuccessRate: 0.82, Freshness: 1, Total: 0.8),
         Evidence = new ReasonletEvidence { Runs = 11, JudgedRuns = 11, UsesParentPrior = false },
+        LineageId = ReasonletId.New(),
     };
 
     private static ReasonletGraph Graph(ReasonletNode[] nodes, ReasonletEdge[] edges) =>

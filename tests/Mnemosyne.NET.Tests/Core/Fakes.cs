@@ -159,6 +159,7 @@ internal sealed class FakeSelector : IReasonletSelector
                 Reasonlet = c.Reasonlet,
                 Score = new ReasonletScore(c.Similarity, 0.5, 1, 0.5),
                 Evidence = new ReasonletEvidence { Runs = c.Metrics.Runs, JudgedRuns = c.Metrics.JudgedRuns, UsesParentPrior = false },
+                LineageId = c.LineageId,
             }).ToList()));
     }
 }

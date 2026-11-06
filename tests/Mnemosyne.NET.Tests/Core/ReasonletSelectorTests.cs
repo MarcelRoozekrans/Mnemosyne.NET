@@ -45,7 +45,7 @@ public sealed class ReasonletSelectorTests
     private static readonly ReasonletRankingOptions FullAgentWeight = new() { AgentVerdictWeight = 1 };
 
     private static ReasonletCandidate Candidate(double similarity, ReasonletMetrics? metrics = null, ReasonletMetrics? parent = null, ReasonletId? id = null) =>
-        new() { Reasonlet = TestData.Definition() with { Id = id ?? ReasonletId.New() }, Similarity = similarity, Metrics = metrics ?? Metrics(0, 0), ParentMetrics = parent };
+        new() { LineageId = ReasonletId.New(), Reasonlet = TestData.Definition() with { Id = id ?? ReasonletId.New() }, Similarity = similarity, Metrics = metrics ?? Metrics(0, 0), ParentMetrics = parent };
 
     private static async Task<IReadOnlyList<ReasonletMatch>> Rank(ReasonletSelector selector, ReasonletQuery query, params ReasonletCandidate[] candidates)
     {
@@ -156,6 +156,15 @@ public sealed class ReasonletSelectorTests
                 new ReasonletEvidence { Runs = 2, JudgedRuns = 0, UsesParentPrior = false },
             ],
             matches.Select(m => m.Evidence));
+    }
+
+    [Fact]
+    public async Task RankAsyncCopiesTheCandidatesLineageIdToTheMatch()
+    {
+        var first = Candidate(0.9) with { LineageId = ReasonletId.New() };
+        var second = Candidate(0.8) with { LineageId = ReasonletId.New() };
+        var matches = await Rank(Selector(), TestData.Query(), first, second);
+        Assert.Equal([first.LineageId, second.LineageId], matches.Select(m => m.LineageId));
     }
 
     [Fact]
