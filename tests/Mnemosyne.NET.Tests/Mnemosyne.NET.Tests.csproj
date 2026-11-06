@@ -24,6 +24,7 @@
     <Compile Include="..\..\samples\Shared\HashingEmbeddingGenerator.cs" Link="Samples\HashingEmbeddingGenerator.cs" />
     <Compile Include="..\..\samples\Shared\ScriptedChatClient.cs" Link="Samples\ScriptedChatClient.cs" />
     <Compile Include="..\..\samples\Shared\CaptureRunWatcher.cs" Link="Samples\CaptureRunWatcher.cs" />
+    <Compile Include="..\..\samples\Shared\SampleRunner.cs" Link="Samples\SampleRunner.cs" />
   </ItemGroup>
 
   <ItemGroup>
