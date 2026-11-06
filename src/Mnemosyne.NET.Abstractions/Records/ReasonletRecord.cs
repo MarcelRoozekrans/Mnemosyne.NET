@@ -3,7 +3,7 @@ using ZeroAlloc.Results;
 
 namespace Mnemosyne.NET.Abstractions;
 
-/// <summary>One Reasonlet in a subject export: its definition and the metrics of its recorded runs.</summary>
+/// <summary>One Reasonlet in a subject export: its definition and the metrics of its recorded runs. Produced by the library, never by callers.</summary>
 /// <remarks>Init-only, so later phases can add members without breaking callers.</remarks>
 public sealed record ReasonletRecord
 {

@@ -3,7 +3,7 @@ using ZeroAlloc.Results;
 
 namespace Mnemosyne.NET.Abstractions;
 
-/// <summary>One recorded run in a subject export: the run, its verdict and where the verdict came from.</summary>
+/// <summary>One recorded run in a subject export: the run, its verdict and where the verdict came from. Produced by the library, never by callers.</summary>
 /// <remarks>Init-only, so later phases can add members without breaking callers.</remarks>
 public sealed record ReasonletExecutionRecord
 {
@@ -26,7 +26,11 @@ public sealed record ReasonletExecutionRecord
     public ReasonletEvaluation? Evaluation { get; init; }
 
     /// <summary>Gets the feedback recorded for the run, or <see langword="null"/> when there is none.</summary>
+    /// <remarks><c>Worked</c> is the verdict in effect, which a later feedback without a verdict does not clear.</remarks>
     public ReasonletFeedback? Feedback { get; init; }
+
+    /// <summary>Gets when the feedback was last recorded. Set exactly when <see cref="Feedback"/> is set.</summary>
+    public DateTimeOffset? FeedbackRecordedAt { get; init; }
 
     /// <summary>Gets the run's verdict, after the agent's view, any evaluation and any feedback are weighed.</summary>
     public required bool Success { get; init; }
@@ -49,6 +53,9 @@ public sealed record ReasonletExecutionRecord
             : UnitResult<MnemosyneError>.Success(),
         () => Feedback is { } feedback
             ? Check.Nested(feedback.Validate(), nameof(Feedback))
+            : UnitResult<MnemosyneError>.Success(),
+        () => (Feedback is null) != (FeedbackRecordedAt is null)
+            ? Check.Fail(nameof(FeedbackRecordedAt), "must be set exactly when Feedback is set")
             : UnitResult<MnemosyneError>.Success(),
         () => Check.Defined(VerdictSource, nameof(VerdictSource)),
         () => Check.NotNull(Provenance, nameof(Provenance)),

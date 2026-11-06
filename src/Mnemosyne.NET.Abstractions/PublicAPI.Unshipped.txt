@@ -8,6 +8,8 @@ Mnemosyne.NET.Abstractions.ReasonletExecutionRecord.ExecutedAt.get -> System.Dat
 Mnemosyne.NET.Abstractions.ReasonletExecutionRecord.ExecutedAt.init -> void
 Mnemosyne.NET.Abstractions.ReasonletExecutionRecord.Feedback.get -> Mnemosyne.NET.Abstractions.ReasonletFeedback?
 Mnemosyne.NET.Abstractions.ReasonletExecutionRecord.Feedback.init -> void
+Mnemosyne.NET.Abstractions.ReasonletExecutionRecord.FeedbackRecordedAt.get -> System.DateTimeOffset?
+Mnemosyne.NET.Abstractions.ReasonletExecutionRecord.FeedbackRecordedAt.init -> void
 Mnemosyne.NET.Abstractions.ReasonletExecutionRecord.Id.get -> Mnemosyne.NET.Abstractions.ExecutionId
 Mnemosyne.NET.Abstractions.ReasonletExecutionRecord.Id.init -> void
 Mnemosyne.NET.Abstractions.ReasonletExecutionRecord.Outcome.get -> Mnemosyne.NET.Abstractions.ReasonletOutcome

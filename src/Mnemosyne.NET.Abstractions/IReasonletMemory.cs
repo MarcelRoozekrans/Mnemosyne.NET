@@ -151,7 +151,7 @@ public interface IReasonletMemory
     /// <summary>Lists the Reasonlets a data subject owns in a scope, oldest id first, each with its execution metrics.</summary>
     /// <remarks>
     /// The set is the Reasonlets of the scope whose provenance subject equals <paramref name="subjectId"/>, in any status, so
-    /// <see cref="ReasonletStatus.PendingReview"/> ones are included and versions come with it. This is the set
+    /// <see cref="ReasonletStatus.PendingReview"/> ones are included. Each version is a Reasonlet of its own, so every version the subject captured is listed, and a version someone else captured is not. This is the set
     /// <see cref="EraseAsync"/> removes for the same scope and subject. The embedding is not returned.
     /// Reads bypass the capture guard and the review gate. Returns up to <paramref name="limit"/> rows with an id above
     /// <paramref name="after"/>, ordered by id. Ids are version 7 GUIDs, so this is creation order. Pass the last id of a page as the
@@ -174,6 +174,8 @@ public interface IReasonletMemory
     /// The set is every run of the scope recorded for <paramref name="subjectId"/>, plus every run of a Reasonlet the subject
     /// owns, whatever the run's own subject. This is the set <see cref="EraseAsync"/> removes for the same scope and subject.
     /// A run on another owner's Reasonlet carries only its <see cref="ReasonletExecutionRecord.ReasonletId"/>; that owner's definition is never returned.
+    /// A run another person recorded on one of the subject's Reasonlets is in the set with that person's <c>Provenance</c>. Redact or drop it before the export reaches the subject.
+    /// A run another person recorded on one of the subject's Reasonlets is in the set with that person's <c>Provenance</c>. Redact or drop it before the export reaches the subject.
     /// Reads bypass the capture guard and the review gate. Returns up to <paramref name="limit"/> rows with an id above
     /// <paramref name="after"/>, ordered by id. Ids are version 7 GUIDs, so this is creation order. Pass the last id of a page as the
     /// next <paramref name="after"/>, and <see langword="null"/> to start. Ids are made by clients, so a row stored while an export

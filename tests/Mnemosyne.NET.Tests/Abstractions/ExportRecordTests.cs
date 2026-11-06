@@ -28,6 +28,7 @@ public class ExportRecordTests
         Outcome = new ReasonletOutcome(true, TimeSpan.FromSeconds(1), 0.5),
         Evaluation = new ReasonletEvaluation(true, 0.5, "judge"),
         Feedback = new ReasonletFeedback(0.1, 0.2, 0.3, true),
+        FeedbackRecordedAt = DateTimeOffset.UnixEpoch,
         Success = true,
         VerdictSource = ReasonletVerdictSource.Agent,
         Provenance = TestData.Provenance(),
@@ -67,7 +68,7 @@ public class ExportRecordTests
     public void AnExecutionRecordWithAllPartsValidates()
     {
         Assert.True(Execution().Validate().IsSuccess);
-        Assert.True((Execution() with { Evaluation = null, Feedback = null }).Validate().IsSuccess);
+        Assert.True((Execution() with { Evaluation = null, Feedback = null, FeedbackRecordedAt = null }).Validate().IsSuccess);
     }
 
     [Fact]
@@ -86,6 +87,14 @@ public class ExportRecordTests
             "Outcome.Duration");
         AssertInvalid((Execution() with { Evaluation = new ReasonletEvaluation(true, 2, "judge") }).Validate(), "Evaluation.Score");
         AssertInvalid((Execution() with { Feedback = new ReasonletFeedback(2, 0, 0) }).Validate(), "Feedback.Utility");
+    }
+
+    [Fact]
+    public void AnExecutionRecordNeedsFeedbackAndItsTimeTogether()
+    {
+        AssertInvalid((Execution() with { FeedbackRecordedAt = null }).Validate(), "FeedbackRecordedAt");
+        AssertInvalid((Execution() with { Feedback = null }).Validate(), "FeedbackRecordedAt");
+        Assert.True(Execution().Validate().IsSuccess);
     }
 
     [Fact]
