@@ -149,11 +149,12 @@ public class ContractShapeTests
     private static string[] PositionalShape(Type record) =>
         [.. record.GetConstructors().Single(c => c.GetParameters().Length > 1).GetParameters().Select(p => p.ParameterType.Name + " " + p.Name)];
 
-    private static string[] InitShape(Type record)
+    private static string[] InitShape(Type record, params string[] optional)
     {
         Assert.DoesNotContain(record.GetConstructors(), c => c.GetParameters().Length > 0);
         var properties = record.GetProperties().Where(p => p.DeclaringType == record && p.Name != "EqualityContract").ToArray();
         Assert.All(properties, p => Assert.Contains(p.SetMethod!.ReturnParameter.GetRequiredCustomModifiers(), m => m.Name == "IsExternalInit"));
+        Assert.All(properties, p => Assert.Equal(!optional.Contains(p.Name), p.IsDefined(typeof(System.Runtime.CompilerServices.RequiredMemberAttribute), true)));
         return [.. properties.Select(p => p.PropertyType.Name + " " + p.Name)];
     }
 
@@ -273,9 +274,7 @@ public class ContractShapeTests
                 "Nullable`1 Evaluation",
                 "Boolean ReviewRequired",
             ],
-            InitShape(typeof(ReasonletStoreEntry)));
-        Assert.True(typeof(ReasonletStoreEntry).GetProperty("Evaluation")!.GetCustomAttributes(typeof(System.Runtime.CompilerServices.RequiredMemberAttribute), true).Length == 0);
-        Assert.True(typeof(ReasonletStoreEntry).GetProperty("ReviewRequired")!.GetCustomAttributes(typeof(System.Runtime.CompilerServices.RequiredMemberAttribute), true).Length == 0);
+            InitShape(typeof(ReasonletStoreEntry), "Evaluation", "ReviewRequired"));
     }
 
     [Fact]
