@@ -154,7 +154,7 @@ internal sealed class FakeSelector : IReasonletSelector
         Query = query;
         Candidates = candidates;
         return ValueTask.FromResult(Result ?? Result<IReadOnlyList<ReasonletMatch>, MnemosyneError>.Success(
-            candidates.Select(c => new ReasonletMatch(c.Reasonlet, new ReasonletScore(c.Similarity, 0.5, 1, 0.5), new ReasonletEvidence(c.Metrics.Runs, c.Metrics.JudgedRuns, false))).ToList()));
+            candidates.Select(c => new ReasonletMatch { Reasonlet = c.Reasonlet, Score = new ReasonletScore(c.Similarity, 0.5, 1, 0.5), Evidence = new ReasonletEvidence { Runs = c.Metrics.Runs, JudgedRuns = c.Metrics.JudgedRuns, UsesParentPrior = false } }).ToList()));
     }
 }
 

@@ -402,7 +402,7 @@ static async Task<int> FacadeSmoke(NpgsqlDataSource dataSource, ReasonletGraph g
 
     // The evidence travels with every match: the remember is one run, judged by the agent alone, and there is no parent.
     if (recalled.Value[0].Evidence.Runs < 1
-        || recalled.Value[0].Evidence != new ReasonletEvidence(1, 0, false))
+        || recalled.Value[0].Evidence != new ReasonletEvidence { Runs = 1, JudgedRuns = 0, UsesParentPrior = false })
     {
         Console.Error.WriteLine($"Recall carried the wrong evidence: {recalled.Value[0].Evidence}");
         return 25;
@@ -1060,8 +1060,7 @@ internal sealed class RecordingMemory(ReasonletGraph graph) : IReasonletMemory
         Interlocked.Increment(ref _recalls);
         IReadOnlyList<ReasonletMatch> matches =
         [
-            new ReasonletMatch(
-                new ReasonletDefinition
+            new ReasonletMatch { Reasonlet = new ReasonletDefinition
                 {
                     Id = MatchId,
                     Scope = query.Scope,
@@ -1072,9 +1071,7 @@ internal sealed class RecordingMemory(ReasonletGraph graph) : IReasonletMemory
                     Provenance = new ReasonletProvenance { Source = "aot-smoke" },
                     Status = ReasonletStatus.Active,
                     CreatedAt = DateTimeOffset.UnixEpoch,
-                },
-                new ReasonletScore(0.9, 0.8, 1, 0.9),
-                new ReasonletEvidence(3, 0, false)),
+                }, Score = new ReasonletScore(0.9, 0.8, 1, 0.9), Evidence = new ReasonletEvidence { Runs = 3, JudgedRuns = 0, UsesParentPrior = false } },
         ];
         return ValueTask.FromResult<Result<IReadOnlyList<ReasonletMatch>, MnemosyneError>>(Result<IReadOnlyList<ReasonletMatch>, MnemosyneError>.Success(matches));
     }

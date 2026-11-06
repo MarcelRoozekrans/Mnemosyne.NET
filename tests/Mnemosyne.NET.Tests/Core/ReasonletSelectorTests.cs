@@ -45,7 +45,7 @@ public sealed class ReasonletSelectorTests
     private static readonly ReasonletRankingOptions FullAgentWeight = new() { AgentVerdictWeight = 1 };
 
     private static ReasonletCandidate Candidate(double similarity, ReasonletMetrics? metrics = null, ReasonletMetrics? parent = null, ReasonletId? id = null) =>
-        new(TestData.Definition() with { Id = id ?? ReasonletId.New() }, similarity, metrics ?? Metrics(0, 0), parent);
+        new() { Reasonlet = TestData.Definition() with { Id = id ?? ReasonletId.New() }, Similarity = similarity, Metrics = metrics ?? Metrics(0, 0), ParentMetrics = parent };
 
     private static async Task<IReadOnlyList<ReasonletMatch>> Rank(ReasonletSelector selector, ReasonletQuery query, params ReasonletCandidate[] candidates)
     {
@@ -150,7 +150,7 @@ public sealed class ReasonletSelectorTests
         var weakParent = Candidate(0.7, Metrics(2, 2), Metrics(20, 0));
         var matches = await Rank(Selector(), TestData.Query(), withParent, root, weakParent);
         Assert.Equal(
-            [new ReasonletEvidence(10, 4, true), new ReasonletEvidence(3, 3, false), new ReasonletEvidence(2, 0, false)],
+            [new ReasonletEvidence { Runs = 10, JudgedRuns = 4, UsesParentPrior = true }, new ReasonletEvidence { Runs = 3, JudgedRuns = 3, UsesParentPrior = false }, new ReasonletEvidence { Runs = 2, JudgedRuns = 0, UsesParentPrior = false }],
             matches.Select(m => m.Evidence));
     }
 

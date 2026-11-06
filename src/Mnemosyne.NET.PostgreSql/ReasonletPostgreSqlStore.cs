@@ -867,11 +867,13 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
                     row.ParentJudgedRuns!.Value,
                     row.ParentJudgedSuccesses!.Value)
                 : (ReasonletMetrics?)null;
-            candidates.Add(new ReasonletCandidate(
-                ToDefinition(row.ToReasonletRow()),
-                row.Similarity,
-                new ReasonletMetrics(row.Runs, row.Successes, row.LastSuccessAt, row.LastExecutedAt, row.JudgedRuns, row.JudgedSuccesses),
-                parent));
+            candidates.Add(new ReasonletCandidate
+            {
+                Reasonlet = ToDefinition(row.ToReasonletRow()),
+                Similarity = row.Similarity,
+                Metrics = new ReasonletMetrics(row.Runs, row.Successes, row.LastSuccessAt, row.LastExecutedAt, row.JudgedRuns, row.JudgedSuccesses),
+                ParentMetrics = parent,
+            });
         }
 
         return candidates;

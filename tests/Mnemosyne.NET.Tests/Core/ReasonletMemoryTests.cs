@@ -21,7 +21,7 @@ public sealed class ReasonletMemoryTests
         new(_store, _selector, _generator, extractor, evaluator, options ?? new MnemosyneOptions(), clock);
 
     private static ReasonletCandidate Candidate(double similarity = 0.9) =>
-        new(TestData.Definition(), similarity, new ReasonletMetrics(0, 0, null, DateTimeOffset.UnixEpoch));
+        new() { Reasonlet = TestData.Definition(), Similarity = similarity, Metrics = new ReasonletMetrics(0, 0, null, DateTimeOffset.UnixEpoch) };
 
     private static MnemosyneError Unavailable() => new(MnemosyneErrorCode.Unavailable, "down", "detail");
 
@@ -144,7 +144,7 @@ public sealed class ReasonletMemoryTests
     {
         var candidates = new[] { Candidate(0.9), Candidate(0.8) };
         _store.SearchResult = Result<IReadOnlyList<ReasonletCandidate>, MnemosyneError>.Success(candidates);
-        var matches = new List<ReasonletMatch> { new(candidates[1].Reasonlet, new ReasonletScore(0.8, 1, 1, 0.9), new ReasonletEvidence(1, 0, false)) };
+        var matches = new List<ReasonletMatch> { new() { Reasonlet = candidates[1].Reasonlet, Score = new ReasonletScore(0.8, 1, 1, 0.9), Evidence = new ReasonletEvidence { Runs = 1, JudgedRuns = 0, UsesParentPrior = false } } };
         _selector.Result = Result<IReadOnlyList<ReasonletMatch>, MnemosyneError>.Success(matches);
         var query = TestData.Query();
 

@@ -151,22 +151,30 @@ public class ContractShapeTests
     private static string[] PositionalShape(Type record) =>
         [.. record.GetConstructors().Single(c => c.GetParameters().Length > 1).GetParameters().Select(p => p.ParameterType.Name + " " + p.Name)];
 
+    private static string[] InitShape(Type record)
+    {
+        Assert.DoesNotContain(record.GetConstructors(), c => c.GetParameters().Length > 0);
+        var properties = record.GetProperties().Where(p => p.DeclaringType == record && p.Name != "EqualityContract").ToArray();
+        Assert.All(properties, p => Assert.Contains(p.SetMethod!.ReturnParameter.GetRequiredCustomModifiers(), m => m.Name == "IsExternalInit"));
+        return [.. properties.Select(p => p.PropertyType.Name + " " + p.Name)];
+    }
+
     [Fact]
     public void TheMatchCarriesTheEvidenceBehindItsScore()
     {
         Assert.False(typeof(ReasonletMatch).IsValueType);
         Assert.Equal(
             ["ReasonletDefinition Reasonlet", "ReasonletScore Score", "ReasonletEvidence Evidence"],
-            PositionalShape(typeof(ReasonletMatch)));
+            InitShape(typeof(ReasonletMatch)));
     }
 
     [Fact]
-    public void TheEvidenceIsAPositionalValue()
+    public void TheEvidenceIsAnInitOnlyValue()
     {
         Assert.True(typeof(ReasonletEvidence).IsValueType);
         Assert.True(typeof(ReasonletEvidence).IsPublic);
         Assert.Equal("Mnemosyne.NET.Abstractions", typeof(ReasonletEvidence).Namespace);
-        Assert.Equal(["Int32 Runs", "Int32 JudgedRuns", "Boolean UsesParentPrior"], PositionalShape(typeof(ReasonletEvidence)));
+        Assert.Equal(["Int32 Runs", "Int32 JudgedRuns", "Boolean UsesParentPrior"], InitShape(typeof(ReasonletEvidence)));
     }
 
     [Fact]
