@@ -89,7 +89,7 @@ The version label, such as `1.2`, is opaque. Use it to display a version and to 
 
 A lineage ends where a link is cut. When an erase removes a parent, the kept child becomes its own root, and its `LineageId` is its own id from then on.
 
-A selector can use the lineage id to treat versions as one procedure. The tests hold an illustration, `LineageVariantSelector`, which wraps the default selector and keeps the best match of each lineage. It shows that a variant strategy plugs in through `IReasonletSelector`, with nothing added to the library. [Variants](variants.md) says what 1.0 ships for variants and where it goes after 1.0.
+A selector can use the lineage id to treat versions as one procedure. `VariantSelector` wraps the default selector and keeps the best match of each lineage. Enable it with `AddMnemosyneVariantSelection`. [Variants](variants.md) says what 1.0 ships for variants and where it goes after 1.0.
 
 ## What erasure does to a lineage
 

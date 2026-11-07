@@ -102,6 +102,18 @@ public sealed class VariantSelectorTests
     }
 
     [Fact]
+    public async Task ALineageOfOneIsReturnedUnchanged()
+    {
+        var candidate = Candidate(ReasonletId.New(), 0.8);
+
+        var viaVariant = await Rank(TestData.Query(), candidate);
+        var direct = await Inner().RankAsync(TestData.Query(), [candidate], CancellationToken.None);
+
+        Assert.True(direct.IsSuccess);
+        Assert.Equal(direct.Value, viaVariant);
+    }
+
+    [Fact]
     public async Task NoCandidatesGiveAnEmptySuccess()
     {
         var matches = await Rank(TestData.Query());
