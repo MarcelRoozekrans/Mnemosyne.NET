@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- The sample runner, shared by the samples. -->
+    <Compile Include="../Shared/SampleRunner.cs" Link="SampleRunner.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/Mnemosyne.NET.Abstractions/Mnemosyne.NET.Abstractions.csproj" />
+    <ProjectReference Include="../../src/Mnemosyne.NET/Mnemosyne.NET.csproj" />
+  </ItemGroup>
+
+</Project>
