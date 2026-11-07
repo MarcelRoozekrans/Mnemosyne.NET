@@ -97,28 +97,30 @@ public static class ServiceCollectionExtensions
                 "No IReasonletSelector is registered. Call AddMnemosyne, or register a selector, before AddMnemosyneVariantSelection.");
         }
 
+        // The original moves to a keyed registration, so the container still builds and disposes it.
         var original = services[index];
+        var key = VariantSelectionMarker.OriginalKey;
+        ServiceDescriptor keyed;
+        if (original.ImplementationInstance is { } instance)
+        {
+            keyed = new ServiceDescriptor(typeof(IReasonletSelector), key, instance);
+        }
+        else if (original.ImplementationFactory is { } factory)
+        {
+            keyed = new ServiceDescriptor(typeof(IReasonletSelector), key, (provider, _) => factory(provider), original.Lifetime);
+        }
+        else
+        {
+            keyed = new ServiceDescriptor(typeof(IReasonletSelector), key, original.ImplementationType!, original.Lifetime);
+        }
+
         services[index] = ServiceDescriptor.Describe(
             typeof(IReasonletSelector),
-            provider => new VariantSelector(CreateOriginal(provider, original)),
+            provider => new VariantSelector(provider.GetRequiredKeyedService<IReasonletSelector>(key)),
             original.Lifetime);
+        services.Add(keyed);
         services.AddSingleton<VariantSelectionMarker>();
         return services;
-    }
-
-    private static IReasonletSelector CreateOriginal(IServiceProvider provider, ServiceDescriptor original)
-    {
-        if (original.ImplementationInstance is IReasonletSelector instance)
-        {
-            return instance;
-        }
-
-        if (original.ImplementationFactory is { } factory)
-        {
-            return (IReasonletSelector)factory(provider);
-        }
-
-        return (IReasonletSelector)ActivatorUtilities.CreateInstance(provider, original.ImplementationType!);
     }
 
     /// <summary>
@@ -193,6 +195,3 @@ public static class ServiceCollectionExtensions
         return services;
     }
 }
-
-/// <summary>Marks that <see cref="ServiceCollectionExtensions.AddMnemosyneVariantSelection"/> already ran.</summary>
-internal sealed class VariantSelectionMarker;

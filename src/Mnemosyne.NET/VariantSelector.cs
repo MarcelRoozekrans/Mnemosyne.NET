@@ -17,6 +17,9 @@ public sealed class VariantSelector : IReasonletSelector
 {
     private readonly IReasonletSelector _inner;
 
+    /// <summary>The selector this one wraps.</summary>
+    internal IReasonletSelector Inner => _inner;
+
     /// <summary>Initializes the selector.</summary>
     /// <param name="inner">The selector that scores and orders the candidates.</param>
     /// <exception cref="ArgumentNullException"><paramref name="inner"/> is null.</exception>

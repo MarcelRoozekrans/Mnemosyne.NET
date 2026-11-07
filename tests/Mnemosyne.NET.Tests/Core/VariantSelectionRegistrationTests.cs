@@ -1,4 +1,3 @@
-using System.Reflection;
 using Microsoft.Extensions.DependencyInjection;
 using Mnemosyne.NET.Abstractions;
 using Mnemosyne.NET.Tests.Abstractions;
@@ -28,6 +27,17 @@ public sealed class VariantSelectionRegistrationTests
         }
     }
 
+    private sealed class DisposableSelector : IReasonletSelector, IDisposable
+    {
+        public static int Disposed;
+
+        public void Dispose() => Disposed++;
+
+        public ValueTask<Result<IReadOnlyList<ReasonletMatch>, MnemosyneError>> RankAsync(
+            ReasonletQuery query, IReadOnlyList<ReasonletCandidate> candidates, CancellationToken ct) =>
+            Real.RankAsync(query, candidates, ct);
+    }
+
     private sealed class TypedSelector(TimeProvider clock) : IReasonletSelector
     {
         public TimeProvider Clock { get; } = clock;
@@ -50,10 +60,7 @@ public sealed class VariantSelectionRegistrationTests
             Metrics = new ReasonletMetrics(0, 0, null, Now),
         };
 
-    private static IReasonletSelector Inner(IReasonletSelector selector) =>
-        (IReasonletSelector)typeof(VariantSelector)
-            .GetField("_inner", BindingFlags.Instance | BindingFlags.NonPublic)!
-            .GetValue(selector)!;
+    private static IReasonletSelector Inner(IReasonletSelector selector) => ((VariantSelector)selector).Inner;
 
     private static async Task<int> Rank(IReasonletSelector selector)
     {
@@ -165,10 +172,38 @@ public sealed class VariantSelectionRegistrationTests
         var selector = provider.GetRequiredService<IReasonletSelector>();
 
         Assert.Same(host, Inner(selector));
-        Assert.Single(services, d => d.ServiceType == typeof(IReasonletSelector));
+        Assert.Single(services, d => d.ServiceType == typeof(IReasonletSelector) && !d.IsKeyedService);
     }
 
     [Fact]
     public void ANullServicesThrows() =>
         Assert.Throws<ArgumentNullException>(() => ServiceCollectionExtensions.AddMnemosyneVariantSelection(null!));
+
+    [Fact]
+    public void ADisposableHostSelectorRegisteredByTypeIsDisposedWithTheProvider()
+    {
+        DisposableSelector.Disposed = 0;
+        var services = Services();
+        services.AddSingleton<IReasonletSelector, DisposableSelector>();
+        var provider = services.AddMnemosyneVariantSelection().BuildServiceProvider();
+        _ = provider.GetRequiredService<IReasonletSelector>();
+
+        provider.Dispose();
+
+        Assert.Equal(1, DisposableSelector.Disposed);
+    }
+
+    [Fact]
+    public void ADisposableHostSelectorRegisteredByFactoryIsDisposedWithTheProvider()
+    {
+        DisposableSelector.Disposed = 0;
+        var services = Services();
+        services.AddSingleton<IReasonletSelector>(_ => new DisposableSelector());
+        var provider = services.AddMnemosyneVariantSelection().BuildServiceProvider();
+        _ = provider.GetRequiredService<IReasonletSelector>();
+
+        provider.Dispose();
+
+        Assert.Equal(1, DisposableSelector.Disposed);
+    }
 }
