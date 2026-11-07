@@ -61,6 +61,67 @@ public static class ServiceCollectionExtensions
     }
 
     /// <summary>
+    /// Wraps the registered <see cref="IReasonletSelector"/> in a <see cref="VariantSelector"/>, so a recall returns one
+    /// version per lineage.
+    /// </summary>
+    /// <remarks>
+    /// Call it after <see cref="AddMnemosyne"/>, and after a host registers its own selector: it wraps whatever
+    /// unkeyed selector is registered last, so a host's own selector is grouped too. The wrapper keeps the lifetime of the
+    /// selector it wraps. A second call changes nothing.
+    /// </remarks>
+    /// <param name="services">The service collection.</param>
+    /// <returns>The same service collection.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="services"/> is null.</exception>
+    /// <exception cref="InvalidOperationException">No <see cref="IReasonletSelector"/> is registered yet.</exception>
+    public static IServiceCollection AddMnemosyneVariantSelection(this IServiceCollection services)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+        if (services.Any(descriptor => descriptor.ServiceType == typeof(VariantSelectionMarker)))
+        {
+            return services;
+        }
+
+        var index = -1;
+        for (var i = services.Count - 1; i >= 0; i--)
+        {
+            if (services[i].ServiceType == typeof(IReasonletSelector) && !services[i].IsKeyedService)
+            {
+                index = i;
+                break;
+            }
+        }
+
+        if (index < 0)
+        {
+            throw new InvalidOperationException(
+                "No IReasonletSelector is registered. Call AddMnemosyne, or register a selector, before AddMnemosyneVariantSelection.");
+        }
+
+        var original = services[index];
+        services[index] = ServiceDescriptor.Describe(
+            typeof(IReasonletSelector),
+            provider => new VariantSelector(CreateOriginal(provider, original)),
+            original.Lifetime);
+        services.AddSingleton<VariantSelectionMarker>();
+        return services;
+    }
+
+    private static IReasonletSelector CreateOriginal(IServiceProvider provider, ServiceDescriptor original)
+    {
+        if (original.ImplementationInstance is IReasonletSelector instance)
+        {
+            return instance;
+        }
+
+        if (original.ImplementationFactory is { } factory)
+        {
+            return (IReasonletSelector)factory(provider);
+        }
+
+        return (IReasonletSelector)ActivatorUtilities.CreateInstance(provider, original.ImplementationType!);
+    }
+
+    /// <summary>
     /// Registers <see cref="ChatReasonletEvaluator"/> as the singleton <see cref="IReasonletEvaluator"/>, judging runs with the
     /// host's <see cref="IChatClient"/>.
     /// </summary>
@@ -132,3 +193,6 @@ public static class ServiceCollectionExtensions
         return services;
     }
 }
+
+/// <summary>Marks that <see cref="ServiceCollectionExtensions.AddMnemosyneVariantSelection"/> already ran.</summary>
+internal sealed class VariantSelectionMarker;
