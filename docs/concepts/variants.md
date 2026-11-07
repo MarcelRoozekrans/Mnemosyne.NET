@@ -53,7 +53,7 @@ if (recalled.IsSuccess)
 }
 ```
 
-Recall returns up to three matches by default, so raise `Top` on the query when you want more variants to group. The same grouping fits in an `IReasonletSelector` that wraps the default one. The repository's tests hold such a selector, `LineageVariantSelector`, as an illustration. It is test code and not part of any package.
+Recall returns up to three matches by default, so raise `Top` on the query when you want more variants to group. The same grouping fits in an `IReasonletSelector` that wraps the default one. Or, `VariantSelector` does this grouping. Enable it with `AddMnemosyneVariantSelection`.
 
 Grouping by lineage keeps variants of one procedure from crowding out other procedures. It picks the best score. It does not try a new version that has not yet earned one, which is the second item in the note above.
 

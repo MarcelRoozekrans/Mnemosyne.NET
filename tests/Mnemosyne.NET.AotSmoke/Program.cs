@@ -94,6 +94,14 @@ if (pipeline != 0)
     return pipeline;
 }
 
+// Variant selection as a host wires it: AddMnemosyneVariantSelection wraps the selector in the container, and two
+// candidates of one lineage rank as one match under native AOT. Needs no database.
+var variant = await VariantSmoke(read.Value);
+if (variant != 0)
+{
+    return variant;
+}
+
 // The Agent Framework context provider as a host wires it: a ChatClientAgent with ReasonletContextProvider, run once
 // with RunAsync and once with RunStreamingAsync under native AOT against an in-memory stub. Needs no database.
 var agent = await AgentSmoke(read.Value);
@@ -644,6 +652,57 @@ static ReasonletCapture GateCapture(ReasonletScope scope, string question, Reaso
     Outcome = new ReasonletOutcome(true, TimeSpan.FromMilliseconds(5), null),
     Provenance = new ReasonletProvenance { Source = "aot-smoke" },
 };
+
+static async Task<int> VariantSmoke(ReasonletGraph graph)
+{
+    var services = new ServiceCollection();
+    services.AddSingleton<IReasonletSelector>(new ReasonletSelector(new ReasonletRankingOptions(), TimeProvider.System));
+    services.AddMnemosyneVariantSelection();
+    await using var provider = services.BuildServiceProvider();
+    var selector = provider.GetRequiredService<IReasonletSelector>();
+    if (selector is not VariantSelector)
+    {
+        Console.Error.WriteLine("AddMnemosyneVariantSelection did not register a VariantSelector.");
+        return 65;
+    }
+
+    var empty = await selector.RankAsync(new ReasonletQuery { Scope = new ReasonletScope("aot-variant"), Question = "q" }, [], CancellationToken.None);
+    if (empty.IsFailure || empty.Value.Count != 0)
+    {
+        Console.Error.WriteLine("The variant selector did not rank an empty candidate set to nothing.");
+        return 66;
+    }
+
+    var lineage = ReasonletId.New();
+    ReasonletCandidate Candidate(double similarity) => new()
+    {
+        LineageId = lineage,
+        Reasonlet = new ReasonletDefinition
+        {
+            Id = ReasonletId.New(),
+            Scope = new ReasonletScope("aot-variant"),
+            Name = "refund-order",
+            Intent = "refund an order",
+            Version = "1.0",
+            Graph = graph,
+            Provenance = new ReasonletProvenance { Source = "aot-smoke" },
+            Status = ReasonletStatus.Active,
+            CreatedAt = DateTimeOffset.UnixEpoch,
+        },
+        Similarity = similarity,
+        Metrics = new ReasonletMetrics(0, 0, null, DateTimeOffset.UnixEpoch),
+    };
+
+    var grouped = await selector.RankAsync(
+        new ReasonletQuery { Scope = new ReasonletScope("aot-variant"), Question = "q" }, [Candidate(0.9), Candidate(0.8)], CancellationToken.None);
+    if (grouped.IsFailure || grouped.Value.Count != 1)
+    {
+        Console.Error.WriteLine("The variant selector did not rank two candidates of one lineage as one match.");
+        return 67;
+    }
+
+    return 0;
+}
 
 // The guard without a database: AddMnemosyne resolves the registered guard, and a capture it blocks answers Blocked
 // before the embedding generator or the store is touched. Both stubs throw, so reaching either one fails the smoke.

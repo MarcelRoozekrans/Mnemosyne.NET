@@ -7,7 +7,8 @@ public interface IReasonletSelector
 {
     /// <summary>Ranks candidates for a query.</summary>
     /// <remarks>
-    /// The facade validates the query and every candidate before ranking, so the selector may assume valid input.
+    /// The facade validates the query and every candidate before ranking, so the selector may assume valid input. The exception is <see cref="ReasonletQuery.Top"/>, which a wrapping
+    /// selector such as <c>VariantSelector</c> raises to the candidate count, so it can exceed the query's limit of 50.
     /// Error codes: <see cref="MnemosyneErrorCode.Unavailable"/> when the ranking backend fails.
     /// </remarks>
     /// <param name="query">The query being answered.</param>
