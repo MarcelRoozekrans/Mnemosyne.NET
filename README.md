@@ -12,7 +12,7 @@ procedures that worked, as **Reasonlets**.
 Documentation: <https://marcelroozekrans.github.io/Mnemosyne.NET/>
 
 - [Getting started](https://marcelroozekrans.github.io/Mnemosyne.NET/getting-started) and the [samples](https://marcelroozekrans.github.io/Mnemosyne.NET/samples): store and recall, evaluation, and variants
-- [Concepts](https://marcelroozekrans.github.io/Mnemosyne.NET/category/concepts): Reasonlets, versions, scopes and subjects, ranking, evaluation
+- [Concepts](https://marcelroozekrans.github.io/Mnemosyne.NET/category/concepts): Reasonlets, versions, scopes and subjects, ranking, variants, evaluation
 - [Guides](https://marcelroozekrans.github.io/Mnemosyne.NET/category/guides): the PostgreSQL store, data lifecycle, judging runs with Minos, writing your own evaluator, telemetry, choosing between variants
 
 | Package | What it holds |

@@ -53,7 +53,7 @@ The heart of the output is the ranked list:
 
 [Ranking](concepts/ranking.md#a-worked-example) works through every number in this table.
 
-The sample checks this order itself, and the repository's CI runs it on every pull request to `main` and every push to `main`. If a change to the ranking broke what this page shows, CI would fail.
+The sample checks this order itself, and If a change to the ranking broke what this page shows, CI would fail.
 
 ### The embedding generator is a stand-in
 
@@ -310,6 +310,6 @@ Act 3. VariantSelector with Thompson sampling, seed 11.
 All checks passed.
 ```
 
-The sample checks these counts itself, and the repository's CI runs it on every pull request to `main` and every push to `main`. If a change to variant selection broke what this page shows, CI would fail.
+The sample checks these counts itself. Act 1's 0 and Act 2's matches are exact. Act 3 checks at least 1 of the first 20 rounds and at least 60 of the last 100. The repository's CI runs it on every pull request to `main` and every push to `main`. If a change to variant selection broke what this page shows, CI would fail.
 
 [Choosing between variants](guides/variants.md) explains what the sample shows.

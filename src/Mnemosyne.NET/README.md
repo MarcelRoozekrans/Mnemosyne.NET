@@ -9,6 +9,7 @@ An agent asks a question and gets back the few Reasonlets most worth trying, bes
 - `ReasonletMemory`, the default `IReasonletMemory` facade. It ties together a store, a selector, an embedding generator, an optional intent extractor and an optional evaluator.
 - `ReasonletSelector`, the default `IReasonletSelector`, with its `ReasonletRankingOptions`.
 - `MnemosyneOptions` and the `AddMnemosyne` registration.
+- `VariantSelector` and the `AddMnemosyneVariantSelection` registration, which return one version per lineage and can explore new versions with `VariantSelectionOptions`. See [Choosing between variants](https://marcelroozekrans.github.io/Mnemosyne.NET/guides/variants).
 - `ReasonletTranscript`, which turns a `Microsoft.Extensions.AI` chat transcript into a capture.
 
 ```bash

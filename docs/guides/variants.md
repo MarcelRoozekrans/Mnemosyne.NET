@@ -9,7 +9,7 @@ By default a recall ranks every version as a match of its own, so the versions o
 
 ## When to switch it on
 
-Switch it on when agents improve procedures, so lineages hold more than one version. Without it, a recall of three can show three versions of one procedure. With it, a recall shows three procedures.
+Switch it on when agents improve procedures, so lineages hold more than one version. Without it, a recall of three can show three versions of one procedure. With it, a recall shows up to three procedures.
 
 Leave it off when each procedure has one version, or when you want every version ranked as its own match.
 

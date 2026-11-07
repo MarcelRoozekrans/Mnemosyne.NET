@@ -24,13 +24,13 @@ Without variant selection, the default ranking treats every version as a match o
 
 With variant selection on, the wrapped selector still ranks the candidates. `VariantSelector` then keeps the best-ranked version of each lineage and drops the others. The query's `Top` applies after the grouping, so variants of one procedure do not crowd out other procedures.
 
-Grouping picks the best score. A new version with no runs takes its parent's rate as its prior, so it scores about as its parent does and rarely wins a run of its own.
+Grouping picks the best score. A new version of a proven procedure takes its parent's rate as its prior, so it scores about as its parent does and rarely wins a run of its own.
 
 ## Exploration
 
 Set `Exploration` to `VariantExploration.Thompson` to give a new version a fair try. For each lineage, `VariantSelector` picks one version before the wrapped selector scores anything:
 
-- Each version draws a value from a Beta distribution whose mean is its smoothed success rate. The prior is 0.5 for a root, and the parent's head start for a child. See [Ranking](ranking.md).
+- Each version draws a value from a Beta distribution whose mean is its smoothed success rate. The prior is 0.5 for a root, and the parent's rate when that is above 0.5, otherwise 0.5, for a child. See [Ranking](ranking.md#a-new-version-inherits-upward-only).
 - The highest draw wins. A version with few runs has a wide distribution, so it sometimes wins, and it wins less often as its runs pile up.
 - `MinTrials` forces the issue. When any version of a lineage has fewer runs than `MinTrials`, the lineage skips the draw and serves its least-run version.
 
