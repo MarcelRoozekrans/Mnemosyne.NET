@@ -68,7 +68,8 @@ public static class ServiceCollectionExtensions
     /// Call it after <see cref="AddMnemosyne"/>, and after a host registers its own selector: it wraps whatever
     /// unkeyed selector is registered last, so a host's own selector is grouped too. The wrapper keeps the lifetime of the
     /// selector it wraps. A second call changes nothing, whichever overload either call used, so the first call's options
-    /// win. This overload explores nothing and ranks as the 5.1 selector did. The wrapped selector receives a query whose
+    /// win. This overload explores nothing. The selector takes its ranking options from the registered
+    /// <see cref="MnemosyneOptions"/>, or the defaults when the host registered none. The wrapped selector receives a query whose
     /// <see cref="ReasonletQuery.Top"/> equals the candidate count, so it can exceed the query's limit of 50 when
     /// <see cref="MnemosyneOptions.CandidatePool"/> does.
     /// </remarks>
@@ -95,7 +96,10 @@ public static class ServiceCollectionExtensions
     /// <param name="options">How a version is picked within a lineage.</param>
     /// <returns>The same service collection.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="services"/> or <paramref name="options"/> is null.</exception>
-    /// <exception cref="ArgumentException">The options are invalid.</exception>
+    /// <exception cref="ArgumentException">
+    /// The options are invalid. They are validated before a second call is recognised, so a second call with invalid
+    /// options throws although it would otherwise change nothing.
+    /// </exception>
     /// <exception cref="InvalidOperationException">No <see cref="IReasonletSelector"/> is registered yet.</exception>
     public static IServiceCollection AddMnemosyneVariantSelection(this IServiceCollection services, VariantSelectionOptions options)
     {
