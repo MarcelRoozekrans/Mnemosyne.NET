@@ -11,7 +11,9 @@ namespace Mnemosyne.NET;
 /// </summary>
 /// <remarks>
 /// Scoring, the similarity cut-off and the order of ties all come from the inner selector. This selector only drops the
-/// lower-ranked versions of a lineage, so the surviving matches keep the inner order.
+/// lower-ranked versions of a lineage, so the surviving matches keep the inner order. The inner selector receives a
+/// query whose <see cref="ReasonletQuery.Top"/> equals the candidate count, so it can exceed the query's limit of 50
+/// when the candidate pool does.
 /// </remarks>
 public sealed class VariantSelector : IReasonletSelector
 {

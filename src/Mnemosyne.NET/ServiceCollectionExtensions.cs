@@ -67,7 +67,9 @@ public static class ServiceCollectionExtensions
     /// <remarks>
     /// Call it after <see cref="AddMnemosyne"/>, and after a host registers its own selector: it wraps whatever
     /// unkeyed selector is registered last, so a host's own selector is grouped too. The wrapper keeps the lifetime of the
-    /// selector it wraps. A second call changes nothing.
+    /// selector it wraps. A second call changes nothing. The wrapped selector receives a query whose
+    /// <see cref="ReasonletQuery.Top"/> equals the candidate count, so it can exceed the query's limit of 50 when
+    /// <see cref="MnemosyneOptions.CandidatePool"/> does.
     /// </remarks>
     /// <param name="services">The service collection.</param>
     /// <returns>The same service collection.</returns>

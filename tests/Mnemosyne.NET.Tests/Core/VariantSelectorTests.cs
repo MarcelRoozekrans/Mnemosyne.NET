@@ -174,6 +174,17 @@ public sealed class VariantSelectorTests
     }
 
     [Fact]
+    public async Task ItPassesTheCandidateCountAsTopEvenPastTheQueryLimit()
+    {
+        var recording = new RecordingSelector(Inner());
+        var candidates = Enumerable.Range(0, 60).Select(i => Candidate(ReasonletId.New(), 0.5 + i / 200.0)).ToArray();
+
+        await new VariantSelector(recording).RankAsync(TestData.Query() with { Top = 3 }, candidates, CancellationToken.None);
+
+        Assert.Equal(60, recording.Seen!.Top);
+    }
+
+    [Fact]
     public async Task ItAsksTheInnerSelectorForAtLeastOneMatch()
     {
         var recording = new RecordingSelector(Inner());
