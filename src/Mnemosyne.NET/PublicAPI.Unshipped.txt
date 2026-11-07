@@ -16,3 +16,4 @@ Mnemosyne.NET.VariantSelector.RankAsync(Mnemosyne.NET.Abstractions.ReasonletQuer
 Mnemosyne.NET.VariantSelector.VariantSelector(Mnemosyne.NET.Abstractions.IReasonletSelector! inner) -> void
 Mnemosyne.NET.VariantSelector.VariantSelector(Mnemosyne.NET.Abstractions.IReasonletSelector! inner, Mnemosyne.NET.VariantSelectionOptions! options, Mnemosyne.NET.ReasonletRankingOptions! ranking) -> void
 static Mnemosyne.NET.ServiceCollectionExtensions.AddMnemosyneVariantSelection(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+static Mnemosyne.NET.ServiceCollectionExtensions.AddMnemosyneVariantSelection(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, Mnemosyne.NET.VariantSelectionOptions! options) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
