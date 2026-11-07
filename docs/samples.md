@@ -5,7 +5,7 @@ sidebar_position: 3
 
 # Samples
 
-All five samples run through one shared runner. It gives each run two minutes, and turns a failed check, a database error or a timeout into a `FAILED:` line and exit code 1.
+All five samples run through one shared runner. It gives each database sample two minutes and the variants sample one, and turns a failed check, a database error or a timeout into a `FAILED:` line and exit code 1.
 
 ## Store and recall
 
@@ -296,5 +296,20 @@ From the sample's folder:
 ```bash
 dotnet run
 ```
+
+### The output
+
+```text
+Act 1. ReasonletSelector alone: the incumbent has 200 runs, its new version has none.
+  New version chosen in 0 of 300 rounds.
+Act 2. VariantSelector without exploration: one match per lineage.
+  rebase, original
+  squash merge
+Act 3. VariantSelector with Thompson sampling, seed 11.
+  New version chosen in 11 of the first 20 rounds and 100 of the last 100.
+All checks passed.
+```
+
+The sample checks these counts itself, and the repository's CI runs it on every pull request to `main` and every push to `main`. If a change to variant selection broke what this page shows, CI would fail.
 
 [Choosing between variants](guides/variants.md) explains what the sample shows.

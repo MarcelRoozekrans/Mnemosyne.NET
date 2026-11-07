@@ -33,7 +33,7 @@ services.AddMnemosyneVariantSelection(new VariantSelectionOptions
 });
 ```
 
-A second call changes nothing, whichever overload either call used, so the first call's options win. Invalid options throw `ArgumentException`.
+A second call changes nothing, whichever overload either call used, so the first call's options win. Invalid options throw `ArgumentException`. With `Thompson`, an invalid `MnemosyneOptions.Ranking` also throws `ArgumentException`, when the selector is resolved.
 
 ## The options
 

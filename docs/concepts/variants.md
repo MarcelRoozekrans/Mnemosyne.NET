@@ -24,7 +24,7 @@ Without variant selection, the default ranking treats every version as a match o
 
 With variant selection on, the wrapped selector still ranks the candidates. `VariantSelector` then keeps the best-ranked version of each lineage and drops the others. The query's `Top` applies after the grouping, so variants of one procedure do not crowd out other procedures.
 
-Grouping picks the best score. A new version has few runs and scores as its parent does, so it ties with the version it came from and never earns a run of its own.
+Grouping picks the best score. A new version with no runs takes its parent's rate as its prior, so it scores about as its parent does and rarely wins a run of its own.
 
 ## Exploration
 
@@ -51,5 +51,5 @@ Set `Seed` and the same question over the same data picks the same versions. Eac
 
 - The lineage id follows `ParentId` inside one scope. Two procedures that were never linked by a parent are different lineages even when they solve the same problem.
 - An erase can cut a link. A kept child becomes the root of a lineage of its own, and its `LineageId` changes to its own id. See [What erasure does to a lineage](versions.md#what-erasure-does-to-a-lineage).
-- Variant selection does not merge lineages, and it does not change the default ranking. It does not reorder what a custom selector returns: the wrapped selector sees the picks and orders them itself.
+- Variant selection does not merge lineages, and it does not change the default ranking. It does not reorder what a custom selector returns: the wrapped selector orders what it is given, and grouping keeps that order.
 - Exploration costs recalls. A lineage that explores sometimes serves a version with a lower success rate, and the [`explored` tag](../guides/telemetry.md#the-recall-activity) counts how often.
