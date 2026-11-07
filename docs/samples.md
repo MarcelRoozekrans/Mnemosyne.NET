@@ -5,7 +5,7 @@ sidebar_position: 3
 
 # Samples
 
-All four samples run through one shared runner. It gives each run two minutes, and turns a failed check, a database error or a timeout into a `FAILED:` line and exit code 1.
+All five samples run through one shared runner. It gives each run two minutes, and turns a failed check, a database error or a timeout into a `FAILED:` line and exit code 1.
 
 ## Store and recall
 
@@ -274,3 +274,27 @@ var agent = new ChatClientAgent(realClient, new ChatClientAgentOptions
 ```
 
 The sample also uses the same offline embedding stand-in as store and recall, so [the same caveat applies](#the-embedding-generator-is-a-stand-in).
+
+## Variants
+
+[`samples/Mnemosyne.Samples.Variants`](https://github.com/MarcelRoozekrans/Mnemosyne.NET/tree/main/samples/Mnemosyne.Samples.Variants) is a console app that shows how a new version of a Reasonlet overtakes a proven one. It needs only the .NET 10 SDK. It needs no Docker, no database, no API key and no model.
+
+### What it does
+
+1. Builds the candidates by hand: an incumbent with 200 runs at a 70% success rate, its new version with no runs, and an unrelated procedure.
+2. **Act 1**: `ReasonletSelector` alone over 300 rounds. The new version ties with its parent, the lower id wins, and the new version is never chosen.
+3. **Act 2**: `VariantSelector` without exploration returns one match per lineage, so two matches.
+4. **Act 3**: `VariantSelector` with `VariantExploration.Thompson` and a seed tries the new version early and then prefers it. The sample prints the counts.
+5. Exits with code 1 and names the failed check if any receipt is wrong.
+
+The outcomes come from a seeded `Random` and the selector has a fixed seed, so the counts are the same on every run.
+
+### Run it
+
+From the sample's folder:
+
+```bash
+dotnet run
+```
+
+[Choosing between variants](guides/variants.md) explains what the sample shows.

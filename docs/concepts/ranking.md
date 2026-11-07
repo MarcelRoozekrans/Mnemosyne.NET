@@ -104,7 +104,7 @@ As the version runs, its own successes and failures outweigh the inherited prior
 
 ### Versions of one lineage
 
-Recall ranks every version as a match of its own. Two versions of one procedure can both reach the result, each with its own score, and nothing in the default ranking merges them. Each match carries a `LineageId`, the id of the root of its version tree, so a selector can group versions of one lineage, for example to keep only the best of each. See [The lineage id](versions.md#the-lineage-id).
+Recall ranks every version as a match of its own. Two versions of one procedure can both reach the result, each with its own score, and nothing in the default ranking merges them. Each match carries a `LineageId`, the id of the root of its version tree, so a selector can group versions of one lineage. `VariantSelector` does this: it keeps the best version of each lineage and can explore new ones. See [Choosing between variants](../guides/variants.md) and [The lineage id](versions.md#the-lineage-id).
 
 ### Freshness
 
