@@ -446,7 +446,7 @@ public sealed class ReasonletMemory : IReasonletMemory
     }
 
     /// <inheritdoc />
-    public ValueTask<Result<IReadOnlyList<ReasonletExecutionRecord>, MnemosyneError>> ListSubjectRunsAsync(
+    public ValueTask<Result<IReadOnlyList<ReasonletExecutionRecord>, MnemosyneError>> ListSubjectExecutionsAsync(
         ReasonletScope scope, string subjectId, int limit, ExecutionId? after, CancellationToken ct)
     {
         var valid = Check.All(
@@ -454,7 +454,7 @@ public sealed class ReasonletMemory : IReasonletMemory
             () => after is { } cursor ? Check.NotDefault(cursor, nameof(after)) : UnitResult<MnemosyneError>.Success());
         return valid.IsFailure
             ? ValueTask.FromResult(Result<IReadOnlyList<ReasonletExecutionRecord>, MnemosyneError>.Failure(valid.Error))
-            : _store.ListSubjectRunsAsync(scope, subjectId, limit, after, ct);
+            : _store.ListSubjectExecutionsAsync(scope, subjectId, limit, after, ct);
     }
 
     private static UnitResult<MnemosyneError> ValidateSubjectList(ReasonletScope scope, string subjectId, int limit) => Check.All(

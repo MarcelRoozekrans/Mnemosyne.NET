@@ -31,7 +31,7 @@ See the [milestone design](../superpowers/specs/2026-11-06-milestone-4-design.md
 5. Phase 4.5 — Docs completeness [complete]
 6. Phase 4.6 — Data protection guide [complete]
 7. Phase 4.7 — Subject export [complete]
-8. Phase 4.8 — 1.0.0 release [pending]
+8. Phase 4.8 — 1.0.0 release [active]
 
 ## Audit History
 | Date | Verdict | Gaps |

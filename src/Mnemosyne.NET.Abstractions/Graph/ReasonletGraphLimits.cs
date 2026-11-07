@@ -1,7 +1,7 @@
 namespace Mnemosyne.NET.Abstractions;
 
 /// <summary>The limits that <see cref="ReasonletGraph.Validate"/> enforces for schema version 1.</summary>
-public static class ReasonletGraphLimits
+internal static class ReasonletGraphLimits
 {
     /// <summary>The maximum number of nodes in a graph.</summary>
     public const int MaxNodes = 500;

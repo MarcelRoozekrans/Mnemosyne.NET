@@ -10,5 +10,10 @@
   </ItemGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="Mnemosyne.NET.Tests" />
+    <InternalsVisibleTo Include="Mnemosyne.NET" />
+    <InternalsVisibleTo Include="Mnemosyne.NET.PostgreSql" />
+    <InternalsVisibleTo Include="Mnemosyne.NET.Minos" />
+    <InternalsVisibleTo Include="Mnemosyne.NET.Sentinel" />
+    <InternalsVisibleTo Include="Mnemosyne.NET.AgentFramework" />
   </ItemGroup>
 </Project>

@@ -165,7 +165,7 @@ public sealed class SubjectExportTests(PgVectorFixture fixture) : IClassFixture<
     public async Task AFailedDataSourceAnswersUnavailable()
     {
         var reasonlets = await AfterTheSessionsEndAsync((store, scope) => store.ListSubjectReasonletsAsync(scope, Subject, 10, null, Ct).AsTask());
-        var runs = await AfterTheSessionsEndAsync((store, scope) => store.ListSubjectRunsAsync(scope, Subject, 10, null, Ct).AsTask());
+        var runs = await AfterTheSessionsEndAsync((store, scope) => store.ListSubjectExecutionsAsync(scope, Subject, 10, null, Ct).AsTask());
 
         Assert.Equal(MnemosyneErrorCode.Unavailable, reasonlets.Error.Code);
         Assert.Equal(MnemosyneErrorCode.Unavailable, runs.Error.Code);
@@ -202,7 +202,7 @@ public sealed class SubjectExportTests(PgVectorFixture fixture) : IClassFixture<
         var theirs = await RememberAsync(store, scope, "a", subject: "owner");
         var run = await AppendAsync(store, scope, theirs.Id, Subject);
 
-        var runs = (await store.ListSubjectRunsAsync(scope, Subject, 10, null, Ct)).Value;
+        var runs = (await store.ListSubjectExecutionsAsync(scope, Subject, 10, null, Ct)).Value;
         var reasonlets = (await store.ListSubjectReasonletsAsync(scope, Subject, 10, null, Ct)).Value;
 
         var exported = Assert.Single(runs);
@@ -219,7 +219,7 @@ public sealed class SubjectExportTests(PgVectorFixture fixture) : IClassFixture<
         var mine = await RememberAsync(store, scope, "a");
         var visitor = await AppendAsync(store, scope, mine.Id, "visitor");
 
-        var runs = (await store.ListSubjectRunsAsync(scope, Subject, 10, null, Ct)).Value;
+        var runs = (await store.ListSubjectExecutionsAsync(scope, Subject, 10, null, Ct)).Value;
 
         Assert.Equal(new[] { mine.Execution, visitor }.OrderBy(i => i.Value), runs.Select(r => r.Id));
         Assert.Equal("visitor", runs.Single(r => r.Id == visitor).Provenance.SubjectId);
@@ -242,7 +242,7 @@ public sealed class SubjectExportTests(PgVectorFixture fixture) : IClassFixture<
         var silent = new ReasonletFeedback(0.5, 0.6, 0.7);
         var scored = await AppendAsync(store, scope, owner.Id, Subject, new ReasonletOutcome(false, TimeSpan.Zero, null), judge, silent);
 
-        var runs = (await store.ListSubjectRunsAsync(scope, Subject, 10, null, Ct)).Value.ToDictionary(r => r.Id);
+        var runs = (await store.ListSubjectExecutionsAsync(scope, Subject, 10, null, Ct)).Value.ToDictionary(r => r.Id);
 
         Assert.Equal(4, runs.Count);
         var a = runs[agentOnly];
@@ -276,7 +276,7 @@ public sealed class SubjectExportTests(PgVectorFixture fixture) : IClassFixture<
         var run = await AppendAsync(store, scope, owner.Id, Subject, feedback: new ReasonletFeedback(0.1, 0.2, 0.3, true));
         Assert.True((await store.AppendFeedbackAsync(scope, run, new ReasonletFeedback(0.4, 0.5, 0.6), Ct)).IsSuccess);
 
-        var exported = (await store.ListSubjectRunsAsync(scope, Subject, 10, null, Ct)).Value.Single();
+        var exported = (await store.ListSubjectExecutionsAsync(scope, Subject, 10, null, Ct)).Value.Single();
 
         Assert.Equal(ReasonletVerdictSource.Feedback, exported.VerdictSource);
         var feedback = exported.Feedback!.Value;
@@ -294,7 +294,7 @@ public sealed class SubjectExportTests(PgVectorFixture fixture) : IClassFixture<
         await RememberAsync(store, other, "a");
         await RememberAsync(store, scope, "b", subject: "subject-2");
 
-        var runs = (await store.ListSubjectRunsAsync(scope, Subject, 10, null, Ct)).Value;
+        var runs = (await store.ListSubjectExecutionsAsync(scope, Subject, 10, null, Ct)).Value;
 
         Assert.Equal([mine.Execution], runs.Select(r => r.Id));
     }
@@ -306,7 +306,7 @@ public sealed class SubjectExportTests(PgVectorFixture fixture) : IClassFixture<
         var scope = PgVectorFixture.NewScope();
         await RememberAsync(store, scope, "a");
 
-        var runs = await store.ListSubjectRunsAsync(scope, "SUBJECT-1", 10, null, Ct);
+        var runs = await store.ListSubjectExecutionsAsync(scope, "SUBJECT-1", 10, null, Ct);
 
         Assert.True(runs.IsSuccess);
         Assert.Empty(runs.Value);
@@ -330,7 +330,7 @@ public sealed class SubjectExportTests(PgVectorFixture fixture) : IClassFixture<
         ExecutionId? after = null;
         while (true)
         {
-            var page = (await store.ListSubjectRunsAsync(scope, Subject, limit, after, Ct)).Value;
+            var page = (await store.ListSubjectExecutionsAsync(scope, Subject, limit, after, Ct)).Value;
             pageSizes.Add(page.Count);
             if (page.Count == 0)
             {
@@ -353,20 +353,20 @@ public sealed class SubjectExportTests(PgVectorFixture fixture) : IClassFixture<
 
         var results = new[]
         {
-            await store.ListSubjectRunsAsync(default, Subject, 10, null, Ct),
-            await store.ListSubjectRunsAsync(scope, " ", 10, null, Ct),
-            await store.ListSubjectRunsAsync(scope, Subject, 0, null, Ct),
-            await store.ListSubjectRunsAsync(scope, Subject, 101, null, Ct),
-            await store.ListSubjectRunsAsync(scope, Subject, 10, default(ExecutionId), Ct),
+            await store.ListSubjectExecutionsAsync(default, Subject, 10, null, Ct),
+            await store.ListSubjectExecutionsAsync(scope, " ", 10, null, Ct),
+            await store.ListSubjectExecutionsAsync(scope, Subject, 0, null, Ct),
+            await store.ListSubjectExecutionsAsync(scope, Subject, 101, null, Ct),
+            await store.ListSubjectExecutionsAsync(scope, Subject, 10, default(ExecutionId), Ct),
         };
 
         Assert.All(results, r => Assert.Equal(MnemosyneErrorCode.Validation, r.Error.Code));
-        Assert.True((await store.ListSubjectRunsAsync(scope, Subject, 100, null, Ct)).IsSuccess);
+        Assert.True((await store.ListSubjectExecutionsAsync(scope, Subject, 100, null, Ct)).IsSuccess);
 
         using var cancelled = new CancellationTokenSource();
         await cancelled.CancelAsync();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(
-            async () => await store.ListSubjectRunsAsync(scope, Subject, 10, null, cancelled.Token));
+            async () => await store.ListSubjectExecutionsAsync(scope, Subject, 10, null, cancelled.Token));
     }
 
     [Fact]
@@ -374,7 +374,7 @@ public sealed class SubjectExportTests(PgVectorFixture fixture) : IClassFixture<
     {
         var store = new ReasonletPostgreSqlStore(await fixture.CreateEmptyDatabaseAsync(), new MnemosynePostgreSqlOptions { Dimensions = 3 });
 
-        var result = await store.ListSubjectRunsAsync(PgVectorFixture.NewScope(), Subject, 10, null, Ct);
+        var result = await store.ListSubjectExecutionsAsync(PgVectorFixture.NewScope(), Subject, 10, null, Ct);
 
         Assert.Equal(MnemosyneErrorCode.Unavailable, result.Error.Code);
     }
@@ -418,7 +418,7 @@ public sealed class SubjectExportTests(PgVectorFixture fixture) : IClassFixture<
 
         var exportedRuns = new List<Guid>();
         ExecutionId? afterRun = null;
-        while ((await store.ListSubjectRunsAsync(scope, A, 3, afterRun, Ct)).Value is { Count: > 0 } page)
+        while ((await store.ListSubjectExecutionsAsync(scope, A, 3, afterRun, Ct)).Value is { Count: > 0 } page)
         {
             exportedRuns.AddRange(page.Select(r => r.Id.Value));
             afterRun = page[^1].Id;

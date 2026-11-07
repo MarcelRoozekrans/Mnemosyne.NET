@@ -48,7 +48,7 @@ Every store method is one operation, and so is each recall, each judge call and 
 | `reject` | store | `RejectAsync` |
 | `list_pending` | store | `ListPendingAsync` |
 | `list_subject_reasonlets` | store | `ListSubjectReasonletsAsync` |
-| `list_subject_runs` | store | `ListSubjectRunsAsync` |
+| `list_subject_executions` | store | `ListSubjectExecutionsAsync` |
 | `recall` | facade | `RecallAsync` |
 | `evaluate` | facade | one call to the registered `IReasonletEvaluator` |
 | `guard` | facade | one call to the registered `ICaptureGuard` |
@@ -73,7 +73,7 @@ There is one activity per operation, with these tags:
 | `mnemosyne.reject` | `mnemosyne.reasonlet.id`, set before it runs |
 | `mnemosyne.list_pending` | `mnemosyne.list.limit`, set before it runs; on success `mnemosyne.list.returned` |
 | `mnemosyne.list_subject_reasonlets` | `mnemosyne.list.limit`, set before it runs; on success `mnemosyne.list.returned` |
-| `mnemosyne.list_subject_runs` | `mnemosyne.list.limit`, set before it runs; on success `mnemosyne.list.returned` |
+| `mnemosyne.list_subject_executions` | `mnemosyne.list.limit`, set before it runs; on success `mnemosyne.list.returned` |
 | `mnemosyne.recall` | see below |
 | `mnemosyne.evaluate` | see below |
 | `mnemosyne.guard` | see below |
@@ -196,7 +196,7 @@ The agent provider counts the same way, with `mnemosyne.integration` set to `age
 - A memory that fails to resolve counts as `exception`, and so does a scope resolver that throws. A throwing resolver gives the run no scope, and the run goes on without recall and capture.
 - A run can count twice. With `Recall` on, `ExposeFindProcedure` on, no tool named `find_procedure` already offered, a last user message without text, and a memory that fails to resolve, the run counts `continuation` and then `exception`.
 
-The capture side is shared. A host or integration that hands a run to `IReasonletCaptureSink` and sees an exception can count it with `ReasonletCaptures.CountFailed`, which adds `exception` to `mnemosyne.capture.queue`; the provider does this when resolving the sink or offering a run throws. Captures carry a `Provenance.Source`: the chat middleware's is `mnemosyne.chat` by default, set with `ReasonletCaptureOptions.Source`, and the agent provider's is `mnemosyne.agent` by default, set with `ReasonletAgentOptions.Source`.
+The capture side is shared. When the agent provider cannot resolve the sink or offer a run, it adds `exception` to `mnemosyne.capture.queue`. Captures carry a `Provenance.Source`: the chat middleware's is `mnemosyne.chat` by default, set with `ReasonletCaptureOptions.Source`, and the agent provider's is `mnemosyne.agent` by default, set with `ReasonletAgentOptions.Source`.
 
 A timeout, a formatter failure, an error result and an exception mark the `mnemosyne.chat.recall` activity as failed, with `error.type` set as described in [Failures on an activity](#failures-on-an-activity). The memory's own `mnemosyne.recall` activity runs inside it. The worker processes items outside the trace of the chat call that queued them, so each `mnemosyne.capture.run` is a root activity, and the facade's and the store's activities for the remember run inside it.
 

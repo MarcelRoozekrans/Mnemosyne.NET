@@ -4,7 +4,7 @@ using ZeroAlloc.Results;
 
 namespace Mnemosyne.NET;
 
-/// <summary>Settings for <see cref="ReasonletSuggestions.RecallAsync"/>, the recall step every integration shares.</summary>
+/// <summary>Settings for the recall step of the chat middleware and the agent provider.</summary>
 public sealed class ReasonletSuggestionOptions
 {
     /// <summary>

@@ -234,7 +234,7 @@ Design: [roadmap design](../superpowers/specs/2026-10-21-roadmap-design.md), bui
 **Plan:** `docs/superpowers/plans/2026-11-06-phase-4.7-subject-export.md`
 **Completed:** 2026-11-06
 
-### Phase 4.8: 1.0.0 release [status: pending]
+### Phase 4.8: 1.0.0 release [status: active]
 **Goal:** Release 1.0.0 through release-please.
 **Surface:** Infra
 **HelpWanted:** no

@@ -21,7 +21,7 @@ namespace Mnemosyne.NET;
 /// suggested text, a tool or argument name, or any error or exception message.
 /// </para>
 /// </remarks>
-public static class ReasonletSuggestions
+internal static class ReasonletSuggestions
 {
     /// <summary>The integration name of the chat middleware that <c>UseReasonlets</c> adds.</summary>
     public const string ChatIntegration = "chat";

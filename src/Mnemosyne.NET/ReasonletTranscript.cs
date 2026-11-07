@@ -35,7 +35,7 @@ namespace Mnemosyne.NET;
 /// <see cref="IReasonletMemory.RememberAsync"/> records a rerun under a recalled parent as an execution, not a new version.
 /// </para>
 /// <para>
-/// Nothing here validates the graph against <see cref="ReasonletGraphLimits"/>; <see cref="IReasonletMemory.RememberAsync"/>
+/// Nothing here validates the graph against the graph limits; <see cref="IReasonletMemory.RememberAsync"/>
 /// does, and answers <see cref="MnemosyneErrorCode.Validation"/> for a run with too many steps or an overlong tool name.
 /// </para>
 /// </remarks>

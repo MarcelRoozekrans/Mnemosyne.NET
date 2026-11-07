@@ -1,7 +1,7 @@
 namespace Mnemosyne.NET;
 
 /// <summary>The counts that every integration shares for runs it could not hand to capture.</summary>
-public static class ReasonletCaptures
+internal static class ReasonletCaptures
 {
     /// <summary>
     /// Counts one finished run that could not be handed to capture, such as a sink that failed to resolve or a run that

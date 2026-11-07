@@ -15,7 +15,7 @@ public sealed class MinosEvaluatorOptions
 
     /// <summary>
     /// Gets the name the verdicts carry as <see cref="ReasonletEvaluation.Evaluator"/>. Must not be blank, must be valid
-    /// UTF-16 and must not be longer than <see cref="EvaluationLimits.MaxEvaluatorLength"/> code points. Defaults to
+    /// UTF-16 and must not be longer than 100 code points. Defaults to
     /// <c>minos</c>.
     /// </summary>
     public string EvaluatorName { get; init; } = "minos";

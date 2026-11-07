@@ -38,11 +38,11 @@ The answer of a run reaches an evaluator when you register one, and is never sto
 | Storage limitation, Art. 5(1)(e) | `PruneAsync` deletes old run records and Reasonlets nobody uses, on a schedule the host runs. | [Retention](data-lifecycle.md#retention) |
 | Accountability, Art. 5(2) and records of processing, Art. 30 | Each Reasonlet and run carries its provenance. Receipts return the ids to correlate on. The table above lists the categories of data to put in your own record. Mnemosyne does not keep that record for you. | [Reasonlets](../concepts/reasonlets.md), [Telemetry](telemetry.md) |
 | Security of processing, Art. 32 | Encryption and backup rotation are a storage concern for the database. Telemetry carries no question, subject or scope, so an exporter needs no scrubbing. The store's role needs only the privileges listed. Keep Npgsql's `IncludeErrorDetail` off in production, or a logged error can carry row values. | [What erasure leaves on disk](postgresql.md#what-erasure-leaves-on-disk), [Privileges](postgresql.md#privileges), [Errors](postgresql.md#errors) and [Privacy](telemetry.md#privacy) |
-| Access, Art. 15, and portability, Art. 20 | `ListSubjectReasonletsAsync` and `ListSubjectRunsAsync` page through everything stored about one subject in a scope except the embeddings. The library has no export format. | [Access and portability](#access-and-portability) |
+| Access, Art. 15, and portability, Art. 20 | `ListSubjectReasonletsAsync` and `ListSubjectExecutionsAsync` page through everything stored about one subject in a scope except the embeddings. The library has no export format. | [Access and portability](#access-and-portability) |
 
 ### Access and portability
 
-`IReasonletMemory` has two calls that read by subject. `ListSubjectReasonletsAsync` returns the subject's Reasonlets in a scope as `ReasonletRecord`s, each with its `Definition` and its `Metrics`. `ListSubjectRunsAsync` returns the subject's runs as `ReasonletExecutionRecord`s. Both take a scope, a subject id, a limit from 1 to 100 and the last id of the previous page, and both return the same set that `EraseAsync` removes for that scope and subject. They return oldest id first, and an empty page means the end. There is no export format: the host serialises the records.
+`IReasonletMemory` has two calls that read by subject. `ListSubjectReasonletsAsync` returns the subject's Reasonlets in a scope as `ReasonletRecord`s, each with its `Definition` and its `Metrics`. `ListSubjectExecutionsAsync` returns the subject's runs as `ReasonletExecutionRecord`s. Both take a scope, a subject id, a limit from 1 to 100 and the last id of the previous page, and both return the same set that `EraseAsync` removes for that scope and subject. They return oldest id first, and an empty page means the end. There is no export format: the host serialises the records.
 
 ```csharp
 const string subject = "user-1234";
@@ -71,7 +71,7 @@ while (true)
 }
 ```
 
-The runs loop has the same shape, with `ListSubjectRunsAsync`, an `ExecutionId?` cursor and the `Id` of the last run.
+The runs loop has the same shape, with `ListSubjectExecutionsAsync`, an `ExecutionId?` cursor and the `Id` of the last run.
 
 Notes on what comes back:
 
