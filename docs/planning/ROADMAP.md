@@ -242,27 +242,32 @@ Design: [roadmap design](../superpowers/specs/2026-10-21-roadmap-design.md), bui
 **Plan:** `docs/superpowers/plans/2026-11-06-phase-4.8-1-0-release.md`
 **Completed:** 2026-11-07
 
-## Milestone 5: Variants [status: pending]
-**Goal:** Choose between sibling versions of a procedure, post-1.0 (handover phase 4).
+## Milestone 5: Variants [status: active]
+**Goal:** A new version of a procedure gets a fair chance to prove itself: an opt-in variant selector picks one variant per lineage and explores new versions before the best known one dominates, without changing the 1.0 API.
+**Started:** 2026-11-07
+**Design:** [milestone 5 design](../superpowers/specs/2026-11-07-milestone-5-design.md)
 **Definition of Done:**
-- [ ] Variant selection works behind an interface without breaking the 1.0 API
-- [ ] New versions get explored before the best one dominates
-- [ ] Docs and a sample cover variants
+- [ ] All planned phases complete
+- [ ] All tests passing, including integration tests against PostgreSQL + pgvector
+- [ ] Variant selection works behind the existing selector interface, opt-in, and package validation against 1.0.0 stays green
+- [ ] A new version with few runs gets tried before the best known one dominates, shown by a simulation test
+- [ ] Selection is deterministic when seeded, and the recall activity records the chosen variant and whether it was an exploration
+- [ ] Docs and a self-checking sample cover variants
 
-### Phase 5.1: Variant selection strategy [status: pending]
-**Goal:** A variant selection strategy behind an interface.
+### Phase 5.1: Variant selection [status: pending]
+**Goal:** A `VariantSelector` over `IReasonletSelector` that groups candidates by lineage and picks one variant per lineage, with a seedable random source and telemetry.
 **Surface:** Backend
 **HelpWanted:** no
 **Plan:** _to be written_
 
-### Phase 5.2: Exploration versus exploitation [status: pending]
-**Goal:** Give new versions a chance to prove themselves before the best known version dominates.
+### Phase 5.2: Exploration [status: pending]
+**Goal:** Thompson sampling with the parent prior and an optional minimum number of trials, proven by a simulation in which a stronger new version overtakes an incumbent.
 **Surface:** Backend
 **HelpWanted:** no
 **Plan:** _to be written_
 
-### Phase 5.3: Variant docs and sample [status: pending]
-**Goal:** Docsite pages and a sample for variants.
+### Phase 5.3: Docs and sample [status: pending]
+**Goal:** Update `variants.md`, add a variants guide and a self-checking sample that CI runs.
 **Surface:** Docs
 **HelpWanted:** no
 **Plan:** _to be written_
