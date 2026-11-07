@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Mnemosyne.NET.Abstractions;
 using ZeroAlloc.Results;
 
@@ -50,6 +51,13 @@ public sealed class VariantSelector : IReasonletSelector
             {
                 variants.Add(match);
             }
+        }
+
+        // Only the recall's own activity is tagged, never whatever activity happens to be current.
+        var activity = Activity.Current;
+        if (activity is not null && activity.OperationName == RecallTelemetry.RecallActivityName)
+        {
+            RecallTelemetry.Variants(activity, variants.Count, ranked.Value.Count - variants.Count);
         }
 
         return Result<IReadOnlyList<ReasonletMatch>, MnemosyneError>.Success(variants);

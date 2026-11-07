@@ -27,7 +27,8 @@ namespace Mnemosyne.NET;
 /// </remarks>
 internal static class RecallTelemetry
 {
-    private const string ActivityName = "mnemosyne.recall";
+    /// <summary>The name of the recall activity.</summary>
+    internal const string RecallActivityName = "mnemosyne.recall";
     private const string Operation = "recall";
     private const string OperationTag = "mnemosyne.operation";
     /// <summary>The tag that carries an operation's outcome.</summary>
@@ -46,6 +47,12 @@ internal static class RecallTelemetry
     private const string IntentFallbackTag = "mnemosyne.recall.intent_fallback";
     private const string CandidatesTag = "mnemosyne.recall.candidates";
     private const string ReturnedTag = "mnemosyne.recall.returned";
+    /// <summary>The tag that carries how many lineages a variant selection kept.</summary>
+    internal const string VariantLineagesTag = "mnemosyne.recall.variant.lineages";
+
+    /// <summary>The tag that carries how many lower-ranked versions a variant selection dropped.</summary>
+    internal const string VariantDroppedTag = "mnemosyne.recall.variant.dropped";
+
     private const string ChosenIdTag = "mnemosyne.recall.chosen.id";
     private const string ChosenLineageIdTag = "mnemosyne.recall.chosen.lineage_id";
     private const string ChosenVersionTag = "mnemosyne.recall.chosen.version";
@@ -81,7 +88,7 @@ internal static class RecallTelemetry
     internal static async ValueTask<Result<IReadOnlyList<ReasonletMatch>, MnemosyneError>> RunAsync(
         Func<Activity?, ValueTask<Result<IReadOnlyList<ReasonletMatch>, MnemosyneError>>> body)
     {
-        using var activity = Source.StartActivity(ActivityName);
+        using var activity = Source.StartActivity(RecallActivityName);
         var started = Stopwatch.GetTimestamp();
         var outcome = ExceptionOutcome;
         try
@@ -161,6 +168,13 @@ internal static class RecallTelemetry
 
     /// <summary>Tags a recall with how many candidates the store returned.</summary>
     internal static void Candidates(Activity? activity, int count) => activity?.SetTag(CandidatesTag, count);
+
+    /// <summary>Tags a recall with the lineages a variant selection kept and the versions it dropped. Counts only.</summary>
+    internal static void Variants(Activity? activity, int lineages, int dropped)
+    {
+        activity?.SetTag(VariantLineagesTag, lineages);
+        activity?.SetTag(VariantDroppedTag, dropped);
+    }
 
     /// <summary>The name an error code is tagged with, without formatting a defined one.</summary>
     internal static string ErrorName(MnemosyneErrorCode code) => code switch

@@ -136,6 +136,21 @@ public sealed class VariantSelectorTests
     }
 
     [Fact]
+    public async Task EqualScoresInOneLineageKeepTheFirstInTheInnerOrder()
+    {
+        var a = ReasonletId.New();
+        var candidates = new[] { Candidate(a, 0.8), Candidate(a, 0.8), Candidate(a, 0.8) };
+        var query = TestData.Query() with { Top = 10 };
+        var direct = await Inner().RankAsync(query, candidates, CancellationToken.None);
+        Assert.True(direct.IsSuccess);
+
+        var matches = await Rank(query, candidates);
+
+        var only = Assert.Single(matches);
+        Assert.Equal(direct.Value[0].Reasonlet.Id, only.Reasonlet.Id);
+    }
+
+    [Fact]
     public async Task ItAsksTheInnerSelectorForEveryCandidate()
     {
         var recording = new RecordingSelector(Inner());
