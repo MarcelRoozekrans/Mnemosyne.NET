@@ -4,9 +4,9 @@ using Mnemosyne.Samples;
 using static Mnemosyne.Samples.SampleRunner;
 
 // Watch a new version of a Reasonlet overtake a proven one. The incumbent has 200 runs at a 70% success rate; its new
-// version has no runs yet and would really succeed 90% of the time. The sample builds the candidates by hand, so it needs
-// no database, no model and no key, and nothing it prints depends on the clock or on chance: the outcomes are drawn from
-// a seeded Random and the selector gets a fixed seed.
+// version has no runs yet and would really succeed 90% of the time. The sample builds the candidates by hand, so it
+// needs no database, no model and no key, and nothing it prints depends on the clock or on chance: the outcomes are
+// drawn from a seeded Random and the selector gets a fixed seed.
 // Three acts: ReasonletSelector alone never tries the new version; VariantSelector without exploration returns one
 // variant per lineage; VariantSelector with Thompson sampling tries the new version early and then prefers it.
 // The sample checks its own counts and exits 1 if they differ, so what the docs say about variants is tested in CI.
@@ -29,18 +29,24 @@ static async Task<int> Run(CancellationToken ct)
     // Act 2. VariantSelector without exploration keeps one variant per lineage and returns the unrelated procedure too.
     Console.WriteLine("Act 2. VariantSelector without exploration: one match per lineage.");
     var none = new VariantSelector(plain, new VariantSelectionOptions(), ranking);
-    var matches = Require(await none.RankAsync(World.Query(0), world.Candidates(World.Incumbent, World.Child), ct), "Act 2: the ranking");
+    var matches = Require(
+        await none.RankAsync(World.Query(0), world.Candidates(World.Incumbent, World.Child), ct),
+        "Act 2: the ranking");
     foreach (var match in matches)
     {
         Console.WriteLine($"  {match.Reasonlet.Name}");
     }
 
     RequireEqual(matches.Count, 2, "Act 2: the number of matches");
-    RequireEqual(matches.Count(m => m.Reasonlet.Id == World.IncumbentId || m.Reasonlet.Id == World.ChildId), 1, "Act 2: the variants of the lineage");
+    RequireEqual(
+        matches.Count(m => m.Reasonlet.Id == World.IncumbentId || m.Reasonlet.Id == World.ChildId),
+        1,
+        "Act 2: the variants of the lineage");
     RequireEqual(matches.Count(m => m.Reasonlet.Id == World.UnrelatedId), 1, "Act 2: the unrelated procedure");
 
     // Act 3. With Thompson sampling the selector draws a plausible success rate for each variant, and a variant with
-    // little evidence has a wide range, so it gets tried. Once the new version has runs its 0.9 wins nearly every round.
+    // little evidence has a wide range, so it gets tried. Once the new version has runs its 0.9 wins nearly every
+    // round.
     Console.WriteLine("Act 3. VariantSelector with Thompson sampling, seed 11.");
     var thompson = new VariantSelector(
         plain, new VariantSelectionOptions { Exploration = VariantExploration.Thompson, Seed = 11 }, ranking);
@@ -50,12 +56,14 @@ static async Task<int> Run(CancellationToken ct)
     Console.WriteLine($"  New version chosen in {first20} of the first 20 rounds and {last100} of the last 100.");
     if (first20 < 1)
     {
-        throw new SampleFailure($"Act 3: the new version was chosen in {first20} of the first 20 rounds, not at least 1.");
+        throw new SampleFailure(
+            $"Act 3: the new version was chosen in {first20} of the first 20 rounds, not at least 1.");
     }
 
     if (last100 < 60)
     {
-        throw new SampleFailure($"Act 3: the new version was chosen in {last100} of the last 100 rounds, not at least 60.");
+        throw new SampleFailure(
+            $"Act 3: the new version was chosen in {last100} of the last 100 rounds, not at least 60.");
     }
 
     Console.WriteLine("All checks passed.");
@@ -114,7 +122,9 @@ internal sealed class World
         var chosen = new bool[Rounds];
         for (var round = 0; round < Rounds; round++)
         {
-            var ranked = Require(await selector.RankAsync(Query(round), Candidates(incumbent, child), ct), $"Round {round}: the ranking");
+            var ranked = Require(
+                await selector.RankAsync(Query(round), Candidates(incumbent, child), ct),
+                $"Round {round}: the ranking");
             var pick = ranked[0].Reasonlet.Id;
             chosen[round] = pick == ChildId;
             var success = outcomes.NextDouble() < (chosen[round] ? ChildRate : IncumbentRate);
@@ -135,7 +145,12 @@ internal sealed class World
         new(metrics.Runs + 1, metrics.Successes + (success ? 1 : 0), null, Now);
 
     private static ReasonletCandidate Candidate(
-        ReasonletId id, string name, ReasonletId lineage, double similarity, ReasonletMetrics metrics, ReasonletMetrics? parent) => new()
+        ReasonletId id,
+        string name,
+        ReasonletId lineage,
+        double similarity,
+        ReasonletMetrics metrics,
+        ReasonletMetrics? parent) => new()
     {
         LineageId = lineage,
         Similarity = similarity,
