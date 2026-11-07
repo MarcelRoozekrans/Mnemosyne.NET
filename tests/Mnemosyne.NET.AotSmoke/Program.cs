@@ -701,6 +701,19 @@ static async Task<int> VariantSmoke(ReasonletGraph graph)
         return 67;
     }
 
+    // The Thompson path under AOT: a seeded Beta draw per version, MinTrials forcing and the options overload.
+    var thompson = new ServiceCollection();
+    thompson.AddSingleton<IReasonletSelector>(new ReasonletSelector(new ReasonletRankingOptions(), TimeProvider.System));
+    thompson.AddMnemosyneVariantSelection(new VariantSelectionOptions { Exploration = VariantExploration.Thompson, Seed = 7, MinTrials = 1 });
+    await using var thompsonProvider = thompson.BuildServiceProvider();
+    var drawn = await thompsonProvider.GetRequiredService<IReasonletSelector>().RankAsync(
+        new ReasonletQuery { Scope = new ReasonletScope("aot-variant"), Question = "q" }, [Candidate(0.9), Candidate(0.8)], CancellationToken.None);
+    if (drawn.IsFailure || drawn.Value.Count != 1)
+    {
+        Console.Error.WriteLine("The Thompson variant selector did not rank two candidates of one lineage as one match.");
+        return 68;
+    }
+
     return 0;
 }
 
