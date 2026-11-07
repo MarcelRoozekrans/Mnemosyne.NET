@@ -1,5 +1,19 @@
 #nullable enable
+Mnemosyne.NET.VariantExploration
+Mnemosyne.NET.VariantExploration.None = 0 -> Mnemosyne.NET.VariantExploration
+Mnemosyne.NET.VariantExploration.Thompson = 1 -> Mnemosyne.NET.VariantExploration
+Mnemosyne.NET.VariantSelectionOptions
+Mnemosyne.NET.VariantSelectionOptions.Exploration.get -> Mnemosyne.NET.VariantExploration
+Mnemosyne.NET.VariantSelectionOptions.Exploration.init -> void
+Mnemosyne.NET.VariantSelectionOptions.MinTrials.get -> int
+Mnemosyne.NET.VariantSelectionOptions.MinTrials.init -> void
+Mnemosyne.NET.VariantSelectionOptions.Seed.get -> int?
+Mnemosyne.NET.VariantSelectionOptions.Seed.init -> void
+Mnemosyne.NET.VariantSelectionOptions.Validate() -> ZeroAlloc.Results.UnitResult<Mnemosyne.NET.Abstractions.MnemosyneError>
+Mnemosyne.NET.VariantSelectionOptions.VariantSelectionOptions() -> void
 Mnemosyne.NET.VariantSelector
 Mnemosyne.NET.VariantSelector.RankAsync(Mnemosyne.NET.Abstractions.ReasonletQuery! query, System.Collections.Generic.IReadOnlyList<Mnemosyne.NET.Abstractions.ReasonletCandidate!>! candidates, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<ZeroAlloc.Results.Result<System.Collections.Generic.IReadOnlyList<Mnemosyne.NET.Abstractions.ReasonletMatch!>!, Mnemosyne.NET.Abstractions.MnemosyneError>>
 Mnemosyne.NET.VariantSelector.VariantSelector(Mnemosyne.NET.Abstractions.IReasonletSelector! inner) -> void
+Mnemosyne.NET.VariantSelector.VariantSelector(Mnemosyne.NET.Abstractions.IReasonletSelector! inner, Mnemosyne.NET.VariantSelectionOptions! options, Mnemosyne.NET.ReasonletRankingOptions! ranking) -> void
 static Mnemosyne.NET.ServiceCollectionExtensions.AddMnemosyneVariantSelection(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+static Mnemosyne.NET.ServiceCollectionExtensions.AddMnemosyneVariantSelection(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, Mnemosyne.NET.VariantSelectionOptions! options) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!

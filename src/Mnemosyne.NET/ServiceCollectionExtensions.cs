@@ -67,7 +67,8 @@ public static class ServiceCollectionExtensions
     /// <remarks>
     /// Call it after <see cref="AddMnemosyne"/>, and after a host registers its own selector: it wraps whatever
     /// unkeyed selector is registered last, so a host's own selector is grouped too. The wrapper keeps the lifetime of the
-    /// selector it wraps. A second call changes nothing. The wrapped selector receives a query whose
+    /// selector it wraps. A second call changes nothing, whichever overload either call used, so the first call's options
+    /// win. This overload explores nothing, so it never reads the ranking options. The wrapped selector receives a query whose
     /// <see cref="ReasonletQuery.Top"/> equals the candidate count, so it can exceed the query's limit of 50 when
     /// <see cref="MnemosyneOptions.CandidatePool"/> does.
     /// </remarks>
@@ -75,9 +76,41 @@ public static class ServiceCollectionExtensions
     /// <returns>The same service collection.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="services"/> is null.</exception>
     /// <exception cref="InvalidOperationException">No <see cref="IReasonletSelector"/> is registered yet.</exception>
-    public static IServiceCollection AddMnemosyneVariantSelection(this IServiceCollection services)
+    public static IServiceCollection AddMnemosyneVariantSelection(this IServiceCollection services) =>
+        AddMnemosyneVariantSelection(services, new VariantSelectionOptions());
+
+    /// <summary>
+    /// Wraps the registered <see cref="IReasonletSelector"/> in a <see cref="VariantSelector"/> configured with
+    /// <paramref name="options"/>, so a recall returns one version per lineage and can explore new versions.
+    /// </summary>
+    /// <remarks>
+    /// Call it after <see cref="AddMnemosyne"/>, and after a host registers its own selector: it wraps whatever
+    /// unkeyed selector is registered last, so a host's own selector is grouped too. The wrapper keeps the lifetime of the
+    /// selector it wraps. The selector takes its ranking options from the registered <see cref="MnemosyneOptions"/>, or
+    /// the defaults when the host registered none; they are validated only when <paramref name="options"/> explores with
+    /// Thompson sampling, and an invalid set then throws <see cref="ArgumentException"/> when the selector is resolved. A second call changes nothing,
+    /// whichever overload either call used, so the first call's options win. The wrapped selector receives a query whose <see cref="ReasonletQuery.Top"/> equals
+    /// the candidate count, so it can exceed the query's limit of 50 when <see cref="MnemosyneOptions.CandidatePool"/> does.
+    /// </remarks>
+    /// <param name="services">The service collection.</param>
+    /// <param name="options">How a version is picked within a lineage.</param>
+    /// <returns>The same service collection.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="services"/> or <paramref name="options"/> is null.</exception>
+    /// <exception cref="ArgumentException">
+    /// The options are invalid. They are validated before a second call is recognised, so a second call with invalid
+    /// options throws although it would otherwise change nothing.
+    /// </exception>
+    /// <exception cref="InvalidOperationException">No <see cref="IReasonletSelector"/> is registered yet.</exception>
+    public static IServiceCollection AddMnemosyneVariantSelection(this IServiceCollection services, VariantSelectionOptions options)
     {
         ArgumentNullException.ThrowIfNull(services);
+        ArgumentNullException.ThrowIfNull(options);
+        var validation = options.Validate();
+        if (validation.IsFailure)
+        {
+            throw new ArgumentException(validation.Error.Message, nameof(options));
+        }
+
         if (services.Any(descriptor => descriptor.ServiceType == typeof(VariantSelectionMarker)))
         {
             return services;
@@ -118,7 +151,10 @@ public static class ServiceCollectionExtensions
 
         services[index] = ServiceDescriptor.Describe(
             typeof(IReasonletSelector),
-            provider => new VariantSelector(provider.GetRequiredKeyedService<IReasonletSelector>(key)),
+            provider => new VariantSelector(
+                provider.GetRequiredKeyedService<IReasonletSelector>(key),
+                options,
+                (provider.GetService<MnemosyneOptions>() ?? new MnemosyneOptions()).Ranking),
             original.Lifetime);
         services.Add(keyed);
         services.AddSingleton<VariantSelectionMarker>();

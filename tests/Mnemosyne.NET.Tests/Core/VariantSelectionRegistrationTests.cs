@@ -206,4 +206,151 @@ public sealed class VariantSelectionRegistrationTests
 
         Assert.Equal(1, DisposableSelector.Disposed);
     }
+
+    private static IReadOnlyList<int> Picks(IReasonletSelector selector, IReadOnlyList<ReasonletCandidate> candidates)
+    {
+        var picks = new List<int>();
+        for (var round = 0; round < 20; round++)
+        {
+            var result = selector.RankAsync(TestData.Query() with { Top = 10, Question = "question " + round }, candidates, TestContext.Current.CancellationToken)
+                .AsTask().GetAwaiter().GetResult();
+            Assert.True(result.IsSuccess);
+            picks.Add(candidates.ToList().FindIndex(c => c.Reasonlet.Id == result.Value[0].Reasonlet.Id));
+        }
+
+        return picks;
+    }
+
+    private static List<ReasonletCandidate> Variants()
+    {
+        var lineage = ReasonletId.New();
+        return Enumerable.Range(0, 8).Select(n => Candidate(lineage, 0.9 - (n * 0.01))).ToList();
+    }
+
+    private static ServiceProvider SeededProvider(MnemosyneOptions? mnemosyne = null)
+    {
+        var services = Services();
+        if (mnemosyne is not null)
+        {
+            services.AddSingleton(mnemosyne);
+        }
+
+        services.AddSingleton<IReasonletSelector>(new HostSelector());
+        services.AddMnemosyneVariantSelection(new VariantSelectionOptions { Exploration = VariantExploration.Thompson, Seed = 42 });
+        return services.BuildServiceProvider();
+    }
+
+    [Fact]
+    public void TheOptionsReachTheSelector()
+    {
+        var variants = Variants();
+        using var first = SeededProvider();
+        using var second = SeededProvider();
+
+        var a = Picks(first.GetRequiredService<IReasonletSelector>(), variants);
+        var b = Picks(second.GetRequiredService<IReasonletSelector>(), variants);
+
+        Assert.Equal(a, b);
+        Assert.True(a.Distinct().Count() > 1, "Thompson sampling with equal metrics should vary with the question");
+    }
+
+    [Fact]
+    public void TheRankingOptionsComeFromTheRegisteredMnemosyneOptions()
+    {
+        var bad = new MnemosyneOptions { Ranking = new ReasonletRankingOptions { PriorWeight = -1 } };
+        using (var provider = SeededProvider(bad))
+        {
+            Assert.Throws<ArgumentException>(() => provider.GetRequiredService<IReasonletSelector>());
+        }
+
+        var variants = Variants();
+        using var defaults = SeededProvider(new MnemosyneOptions());
+        using var heavy = SeededProvider(new MnemosyneOptions { Ranking = new ReasonletRankingOptions { PriorWeight = 500 } });
+
+        Assert.NotEqual(
+            Picks(defaults.GetRequiredService<IReasonletSelector>(), variants),
+            Picks(heavy.GetRequiredService<IReasonletSelector>(), variants));
+    }
+
+    [Fact]
+    public void InvalidRankingOptionsAreIgnoredWithoutExploration()
+    {
+        var services = Services();
+        services.AddSingleton(new MnemosyneOptions { Ranking = new ReasonletRankingOptions { PriorWeight = -1 } });
+        services.AddSingleton<IReasonletSelector>(new HostSelector());
+        services.AddMnemosyneVariantSelection();
+        using var provider = services.BuildServiceProvider();
+
+        Assert.IsType<VariantSelector>(provider.GetRequiredService<IReasonletSelector>());
+    }
+
+    [Fact]
+    public void InvalidOptionsThrowAtRegistration()
+    {
+        var services = Services();
+        services.AddSingleton<IReasonletSelector>(new HostSelector());
+
+        var ex = Assert.Throws<ArgumentException>(() =>
+            services.AddMnemosyneVariantSelection(new VariantSelectionOptions { MinTrials = -1 }));
+
+        Assert.Equal("options", ex.ParamName);
+        Assert.DoesNotContain(services, d => d.ServiceType == typeof(VariantSelectionMarker));
+    }
+
+    [Fact]
+    public void NullOptionsThrow()
+    {
+        var services = Services();
+        services.AddSingleton<IReasonletSelector>(new HostSelector());
+
+        Assert.Throws<ArgumentNullException>(() => services.AddMnemosyneVariantSelection(null!));
+    }
+
+    [Fact]
+    public void ANullServicesThrowsForTheOptionsOverload() =>
+        Assert.Throws<ArgumentNullException>(() =>
+            ServiceCollectionExtensions.AddMnemosyneVariantSelection(null!, new VariantSelectionOptions()));
+
+    [Fact]
+    public void TheFirstCallsOptionsWinWhicheverOverloadComesFirst()
+    {
+        var variants = Variants();
+        var thompson = new VariantSelectionOptions { Exploration = VariantExploration.Thompson, Seed = 1 };
+
+        var firstOnly = Services();
+        firstOnly.AddSingleton<IReasonletSelector>(new HostSelector());
+        firstOnly.AddMnemosyneVariantSelection(thompson);
+        using var expected = firstOnly.BuildServiceProvider();
+
+        var optionsFirst = Services();
+        optionsFirst.AddSingleton<IReasonletSelector>(new HostSelector());
+        optionsFirst.AddMnemosyneVariantSelection(thompson).AddMnemosyneVariantSelection()
+            .AddMnemosyneVariantSelection(new VariantSelectionOptions { Seed = 2 });
+        using var optionsFirstProvider = optionsFirst.BuildServiceProvider();
+
+        Assert.Single(optionsFirst, d => d.ServiceType == typeof(IReasonletSelector) && !d.IsKeyedService);
+        Assert.Single(optionsFirst, d => d.ServiceType == typeof(VariantSelectionMarker));
+        var expectedPicks = Picks(expected.GetRequiredService<IReasonletSelector>(), variants);
+        Assert.Equal(expectedPicks, Picks(optionsFirstProvider.GetRequiredService<IReasonletSelector>(), variants));
+        Assert.True(expectedPicks.Distinct().Count() > 1);
+
+        var parameterlessFirst = Services();
+        parameterlessFirst.AddSingleton<IReasonletSelector>(new HostSelector());
+        parameterlessFirst.AddMnemosyneVariantSelection().AddMnemosyneVariantSelection(thompson);
+        using var parameterlessProvider = parameterlessFirst.BuildServiceProvider();
+
+        Assert.Single(parameterlessFirst, d => d.ServiceType == typeof(IReasonletSelector) && !d.IsKeyedService);
+        Assert.All(Picks(parameterlessProvider.GetRequiredService<IReasonletSelector>(), variants), pick => Assert.Equal(0, pick));
+    }
+
+    [Fact]
+    public void ASecondCallWithInvalidOptionsStillThrows()
+    {
+        var services = Services();
+        services.AddSingleton<IReasonletSelector>(new HostSelector());
+        services.AddMnemosyneVariantSelection();
+
+        Assert.Throws<ArgumentException>(() =>
+            services.AddMnemosyneVariantSelection(new VariantSelectionOptions { MinTrials = -1 }));
+    }
 }

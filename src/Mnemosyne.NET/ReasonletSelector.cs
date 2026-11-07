@@ -98,22 +98,48 @@ public sealed class ReasonletSelector : IReasonletSelector
     /// <returns>The rate, and whether the parent's rate was the prior, which is when it is above 0.5.</returns>
     internal static SmoothedRate SuccessRate(ReasonletMetrics own, ReasonletMetrics? parent, double priorWeight, double agentVerdictWeight)
     {
-        var parentRate = parent is { } p ? Smooth(p, NeutralPrior, priorWeight, agentVerdictWeight) : NeutralPrior;
-        var usesParentPrior = parentRate > NeutralPrior;
-        var prior = usesParentPrior ? parentRate : NeutralPrior;
+        var (prior, usesParentPrior) = Prior(parent, priorWeight, agentVerdictWeight);
         return new SmoothedRate(Smooth(own, prior, priorWeight, agentVerdictWeight), usesParentPrior);
+    }
+
+    /// <summary>
+    /// Computes the Beta posterior whose mean is <see cref="SuccessRate"/>'s rate:
+    /// <c>alpha = k * prior + weightedSuccesses</c> and <c>beta = k * (1 - prior) + (weightedRuns - weightedSuccesses)</c>,
+    /// with the same prior, weighting and <c>k</c>. Each shape is at least the smallest positive double, so a Beta draw
+    /// accepts it even when rounding would make it 0.
+    /// </summary>
+    /// <returns>The two shape parameters.</returns>
+    internal static (double Alpha, double Beta) Posterior(ReasonletMetrics own, ReasonletMetrics? parent, double priorWeight, double agentVerdictWeight)
+    {
+        var (prior, _) = Prior(parent, priorWeight, agentVerdictWeight);
+        var (runs, successes) = Weighted(own, agentVerdictWeight);
+        var alpha = (priorWeight * prior) + successes;
+        var beta = (priorWeight * (1.0 - prior)) + (runs - successes);
+        return (Math.Max(alpha, double.Epsilon), Math.Max(beta, double.Epsilon));
     }
 
     /// <summary>Computes <c>0.5 ^ (age / halfLife)</c>. A negative age, which clock skew can cause, counts as zero.</summary>
     internal static double Freshness(TimeSpan age, TimeSpan halfLife) =>
         age <= TimeSpan.Zero ? 1.0 : Math.Pow(0.5, age / halfLife);
 
+    // The prior of a version: its parent's smoothed rate when that is above 0.5, and 0.5 otherwise.
+    private static (double Prior, bool UsesParentPrior) Prior(ReasonletMetrics? parent, double priorWeight, double agentVerdictWeight)
+    {
+        var parentRate = parent is { } p ? Smooth(p, NeutralPrior, priorWeight, agentVerdictWeight) : NeutralPrior;
+        var usesParentPrior = parentRate > NeutralPrior;
+        return (usesParentPrior ? parentRate : NeutralPrior, usesParentPrior);
+    }
+
     private static double Smooth(ReasonletMetrics metrics, double prior, double priorWeight, double agentVerdictWeight)
     {
-        var weightedRuns = metrics.JudgedRuns + (agentVerdictWeight * (metrics.Runs - metrics.JudgedRuns));
-        var weightedSuccesses = metrics.JudgedSuccesses + (agentVerdictWeight * (metrics.Successes - metrics.JudgedSuccesses));
+        var (weightedRuns, weightedSuccesses) = Weighted(metrics, agentVerdictWeight);
         return (weightedSuccesses + (priorWeight * prior)) / (weightedRuns + priorWeight);
     }
+
+    // A run that only the agent judged counts at agentVerdictWeight, a judged run in full.
+    private static (double Runs, double Successes) Weighted(ReasonletMetrics metrics, double agentVerdictWeight) =>
+        (metrics.JudgedRuns + (agentVerdictWeight * (metrics.Runs - metrics.JudgedRuns)),
+         metrics.JudgedSuccesses + (agentVerdictWeight * (metrics.Successes - metrics.JudgedSuccesses)));
 
     private static double Clamp(double value) => Math.Clamp(value, 0.0, 1.0);
 
