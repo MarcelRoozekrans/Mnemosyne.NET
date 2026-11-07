@@ -38,27 +38,28 @@ public sealed class VariantSelector : IReasonletSelector
             return Result<IReadOnlyList<ReasonletMatch>, MnemosyneError>.Failure(ranked.Error);
         }
 
+        // Only the recall's own activity is tagged, never whatever activity happens to be current.
+        var current = Activity.Current;
+        var activity = current is not null && current.OperationName == RecallTelemetry.RecallActivityName ? current : null;
+
         var seen = new HashSet<ReasonletId>();
         var variants = new List<ReasonletMatch>();
         foreach (var match in ranked.Value)
         {
-            if (variants.Count >= query.Top)
+            // Past Top nothing more is returned. Only a tagged recall keeps walking, to count the lineages it saw.
+            if (variants.Count >= query.Top && activity is null)
             {
                 break;
             }
 
-            if (seen.Add(match.LineageId))
+            if (seen.Add(match.LineageId) && variants.Count < query.Top)
             {
                 variants.Add(match);
             }
         }
 
-        // Only the recall's own activity is tagged, never whatever activity happens to be current.
-        var activity = Activity.Current;
-        if (activity is not null && activity.OperationName == RecallTelemetry.RecallActivityName)
-        {
-            RecallTelemetry.Variants(activity, variants.Count, ranked.Value.Count - variants.Count);
-        }
+        // Dropped are the versions left out because a better sibling won, not the lineages cut by Top.
+        RecallTelemetry.Variants(activity, variants.Count, ranked.Value.Count - seen.Count);
 
         return Result<IReadOnlyList<ReasonletMatch>, MnemosyneError>.Success(variants);
     }

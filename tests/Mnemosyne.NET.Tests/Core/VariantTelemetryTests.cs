@@ -80,6 +80,20 @@ public sealed class VariantTelemetryTests
     }
 
     [Fact]
+    public async Task ALineageCutByTopIsNotCountedAsDropped()
+    {
+        using var capture = new TelemetryCapture();
+        var (a, b, c) = (ReasonletId.New(), ReasonletId.New(), ReasonletId.New());
+        var candidates = new[] { Candidate(a, 0.9), Candidate(a, 0.85), Candidate(b, 0.8), Candidate(c, 0.7), Candidate(c, 0.6) };
+
+        await RecallTelemetry.RunAsync(_ => Selector().RankAsync(TestData.Query() with { Top = 1 }, candidates, Ct));
+        var activity = Assert.Single(capture.Activities, x => x.OperationName == RecallTelemetry.RecallActivityName);
+
+        Assert.Equal(1, activity.GetTagItem(RecallTelemetry.VariantLineagesTag));
+        Assert.Equal(2, activity.GetTagItem(RecallTelemetry.VariantDroppedTag));
+    }
+
+    [Fact]
     public async Task TheTagValuesAreCountsNotStrings()
     {
         using var capture = new TelemetryCapture();
