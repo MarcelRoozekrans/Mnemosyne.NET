@@ -257,14 +257,38 @@ public sealed class VariantExplorationTests
         Assert.Equal(error, result.Error);
     }
 
-    [Fact]
-    public async Task ACancelledTokenThrows()
+    [Theory]
+    [InlineData(VariantExploration.None)]
+    [InlineData(VariantExploration.Thompson)]
+    public async Task ACancelledTokenGivesACanceledValueTaskWithoutThrowingFromTheCall(VariantExploration exploration)
     {
         using var cts = new CancellationTokenSource();
         await cts.CancelAsync();
+        var selector = new VariantSelector(Inner(), new VariantSelectionOptions { Exploration = exploration, Seed = 7 }, Ranking);
+        var a = ReasonletId.New();
 
-        await Assert.ThrowsAsync<OperationCanceledException>(async () =>
-            await Thompson().RankAsync(Query(), [Candidate(ReasonletId.New(), 0, 0)], cts.Token));
+        var pending = selector.RankAsync(Query(), [Candidate(a, 0, 0), Candidate(a, 1, 1)], cts.Token);
+
+        Assert.True(pending.IsCanceled);
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await pending);
+    }
+
+    [Fact]
+    public async Task ConcurrentSeededCallsPickTheSameVariants()
+    {
+        var (a, b, c) = (ReasonletId.New(), ReasonletId.New(), ReasonletId.New());
+        var candidates = new[]
+        {
+            Candidate(a, 4, 2), Candidate(a, 4, 3), Candidate(a, 1, 0),
+            Candidate(b, 6, 3), Candidate(b, 2, 1), Candidate(b, 3, 3),
+            Candidate(c, 0, 0), Candidate(c, 1, 1),
+        };
+        var selector = Thompson();
+        var expected = (await Rank(selector, Query(), candidates)).Select(m => m.Reasonlet.Id).ToList();
+
+        var results = await Task.WhenAll(Enumerable.Range(0, 16).Select(_ => Task.Run(() => Rank(selector, Query(), candidates), Ct)));
+
+        Assert.All(results, matches => Assert.Equal(expected, matches.Select(m => m.Reasonlet.Id)));
     }
 
     [Fact]
@@ -322,14 +346,20 @@ public sealed class VariantExplorationTests
     {
         using var capture = new TelemetryCapture();
         var (a, b, c) = (ReasonletId.New(), ReasonletId.New(), ReasonletId.New());
-        var candidates = new[] { Candidate(a, 0, 0), Candidate(a, 0, 0), Candidate(b, 0, 0), Candidate(c, 0, 0) };
+        // Every lineage but c is forced onto its unrun variant, which is not its best rate.
+        var candidates = new[]
+        {
+            Candidate(a, 100, 90, 0.5), Candidate(a, 0, 0, 0.5), Candidate(b, 100, 90, 0.6), Candidate(b, 0, 0, 0.6),
+            Candidate(c, 0, 0, 0.9),
+        };
 
-        await RecallTelemetry.RunAsync(_ => Thompson().RankAsync(Query() with { Top = 1 }, candidates, Ct));
+        await RecallTelemetry.RunAsync(_ => Thompson(minTrials: 1).RankAsync(Query() with { Top = 1 }, candidates, Ct));
         var activity = Assert.Single(capture.Activities, x => x.OperationName == RecallTelemetry.RecallActivityName);
 
         Assert.Equal(1, activity.GetTagItem(RecallTelemetry.VariantLineagesTag));
-        Assert.Equal(1, activity.GetTagItem(RecallTelemetry.VariantDroppedTag));
-        Assert.IsType<int>(activity.GetTagItem(RecallTelemetry.VariantExploredTag));
+        Assert.Equal(2, activity.GetTagItem(RecallTelemetry.VariantDroppedTag));
+        // Explored counts the picks before Top, so it can exceed the lineages returned.
+        Assert.Equal(2, activity.GetTagItem(RecallTelemetry.VariantExploredTag));
     }
 
     [Fact]

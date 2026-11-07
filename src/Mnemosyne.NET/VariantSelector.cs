@@ -78,13 +78,14 @@ public sealed class VariantSelector : IReasonletSelector
 
     /// <inheritdoc />
     /// <exception cref="OperationCanceledException"><paramref name="ct"/> is cancelled.</exception>
-    public ValueTask<Result<IReadOnlyList<ReasonletMatch>, MnemosyneError>> RankAsync(
+    public async ValueTask<Result<IReadOnlyList<ReasonletMatch>, MnemosyneError>> RankAsync(
         ReasonletQuery query, IReadOnlyList<ReasonletCandidate> candidates, CancellationToken ct)
     {
+        // Inside the async method, so a cancelled token cancels the returned task instead of throwing from the call.
         ct.ThrowIfCancellationRequested();
         return _options.Exploration == VariantExploration.Thompson
-            ? ExploreAsync(query, candidates, ct)
-            : BestAsync(query, candidates, ct);
+            ? await ExploreAsync(query, candidates, ct).ConfigureAwait(false)
+            : await BestAsync(query, candidates, ct).ConfigureAwait(false);
     }
 
     // Only the recall's own activity is tagged, never whatever activity happens to be current.

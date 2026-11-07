@@ -53,7 +53,11 @@ internal static class RecallTelemetry
     /// <summary>The tag that carries how many sibling versions a variant selection dropped because a better version of the same lineage won.</summary>
     internal const string VariantDroppedTag = "mnemosyne.recall.variant.dropped";
 
-    /// <summary>The tag that carries how many lineages an exploring variant selection picked a variant for that does not have the lineage's highest smoothed success rate.</summary>
+    /// <summary>
+    /// The tag that carries how many lineages an exploring variant selection picked a variant for that does not have the
+    /// lineage's highest smoothed success rate. It counts the picks before <see cref="ReasonletQuery.Top"/> and the inner
+    /// selector's similarity cut-off, so it can exceed <see cref="VariantLineagesTag"/>.
+    /// </summary>
     internal const string VariantExploredTag = "mnemosyne.recall.variant.explored";
 
     private const string ChosenIdTag = "mnemosyne.recall.chosen.id";
