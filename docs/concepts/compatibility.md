@@ -9,7 +9,7 @@ This page says what you can rely on across releases: the public API of the six p
 
 ## Before 1.0.0
 
-The packages are at 0.x. Until 1.0.0 a minor release may break the public API, and release-please bumps the minor version for a breaking change. The baseline diff in the pull request is still the review gate: a reviewer sees every changed line. The rules below, where only a major release breaks, start at 1.0.0.
+The 0.x releases could break the public API in a minor release. That ended with 1.0.0.
 
 ## The promise
 
@@ -19,7 +19,7 @@ From 1.0.0, the six packages share one version number, and it follows SemVer. A 
 - A **minor** release adds. It may add public types and members, and it never removes or changes one that shipped.
 - A **major** release may break. It is the only release that removes a public member, changes a signature, or changes behavior a caller could rely on.
 
-Package validation, which compares each package with its previous release at pack time, is turned on after 1.0.0 is published, with 1.0.0 as its baseline. Until then the baseline files described below are the gate.
+From 1.0.0, package validation compares each package with the last stable release at pack time, and CI fails the pack on a removed or changed public member (`CP0002` for a removed member). The baseline files described below stay the review gate, because the diff shows the change in the pull request.
 
 ## What counts as public
 

@@ -10,6 +10,16 @@
   </ItemGroup>
 
   <!--
+    Package validation: from 1.0.0 every package is compared with the last stable release at pack
+    time, and a removed or changed public member fails the pack. The baseline version moves with
+    each major release, together with the baseline files described in docs/concepts/compatibility.md.
+  -->
+  <PropertyGroup Condition="'$(IsPackable)' != 'false' And $(MSBuildProjectDirectory.StartsWith('$(MSBuildThisFileDirectory)src$([System.IO.Path]::DirectorySeparatorChar)'))">
+    <EnablePackageValidation>true</EnablePackageValidation>
+    <PackageValidationBaselineVersion>1.0.0</PackageValidationBaselineVersion>
+  </PropertyGroup>
+
+  <!--
     Refuses a VSTest filter on a project Microsoft.Testing.Platform runs, because the filter is
     silently ignored there and EVERY test in the assembly runs instead.
 
