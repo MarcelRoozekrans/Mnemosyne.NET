@@ -2,6 +2,8 @@
 
 Reasonlet memory for [Microsoft Agent Framework](https://github.com/microsoft/agent-framework) agents. The package depends on `Mnemosyne.NET` and `Microsoft.Agents.AI.Abstractions` 1.24.0.
 
+Mnemosyne.NET follows [SemVer](https://semver.org) from 1.0.0. An analyzer baseline locks the public API, and the [compatibility policy](https://marcelroozekrans.github.io/Mnemosyne.NET/concepts/compatibility) says what a release may change.
+
 ```bash
 dotnet add package Mnemosyne.NET.AgentFramework
 ```

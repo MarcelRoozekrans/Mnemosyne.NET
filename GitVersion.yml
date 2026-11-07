@@ -1,15 +1,13 @@
 # Derives every package version from git history: GitVersion as a dotnet local tool
 # (.config/dotnet-tools.json), this file as its configuration, output parsed with jq in CI.
 #
-# The repository has no tags yet, deliberately. Until the first release tag exists,
-# next-version below is the base, and every version GitVersion produces is a PRERELEASE:
-# 0.1.0-preview.N on main, 0.1.0-<branch>.N on branches. Nothing publishes, but the pack
-# step must produce a coherent version. Once a release tag vX.Y.Z exists, GitVersion returns
-# that stable version on the tagged commit and this file needs no change.
+# Release tags exist (v0.9.0 and earlier), and release-please makes each one. GitVersion returns
+# the tag's stable version on the tagged commit, and the first stable tag is 1.0.0. The next-version
+# and label settings below only matter for a repository with no tag, so this file needs no further
+# change for 1.0.0.
 workflow: GitHubFlow/v1
 
-# The fallback base while no tag exists. 0.x on purpose: a 1.0.0-anything version would claim
-# a release decision that has not been made.
+# The fallback base while no tag exists, which is never the case on this repository now.
 next-version: 0.1.0
 
 branches:

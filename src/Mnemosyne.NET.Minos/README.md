@@ -2,6 +2,8 @@
 
 A Reasonlet evaluator that judges each run with a [Minos.NET](https://github.com/MarcelRoozekrans/Minos.NET) decision model. `MinosReasonletEvaluator` asks one yes/no question, "Does the answer resolve the question by following the procedure?", and gets a calibrated probability back, so no free-text reply needs parsing.
 
+Mnemosyne.NET follows [SemVer](https://semver.org) from 1.0.0. An analyzer baseline locks the public API, and the [compatibility policy](https://marcelroozekrans.github.io/Mnemosyne.NET/concepts/compatibility) says what a release may change.
+
 ```bash
 dotnet add package Mnemosyne.NET.Minos
 ```
