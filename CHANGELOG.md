@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.1.0](https://github.com/MarcelRoozekrans/Mnemosyne.NET/compare/v1.0.0...v1.1.0) (2026-11-07)
+
+
+### Features
+
+* explore new versions of a lineage with Thompson sampling ([5f8d81f](https://github.com/MarcelRoozekrans/Mnemosyne.NET/commit/5f8d81f0af7138f4850d17d4fe5616586350944e))
+* return one variant per lineage with AddMnemosyneVariantSelection ([9b553cb](https://github.com/MarcelRoozekrans/Mnemosyne.NET/commit/9b553cb5c815838a2420cd9803b0f23e612e276a))
+
 ## [1.0.0](https://github.com/MarcelRoozekrans/Mnemosyne.NET/compare/v0.9.0...v1.0.0) (2026-11-07)
 
 
