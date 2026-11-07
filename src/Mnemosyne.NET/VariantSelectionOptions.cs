@@ -10,7 +10,10 @@ public enum VariantExploration
     /// <summary>Always return the best-ranked variant of each lineage.</summary>
     None,
 
-    /// <summary>Draw each variant's success rate from its Beta posterior and return the highest draw.</summary>
+    /// <summary>
+    /// Draw each variant's success rate from its Beta posterior and return the highest draw. A lineage with a version
+    /// below <see cref="VariantSelectionOptions.MinTrials"/> runs skips the draw and serves its least-run version.
+    /// </summary>
     Thompson,
 }
 

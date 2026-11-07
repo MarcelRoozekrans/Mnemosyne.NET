@@ -129,6 +129,31 @@ public sealed class VariantExplorationTests
     }
 
     [Fact]
+    public async Task ASeededRunDoesNotDependOnTheOrderOfTheVariantsInALineage()
+    {
+        var lineage = ReasonletId.New();
+        var variants = new[]
+        {
+            Candidate(lineage, 4, 2), Candidate(lineage, 4, 3), Candidate(lineage, 6, 3),
+            Candidate(lineage, 2, 1), Candidate(lineage, 9, 5),
+        };
+        using var capture = new TelemetryCapture();
+        var query = Query();
+        var permutations = new int[][] { [0, 1, 2, 3, 4], [4, 3, 2, 1, 0], [2, 0, 4, 1, 3], [1, 2, 3, 4, 0], [3, 4, 0, 2, 1] };
+
+        var runs = new List<(ReasonletId Id, object? Explored)>();
+        foreach (var permutation in permutations)
+        {
+            var shuffled = permutation.Select(i => variants[i]).ToArray();
+            var result = await RecallTelemetry.RunAsync(_ => Thompson().RankAsync(query, shuffled, Ct));
+            var activity = capture.Activities.Last(x => x.OperationName == RecallTelemetry.RecallActivityName);
+            runs.Add((Assert.Single(result.Value).Reasonlet.Id, activity.GetTagItem(RecallTelemetry.VariantExploredTag)));
+        }
+
+        Assert.All(runs, run => Assert.Equal(runs[0], run));
+    }
+
+    [Fact]
     public async Task TheSameSeedWithAnotherQuestionCanPickAnotherVariant()
     {
         var a = ReasonletId.New();
@@ -458,11 +483,25 @@ public sealed class VariantExplorationTests
     }
 
     [Fact]
-    public void InvalidRankingOptionsThrow()
+    public void InvalidRankingOptionsThrowWhenExploring()
     {
         var exception = Assert.Throws<ArgumentException>(() =>
-            new VariantSelector(Inner(), new VariantSelectionOptions(), new ReasonletRankingOptions { PriorWeight = 0.0 }));
+            new VariantSelector(
+                Inner(),
+                new VariantSelectionOptions { Exploration = VariantExploration.Thompson },
+                new ReasonletRankingOptions { PriorWeight = 0.0 }));
 
         Assert.Equal("ranking", exception.ParamName);
+    }
+
+    [Fact]
+    public async Task InvalidRankingOptionsAreIgnoredWithoutExploration()
+    {
+        var a = ReasonletId.New();
+        var selector = new VariantSelector(Inner(), new VariantSelectionOptions(), new ReasonletRankingOptions { PriorWeight = 0.0 });
+
+        var matches = await Rank(selector, Query(), Candidate(a, 3, 1), Candidate(a, 3, 3));
+
+        Assert.Single(matches);
     }
 }

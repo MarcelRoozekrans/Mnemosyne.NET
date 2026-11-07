@@ -23,8 +23,10 @@ namespace Mnemosyne.NET;
 /// <see cref="VariantSelectionOptions.MinTrials"/> runs gets the version with the fewest runs. Otherwise each version
 /// draws from a Beta posterior whose mean is its smoothed success rate under the ranking options, and the highest draw
 /// wins. Ties go to the lowest id. With a <see cref="VariantSelectionOptions.Seed"/> each lineage draws from its own
-/// generator, seeded from the seed, the question and the lineage id, so the same query on the same data picks the same
-/// versions whatever the order or concurrency of the calls.
+/// generator, seeded from the seed, the question and the lineage id, and draws for its variants in id order, so the same
+/// query on the same data picks the same versions whatever the order of the lineages or of the variants, and whatever the
+/// concurrency of the calls. The inner selector receives a query whose <see cref="ReasonletQuery.Top"/> equals the number
+/// of picks, so it can exceed the query's limit of 50 when the candidate pool does.
 /// </para>
 /// </remarks>
 public sealed class VariantSelector : IReasonletSelector
@@ -50,10 +52,13 @@ public sealed class VariantSelector : IReasonletSelector
     /// <param name="inner">The selector that scores and orders the candidates.</param>
     /// <param name="options">How a version is picked within a lineage. Must be valid.</param>
     /// <param name="ranking">
-    /// The ranking options whose prior weight and agent-verdict weight shape the Beta posteriors. Must be valid.
+    /// The ranking options whose prior weight and agent-verdict weight shape the Beta posteriors. Must be valid when
+    /// <see cref="VariantSelectionOptions.Exploration"/> is <see cref="VariantExploration.Thompson"/>, and is not read otherwise.
     /// </param>
     /// <exception cref="ArgumentNullException">An argument is null.</exception>
-    /// <exception cref="ArgumentException">The options or the ranking options are invalid.</exception>
+    /// <exception cref="ArgumentException">
+    /// The options are invalid, or the ranking options are invalid while exploring with Thompson sampling.
+    /// </exception>
     public VariantSelector(IReasonletSelector inner, VariantSelectionOptions options, ReasonletRankingOptions ranking)
     {
         ArgumentNullException.ThrowIfNull(inner);
@@ -65,10 +70,13 @@ public sealed class VariantSelector : IReasonletSelector
             throw new ArgumentException(validation.Error.Message, nameof(options));
         }
 
-        var rankingValidation = ranking.Validate();
-        if (rankingValidation.IsFailure)
+        if (options.Exploration == VariantExploration.Thompson)
         {
-            throw new ArgumentException(rankingValidation.Error.Message, nameof(ranking));
+            var rankingValidation = ranking.Validate();
+            if (rankingValidation.IsFailure)
+            {
+                throw new ArgumentException(rankingValidation.Error.Message, nameof(ranking));
+            }
         }
 
         _inner = inner;
@@ -173,6 +181,9 @@ public sealed class VariantSelector : IReasonletSelector
         var scores = new double[largest];
         foreach (var variants in order)
         {
+            // Store order within a lineage is not stable, so the pick must depend on the set of variants only.
+            variants.Sort(static (x, y) => x.Reasonlet.Id.Value.CompareTo(y.Reasonlet.Id.Value));
+
             // A lineage of one has nothing to choose between, so its pick is never an exploration.
             var pick = 0;
             if (variants.Count > 1)

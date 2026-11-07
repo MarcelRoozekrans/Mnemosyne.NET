@@ -273,6 +273,18 @@ public sealed class VariantSelectionRegistrationTests
     }
 
     [Fact]
+    public void InvalidRankingOptionsAreIgnoredWithoutExploration()
+    {
+        var services = Services();
+        services.AddSingleton(new MnemosyneOptions { Ranking = new ReasonletRankingOptions { PriorWeight = -1 } });
+        services.AddSingleton<IReasonletSelector>(new HostSelector());
+        services.AddMnemosyneVariantSelection();
+        using var provider = services.BuildServiceProvider();
+
+        Assert.IsType<VariantSelector>(provider.GetRequiredService<IReasonletSelector>());
+    }
+
+    [Fact]
     public void InvalidOptionsThrowAtRegistration()
     {
         var services = Services();

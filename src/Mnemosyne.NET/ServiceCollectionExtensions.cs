@@ -68,8 +68,7 @@ public static class ServiceCollectionExtensions
     /// Call it after <see cref="AddMnemosyne"/>, and after a host registers its own selector: it wraps whatever
     /// unkeyed selector is registered last, so a host's own selector is grouped too. The wrapper keeps the lifetime of the
     /// selector it wraps. A second call changes nothing, whichever overload either call used, so the first call's options
-    /// win. This overload explores nothing. The selector takes its ranking options from the registered
-    /// <see cref="MnemosyneOptions"/>, or the defaults when the host registered none. The wrapped selector receives a query whose
+    /// win. This overload explores nothing, so it never reads the ranking options. The wrapped selector receives a query whose
     /// <see cref="ReasonletQuery.Top"/> equals the candidate count, so it can exceed the query's limit of 50 when
     /// <see cref="MnemosyneOptions.CandidatePool"/> does.
     /// </remarks>
@@ -88,8 +87,9 @@ public static class ServiceCollectionExtensions
     /// Call it after <see cref="AddMnemosyne"/>, and after a host registers its own selector: it wraps whatever
     /// unkeyed selector is registered last, so a host's own selector is grouped too. The wrapper keeps the lifetime of the
     /// selector it wraps. The selector takes its ranking options from the registered <see cref="MnemosyneOptions"/>, or
-    /// the defaults when the host registered none. A second call changes nothing, whichever overload either call used, so
-    /// the first call's options win. The wrapped selector receives a query whose <see cref="ReasonletQuery.Top"/> equals
+    /// the defaults when the host registered none; they are validated only when <paramref name="options"/> explores with
+    /// Thompson sampling, and an invalid set then throws <see cref="ArgumentException"/> when the selector is resolved. A second call changes nothing,
+    /// whichever overload either call used, so the first call's options win. The wrapped selector receives a query whose <see cref="ReasonletQuery.Top"/> equals
     /// the candidate count, so it can exceed the query's limit of 50 when <see cref="MnemosyneOptions.CandidatePool"/> does.
     /// </remarks>
     /// <param name="services">The service collection.</param>
