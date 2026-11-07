@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.0](https://github.com/MarcelRoozekrans/Mnemosyne.NET/compare/v0.8.1...v0.9.0) (2026-11-07)
+
+
+### Features
+
+* read everything a subject owns through the store port and facade ([aae1bdf](https://github.com/MarcelRoozekrans/Mnemosyne.NET/commit/aae1bdf6dd57518e1a3a9f1168f5ef971f610344))
+
 ## [0.8.1](https://github.com/MarcelRoozekrans/Mnemosyne.NET/compare/v0.8.0...v0.8.1) (2026-11-06)
 
 
