@@ -50,7 +50,7 @@ internal static class RecallTelemetry
     /// <summary>The tag that carries how many lineages a variant selection kept.</summary>
     internal const string VariantLineagesTag = "mnemosyne.recall.variant.lineages";
 
-    /// <summary>The tag that carries how many lower-ranked versions a variant selection dropped.</summary>
+    /// <summary>The tag that carries how many sibling versions a variant selection dropped because a better version of the same lineage won.</summary>
     internal const string VariantDroppedTag = "mnemosyne.recall.variant.dropped";
 
     private const string ChosenIdTag = "mnemosyne.recall.chosen.id";

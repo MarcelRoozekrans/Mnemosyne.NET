@@ -130,6 +130,25 @@ public sealed class VariantTelemetryTests
     }
 
     [Fact]
+    public async Task ASameNamedActivityFromAnotherSourceIsLeftUntagged()
+    {
+        using var listener = new ActivityListener
+        {
+            ShouldListenTo = source => source.Name == "Other.Source",
+            Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllData,
+        };
+        ActivitySource.AddActivityListener(listener);
+        using var source = new ActivitySource("Other.Source");
+        using var other = source.StartActivity(RecallTelemetry.RecallActivityName);
+        Assert.NotNull(other);
+
+        await Selector().RankAsync(TestData.Query() with { Top = 10 }, Candidates(), Ct);
+
+        Assert.Null(other.GetTagItem(RecallTelemetry.VariantLineagesTag));
+        Assert.Null(other.GetTagItem(RecallTelemetry.VariantDroppedTag));
+    }
+
+    [Fact]
     public async Task NoCurrentActivityIsFine()
     {
         using var capture = new TelemetryCapture();

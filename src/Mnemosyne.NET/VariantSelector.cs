@@ -40,7 +40,9 @@ public sealed class VariantSelector : IReasonletSelector
 
         // Only the recall's own activity is tagged, never whatever activity happens to be current.
         var current = Activity.Current;
-        var activity = current is not null && current.OperationName == RecallTelemetry.RecallActivityName ? current : null;
+        var activity = current is { Source.Name: MnemosyneTelemetry.ActivitySourceName } && current.OperationName == RecallTelemetry.RecallActivityName
+            ? current
+            : null;
 
         var seen = new HashSet<ReasonletId>();
         var variants = new List<ReasonletMatch>();
