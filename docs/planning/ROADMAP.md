@@ -242,17 +242,18 @@ Design: [roadmap design](../superpowers/specs/2026-10-21-roadmap-design.md), bui
 **Plan:** `docs/superpowers/plans/2026-11-06-phase-4.8-1-0-release.md`
 **Completed:** 2026-11-07
 
-## Milestone 5: Variants [status: active]
+## Milestone 5: Variants [status: complete]
 **Goal:** A new version of a procedure gets a fair chance to prove itself: an opt-in variant selector picks one variant per lineage and explores new versions before the best known one dominates, without changing the 1.0 API.
 **Started:** 2026-11-07
+**Completed:** 2026-11-07
 **Design:** [milestone 5 design](../superpowers/specs/2026-11-07-milestone-5-design.md)
 **Definition of Done:**
-- [ ] All planned phases complete
-- [ ] All tests passing, including integration tests against PostgreSQL + pgvector
-- [ ] Variant selection works behind the existing selector interface, opt-in, and package validation against 1.0.0 stays green
-- [ ] A new version with few runs gets tried before the best known one dominates, shown by a simulation test
-- [ ] Selection is deterministic when seeded, and the recall activity records the chosen variant and whether it was an exploration
-- [ ] Docs and a self-checking sample cover variants
+- [x] All planned phases complete
+- [x] All tests passing, including integration tests against PostgreSQL + pgvector
+- [x] Variant selection works behind the existing selector interface, opt-in, and package validation against 1.0.0 stays green
+- [x] A new version with few runs gets tried before the best known one dominates, shown by a simulation test
+- [x] Selection is deterministic when seeded, and the recall activity records the chosen variant and whether it was an exploration
+- [x] Docs and a self-checking sample cover variants
 
 ### Phase 5.1: Variant selection [status: complete]
 **Goal:** A `VariantSelector` over `IReasonletSelector` that groups candidates by lineage and picks the best variant per lineage, opt-in through `AddMnemosyneVariantSelection`, with telemetry.
