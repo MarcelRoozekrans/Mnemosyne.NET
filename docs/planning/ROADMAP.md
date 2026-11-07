@@ -254,11 +254,12 @@ Design: [roadmap design](../superpowers/specs/2026-10-21-roadmap-design.md), bui
 - [ ] Selection is deterministic when seeded, and the recall activity records the chosen variant and whether it was an exploration
 - [ ] Docs and a self-checking sample cover variants
 
-### Phase 5.1: Variant selection [status: pending]
+### Phase 5.1: Variant selection [status: complete]
 **Goal:** A `VariantSelector` over `IReasonletSelector` that groups candidates by lineage and picks the best variant per lineage, opt-in through `AddMnemosyneVariantSelection`, with telemetry.
 **Surface:** Backend
 **HelpWanted:** no
 **Plan:** `docs/superpowers/plans/2026-11-07-phase-5.1-variant-selection.md`
+**Completed:** 2026-11-07
 
 ### Phase 5.2: Exploration [status: pending]
 **Goal:** Thompson sampling with the parent prior, a seed for reproducible picks and an optional minimum number of trials, proven by a simulation in which a stronger new version overtakes an incumbent.
