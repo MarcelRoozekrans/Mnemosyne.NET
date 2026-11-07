@@ -9,6 +9,7 @@
   <ItemGroup>
     <InternalsVisibleTo Include="Mnemosyne.NET.Tests" />
     <InternalsVisibleTo Include="Mnemosyne.NET.PostgreSql.Tests" />
+    <InternalsVisibleTo Include="Mnemosyne.NET.AgentFramework" />
   </ItemGroup>
 
   <ItemGroup>
