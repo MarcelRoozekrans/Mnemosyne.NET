@@ -3,22 +3,18 @@
 **Date:** 2026-11-07
 
 ## Current Position
-- **Milestone:** 4, 1.0, active since 2026-11-06. Design: `docs/superpowers/specs/2026-11-06-milestone-4-design.md`, approved.
-- **Phases 4.1 to 4.8:** complete, on `main`. 4.8 closed on 2026-11-07.
-- **Released:** 1.0.0 is on nuget.org for all six packages, tag `v1.0.0`, cut by release-please. 0.9.0 went out the same day.
-- **API settled before the freeze (Marcel, 2026-11-07):** `ListSubjectRunsAsync` is now `ListSubjectExecutionsAsync`; `ReasonletCaptures`, `ReasonletSuggestions`, `Check`, `EvaluationLimits` and `ReasonletGraphLimits` are internal (PR #83). The `Shipped` baselines hold the 1.0.0 surface (#87). Package validation against baseline 1.0.0 is on (#88).
-- **Branch:** `main` is current. Push with explicit `branch:branch` refspecs, because `push.default` is `upstream`.
+- **Milestone:** 5, Variants, complete on 2026-11-07 (audit PASS with one warning: no pre-push review report; `docs/superpowers/reviews/2026-11-07-milestone-5-audit.md`). No milestone is active.
+- **Phases 5.1 to 5.3:** complete, built by an unattended run and merged as #93, #95 and #96.
+- **Released:** 1.1.0 by release-please (#94), with `AddMnemosyneVariantSelection`, `VariantSelector`, `VariantSelectionOptions` and `VariantExploration`.
+- **Branch:** this closure is on `chore/complete-milestone-5`, waiting for a merge. Push with explicit `branch:branch` refspecs, because `push.default` is `upstream`.
 
 ## Decisions
-- **Export set = erase set (Marcel, 2026-11-06).** The subject's Reasonlets in any status, all runs on them, and the subject's own runs on other owners' Reasonlets, which carry only the `ReasonletId`.
-- **Two paged calls (Marcel, option A):** `ListSubjectReasonletsAsync` and `ListSubjectExecutionsAsync` on the store port and the facade, shaped like `ListPendingAsync`.
-- **My calls, in the design:** no embeddings; reads bypass the capture guard and the review gate; no export file format; record names `ReasonletRecord` and `ReasonletExecutionRecord`; the run record carries the evaluator's verdict and the human feedback.
-- **Phase 4.8 (1.0.0 release), as done:**
-  - the `Release-As: 1.0.0` footer goes in the squash message of the final phase PR, proven first by a release-please dry run, and the squash-merge message setting is checked;
-  - the release PR moves the PublicAPI Unshipped lines to Shipped;
-  - stage B, after 1.0.0 is on nuget.org, adds `EnablePackageValidation` with baseline 1.0.0 in its own PR;
-  - the phase completes after stage B;
-  - Marcel merges the phase PRs and the release PR, and nothing is tagged by hand.
+- **Variant selection (milestone 5):** opt-in, and it decorates the registered `IReasonletSelector`. Thompson sampling is a separate switch.
+- **Beta prior:** the prior `SuccessRate` uses, 0.5 or the parent's rate when above 0.5, so the posterior mean equals the smoothed rate.
+- **Seeded picks:** they hash the seed, the question and the lineage, and draw in id order inside a lineage.
+- **Ranking options:** validated only under Thompson.
+- **Inner selector's Top:** it receives `Top` equal to the candidate count, which can exceed 50. This is documented on `IReasonletSelector`.
+- **Ties:** a fresh child ties its parent on score under the default ranking, and the lower id wins.
 
 ## Open Decisions
 - Rulings from phase 3.2 that are still open: a remember call cancelled before it starts emits `mnemosyne.guard` with outcome `exception`, and `Abandon` takes `Task?`.
@@ -39,5 +35,5 @@
 - **Unattended env:** start the next session without `SUPERPOWERS_UNATTENDED`, or its AskUserQuestion calls are answered by a hook.
 
 ## Recommended Next Step
-1. Run `audit-milestone` for milestone 4, then `complete-milestone`. It creates no tag, because release-please owns releases.
-2. Then `new-milestone` for milestone 5, Variants. Note #78, the follow-up indexes for paging a heavy subject's runs, is planned for 1.1.
+1. Merge `chore/complete-milestone-5`.
+2. The roadmap has no milestone after 5. Either run `plan-roadmap` to extend it, or run `new-milestone` to brainstorm milestone 6 with Marcel. #78, the follow-up indexes for paging a heavy subject's runs, is still open for a 1.x release and is a candidate.
