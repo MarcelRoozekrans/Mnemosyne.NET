@@ -53,6 +53,9 @@ internal static class RecallTelemetry
     /// <summary>The tag that carries how many sibling versions a variant selection dropped because a better version of the same lineage won.</summary>
     internal const string VariantDroppedTag = "mnemosyne.recall.variant.dropped";
 
+    /// <summary>The tag that carries how many lineages an exploring variant selection picked a variant for that does not have the lineage's highest smoothed success rate.</summary>
+    internal const string VariantExploredTag = "mnemosyne.recall.variant.explored";
+
     private const string ChosenIdTag = "mnemosyne.recall.chosen.id";
     private const string ChosenLineageIdTag = "mnemosyne.recall.chosen.lineage_id";
     private const string ChosenVersionTag = "mnemosyne.recall.chosen.version";
@@ -175,6 +178,9 @@ internal static class RecallTelemetry
         activity?.SetTag(VariantLineagesTag, lineages);
         activity?.SetTag(VariantDroppedTag, dropped);
     }
+
+    /// <summary>Tags a recall with how many lineages an exploring variant selection explored. A count only.</summary>
+    internal static void Explored(Activity? activity, int explored) => activity?.SetTag(VariantExploredTag, explored);
 
     /// <summary>The name an error code is tagged with, without formatting a defined one.</summary>
     internal static string ErrorName(MnemosyneErrorCode code) => code switch

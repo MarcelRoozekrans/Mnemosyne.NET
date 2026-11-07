@@ -33,7 +33,8 @@ internal sealed class BetaSampler
         }
 
         Span<byte> bytes = stackalloc byte[16];
-        lineage.Value.TryWriteBytes(bytes);
+        // Big-endian, so the hash is the same on every platform. Sixteen bytes always fit.
+        _ = lineage.Value.TryWriteBytes(bytes, bigEndian: true, out _);
         foreach (var b in bytes)
         {
             hash = Fold(hash, b);
