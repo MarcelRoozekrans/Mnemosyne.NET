@@ -185,47 +185,60 @@ Design: [roadmap design](../superpowers/specs/2026-10-21-roadmap-design.md), bui
 - [ ] Docsite complete, including the data protection guide
 - [ ] 1.0.0 on NuGet
 
-### Phase 4.1: Test and sample hygiene [status: pending]
+### Phase 4.1: Test and sample hygiene [status: complete]
 **Goal:** Share the scripted model and embedding stubs across the PostgreSQL tests (#55) and the self-check runner across the four samples (#57).
 **Surface:** Refactor
 **HelpWanted:** no
 **Plan:** `docs/superpowers/plans/2026-11-06-phase-4.1-test-sample-hygiene.md`
+**Completed:** 2026-11-06
 
-### Phase 4.2: Versioning and lineage API [status: pending]
+### Phase 4.2: Versioning and lineage API [status: complete]
 **Goal:** Settle the versioning and lineage API so variant selection fits later.
 **Surface:** Backend
 **HelpWanted:** no
 **Plan:** `docs/superpowers/plans/2026-11-06-phase-4.2-versioning-lineage-api.md`
+**Completed:** 2026-11-06
 
-### Phase 4.3: Benchmarks in CI [status: pending]
+### Phase 4.3: Benchmarks in CI [status: complete]
 **Goal:** BenchmarkDotNet suite for ranking, search and middleware overhead, running in CI.
 **Surface:** Infra
 **HelpWanted:** no
 **Plan:** `docs/superpowers/plans/2026-11-06-phase-4.3-benchmarks-in-ci.md`
+**Completed:** 2026-11-06
 
-### Phase 4.4: Public API review and freeze [status: pending]
+### Phase 4.4: Public API review and freeze [status: complete]
 **Goal:** Review the public API, adopt the AI.Sentinel fix (#58), add the PublicApiAnalyzers baselines and package validation, and set the graph schema compatibility policy.
 **Surface:** Refactor
 **HelpWanted:** no
 **Plan:** `docs/superpowers/plans/2026-11-06-phase-4.4-public-api-review-freeze.md`
+**Completed:** 2026-11-06
 
-### Phase 4.5: Docs completeness [status: pending]
+### Phase 4.5: Docs completeness [status: complete]
 **Goal:** Concepts, the variants vision, and the Daedalus and Thalos guide.
 **Surface:** Docs
 **HelpWanted:** no
 **Plan:** `docs/superpowers/plans/2026-11-06-phase-4.5-docs-completeness.md`
+**Completed:** 2026-11-06
 
-### Phase 4.6: Data protection guide [status: pending]
+### Phase 4.6: Data protection guide [status: complete]
 **Goal:** How scope, provenance, redaction, erasure, retention and telemetry support a deployer's GDPR duties, and a short note on where the EU AI Act does and does not apply.
 **Surface:** Docs
 **HelpWanted:** no
 **Plan:** `docs/superpowers/plans/2026-11-06-phase-4.6-data-protection-guide.md`
+**Completed:** 2026-11-06
 
-### Phase 4.7: 1.0.0 release [status: pending]
+### Phase 4.7: Subject export [status: complete]
+**Goal:** Hosts can read and export everything a subject owns through the store port and facade (#69).
+**Surface:** Backend
+**HelpWanted:** no
+**Plan:** `docs/superpowers/plans/2026-11-06-phase-4.7-subject-export.md`
+**Completed:** 2026-11-06
+
+### Phase 4.8: 1.0.0 release [status: pending]
 **Goal:** Release 1.0.0 through release-please.
 **Surface:** Infra
 **HelpWanted:** no
-**Plan:** `docs/superpowers/plans/2026-11-06-phase-4.7-1-0-release.md`
+**Plan:** `docs/superpowers/plans/2026-11-06-phase-4.8-1-0-release.md`
 
 ## Milestone 5: Variants [status: pending]
 **Goal:** Choose between sibling versions of a procedure, post-1.0 (handover phase 4).

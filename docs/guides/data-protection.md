@@ -38,13 +38,52 @@ The answer of a run reaches an evaluator when you register one, and is never sto
 | Storage limitation, Art. 5(1)(e) | `PruneAsync` deletes old run records and Reasonlets nobody uses, on a schedule the host runs. | [Retention](data-lifecycle.md#retention) |
 | Accountability, Art. 5(2) and records of processing, Art. 30 | Each Reasonlet and run carries its provenance. Receipts return the ids to correlate on. The table above lists the categories of data to put in your own record. Mnemosyne does not keep that record for you. | [Reasonlets](../concepts/reasonlets.md), [Telemetry](telemetry.md) |
 | Security of processing, Art. 32 | Encryption and backup rotation are a storage concern for the database. Telemetry carries no question, subject or scope, so an exporter needs no scrubbing. The store's role needs only the privileges listed. Keep Npgsql's `IncludeErrorDetail` off in production, or a logged error can carry row values. | [What erasure leaves on disk](postgresql.md#what-erasure-leaves-on-disk), [Privileges](postgresql.md#privileges), [Errors](postgresql.md#errors) and [Privacy](telemetry.md#privacy) |
-| Access, Art. 15, and portability, Art. 20 | See below. The library offers no export. | [Access and portability](#access-and-portability) |
+| Access, Art. 15, and portability, Art. 20 | `ListSubjectReasonletsAsync` and `ListSubjectRunsAsync` page through everything stored about one subject in a scope except the embeddings. The library has no export format. | [Access and portability](#access-and-portability) |
 
 ### Access and portability
 
-`IReasonletMemory` has no call that lists or reads records by subject. It offers `RememberAsync`, `RecallAsync`, `RecordExecutionAsync`, `RecordFeedbackAsync`, `EraseAsync`, and the review calls `ListPendingAsync`, `ApproveAsync` and `RejectAsync`. `ListPendingAsync` lists one scope's pending Reasonlets, not a subject's. `IReasonletStore` adds `GetAsync`, which reads one Reasonlet by id, and `SearchAsync`, which finds the nearest Reasonlets to an embedding. Neither selects by subject, and no call returns the runs of a subject. There is no export format.
+`IReasonletMemory` has two calls that read by subject. `ListSubjectReasonletsAsync` returns the subject's Reasonlets in a scope as `ReasonletRecord`s, each with its `Definition` and its `Metrics`. `ListSubjectRunsAsync` returns the subject's runs as `ReasonletExecutionRecord`s. Both take a scope, a subject id, a limit from 1 to 100 and the last id of the previous page, and both return the same set that `EraseAsync` removes for that scope and subject. They return oldest id first, and an empty page means the end. There is no export format: the host serialises the records.
 
-To answer an access or portability request, query the `mnemosyne` schema yourself. The subject id is a column on `reasonlets` and on `reasonlet_executions`, with an index on `(scope, subject_id)`. [PostgreSQL store](postgresql.md) describes the tables. Only the subject's own records are findable this way. Records captured without a subject id are not.
+```csharp
+const string subject = "user-1234";
+var scope = new ReasonletScope("tenant-1");
+
+ReasonletId? afterReasonlet = null;
+while (true)
+{
+    var page = await memory.ListSubjectReasonletsAsync(scope, subject, 100, afterReasonlet, ct);
+    if (page.IsFailure)
+    {
+        throw new InvalidOperationException(page.Error.Message);
+    }
+
+    if (page.Value.Count == 0)
+    {
+        break;
+    }
+
+    foreach (var record in page.Value)
+    {
+        // Serialise record.Definition and record.Metrics into your export.
+    }
+
+    afterReasonlet = page.Value[^1].Definition.Id;
+}
+```
+
+The runs loop has the same shape, with `ListSubjectRunsAsync`, an `ExecutionId?` cursor and the `Id` of the last run.
+
+Notes on what comes back:
+
+- **Runs and Reasonlets are separate lists.** The host joins a run to its Reasonlet by `ReasonletId`.
+- **A run can sit on another owner's Reasonlet.** The set holds every run recorded for the subject, plus every run of a Reasonlet the subject owns. A run the subject recorded on someone else's Reasonlet carries only that `ReasonletId`. The other owner's definition is never returned, so the join finds nothing for it.
+- **A run by someone else can sit on the subject's Reasonlet.** It is in the set because an erase removes it, and its `Provenance` names that other person. Before you hand the export to the subject, keep only the runs whose `Provenance.SubjectId` is the subject's, or blank `SubjectId`, `RunId` and `Tags` on the others.
+- **A Reasonlet's `ParentId` can name a version another person captured.** That version is not in the export.
+- **The embedding is not returned.** A `ReasonletRecord` holds the definition and the metrics, not the vector.
+- **Pending Reasonlets are included.** The calls read in any review status and bypass the review gate, as an erase does.
+- **A write that lands during the export can be missed.** Ids are made by clients, so a row stored while you page can land behind the cursor. Stop writing for the subject before the export, as the erase procedure does.
+- **A record captured without a subject id is not found.** The calls match the `SubjectId` on provenance, like erasure by subject.
+- **The calls validate their arguments.** A blank subject id, a limit outside 1 to 100, a `default` scope or a `default` cursor answers `Validation`.
 
 ## What Mnemosyne does not do
 
@@ -91,4 +130,4 @@ Mnemosyne does not make a system satisfy Article 12 or Article 14. It holds reco
 - Encrypt the database storage, its WAL archive and its backups.
 - Export telemetry as it is. It carries no user data. Keep `IncludeErrorDetail` off in production.
 - Write down who is controller and who is processor, and list the categories from the table above in your record of processing.
-- Test an erase and your access query against a copy of your data before the first request arrives.
+- Test an erase and your export loop against a copy of your data before the first request arrives.

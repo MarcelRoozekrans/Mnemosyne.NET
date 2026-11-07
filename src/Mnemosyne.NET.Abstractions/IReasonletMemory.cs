@@ -147,4 +147,47 @@ public interface IReasonletMemory
     /// <param name="ct">The cancellation token.</param>
     /// <returns>The page, or the error.</returns>
     ValueTask<Result<IReadOnlyList<ReasonletReview>, MnemosyneError>> ListPendingAsync(ReasonletScope scope, int limit, ReasonletId? after, CancellationToken ct);
+
+    /// <summary>Lists the Reasonlets a data subject owns in a scope, oldest id first, each with its execution metrics.</summary>
+    /// <remarks>
+    /// The set is the Reasonlets of the scope whose provenance subject equals <paramref name="subjectId"/>, in any status, so
+    /// <see cref="ReasonletStatus.PendingReview"/> ones are included. Each version is a Reasonlet of its own, so every version the subject captured is listed, and a version someone else captured is not. This is the set
+    /// <see cref="EraseAsync"/> removes for the same scope and subject. The embedding is not returned.
+    /// Reads bypass the capture guard and the review gate. Returns up to <paramref name="limit"/> rows with an id above
+    /// <paramref name="after"/>, ordered by id. Ids are version 7 GUIDs, so this is creation order. Pass the last id of a page as the
+    /// next <paramref name="after"/>, and <see langword="null"/> to start. Ids are made by clients, so a row stored while an export
+    /// pages can land behind the cursor and is missed, unless the host stops writing for the subject first. An empty list is a success.
+    /// Error codes: <see cref="MnemosyneErrorCode.Validation"/> when the limit is not from 1 to 100, <paramref name="subjectId"/> is
+    /// blank, <paramref name="after"/> is a <c>default</c> ID, or an argument breaks another invariant, such as a <c>default</c> scope,
+    /// <see cref="MnemosyneErrorCode.Unavailable"/> when the backing store fails.
+    /// </remarks>
+    /// <param name="scope">The scope to read.</param>
+    /// <param name="subjectId">The data subject. Must not be blank.</param>
+    /// <param name="limit">The most rows to return, from 1 to 100.</param>
+    /// <param name="after">The last id of the previous page, or null for the first page.</param>
+    /// <param name="ct">The cancellation token.</param>
+    /// <returns>The page, or the error.</returns>
+    ValueTask<Result<IReadOnlyList<ReasonletRecord>, MnemosyneError>> ListSubjectReasonletsAsync(ReasonletScope scope, string subjectId, int limit, ReasonletId? after, CancellationToken ct);
+
+    /// <summary>Lists the runs of a data subject in a scope, oldest id first.</summary>
+    /// <remarks>
+    /// The set is every run of the scope recorded for <paramref name="subjectId"/>, plus every run of a Reasonlet the subject
+    /// owns, whatever the run's own subject. This is the set <see cref="EraseAsync"/> removes for the same scope and subject.
+    /// A run on another owner's Reasonlet carries only its <see cref="ReasonletExecutionRecord.ReasonletId"/>; that owner's definition is never returned.
+    /// A run another person recorded on one of the subject's Reasonlets is in the set with that person's <c>Provenance</c>. Redact or drop it before the export reaches the subject.
+    /// Reads bypass the capture guard and the review gate. Returns up to <paramref name="limit"/> rows with an id above
+    /// <paramref name="after"/>, ordered by id. Ids are version 7 GUIDs, so this is creation order. Pass the last id of a page as the
+    /// next <paramref name="after"/>, and <see langword="null"/> to start. Ids are made by clients, so a row stored while an export
+    /// pages can land behind the cursor and is missed, unless the host stops writing for the subject first. An empty list is a success.
+    /// Error codes: <see cref="MnemosyneErrorCode.Validation"/> when the limit is not from 1 to 100, <paramref name="subjectId"/> is
+    /// blank, <paramref name="after"/> is a <c>default</c> ID, or an argument breaks another invariant, such as a <c>default</c> scope,
+    /// <see cref="MnemosyneErrorCode.Unavailable"/> when the backing store fails.
+    /// </remarks>
+    /// <param name="scope">The scope to read.</param>
+    /// <param name="subjectId">The data subject. Must not be blank.</param>
+    /// <param name="limit">The most rows to return, from 1 to 100.</param>
+    /// <param name="after">The last id of the previous page, or null for the first page.</param>
+    /// <param name="ct">The cancellation token.</param>
+    /// <returns>The page, or the error.</returns>
+    ValueTask<Result<IReadOnlyList<ReasonletExecutionRecord>, MnemosyneError>> ListSubjectRunsAsync(ReasonletScope scope, string subjectId, int limit, ExecutionId? after, CancellationToken ct);
 }

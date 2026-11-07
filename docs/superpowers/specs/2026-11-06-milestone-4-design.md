@@ -47,7 +47,8 @@ Ship `Mnemosyne.NET` 1.0.0 on NuGet, released by release-please. By then the pub
    - **Goal:** Concepts, the variants vision, and the Daedalus and Thalos guide.
 6. **Phase 4.6: Data protection guide** — `Surface: Docs`
    - **Goal:** How scope, provenance, redaction, erasure, retention and telemetry support a deployer's GDPR duties, and a short note on where the EU AI Act does and does not apply.
-7. **Phase 4.7: 1.0.0 release** — `Surface: Infra`
+7. **Phase 4.7: Subject export** — `Surface: Backend`
+8. **Phase 4.8: 1.0.0 release** — `Surface: Infra`
    - **Goal:** Release 1.0.0 through release-please.
 
 ## Dependencies on Prior Milestones
@@ -67,7 +68,7 @@ Ship `Mnemosyne.NET` 1.0.0 on NuGet, released by release-please. By then the pub
 | Versioning change in 4.2 needs a schema or store signature change after 1.0 is nearly set | Breaking change late | 4.2 comes before the freeze; the design names what variants need |
 | The AI.Sentinel jump from 4.2.0 to 5.x changes the adapter API | 4.4 grows | Scope the bump in that phase's design; the adapter is small |
 | Benchmarks are noisy on shared CI runners | Flaky or useless gate | Run them as a report, not a pass or fail threshold, unless 4.3 finds a stable one |
-| release-please will not cut 1.0.0 from the current config | Release blocked | 4.7 verifies the trigger before the last PR |
+| release-please will not cut 1.0.0 from the current config | Release blocked | 4.8 verifies the trigger before the last PR |
 
 ## Open Questions
 

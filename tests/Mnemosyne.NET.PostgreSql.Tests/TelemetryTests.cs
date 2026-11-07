@@ -415,6 +415,40 @@ public sealed class TelemetryTests(PgVectorFixture fixture) : IClassFixture<PgVe
     }
 
     [Fact]
+    public async Task ListSubjectReasonletsTagsLimitAndReturned()
+    {
+        var store = await MigratedStoreAsync();
+        var scope = PgVectorFixture.NewScope();
+        await store.RememberAsync(Entries.Entry(scope), Ct);
+        await store.RememberAsync(Entries.Entry(scope, Entries.Graph("b")), Ct);
+        using var capture = new TelemetryCapture();
+
+        Assert.Equal(2, (await store.ListSubjectReasonletsAsync(scope, "subject-1", 5, null, Ct)).Value.Count);
+
+        var activity = Single(capture, "mnemosyne.list_subject_reasonlets");
+        Assert.Equal(ActivityStatusCode.Unset, activity.Status);
+        Assert.Equal([new("mnemosyne.list.limit", 5), new("mnemosyne.list.returned", 2)], AllTags(activity));
+        AssertOperation(capture, "list_subject_reasonlets", "ok");
+    }
+
+    [Fact]
+    public async Task ListSubjectRunsTagsLimitAndReturned()
+    {
+        var store = await MigratedStoreAsync();
+        var scope = PgVectorFixture.NewScope();
+        await store.RememberAsync(Entries.Entry(scope), Ct);
+        await store.RememberAsync(Entries.Entry(scope, Entries.Graph("b")), Ct);
+        using var capture = new TelemetryCapture();
+
+        Assert.Equal(2, (await store.ListSubjectRunsAsync(scope, "subject-1", 5, null, Ct)).Value.Count);
+
+        var activity = Single(capture, "mnemosyne.list_subject_runs");
+        Assert.Equal(ActivityStatusCode.Unset, activity.Status);
+        Assert.Equal([new("mnemosyne.list.limit", 5), new("mnemosyne.list.returned", 2)], AllTags(activity));
+        AssertOperation(capture, "list_subject_runs", "ok");
+    }
+
+    [Fact]
     public async Task NoGateSignalCarriesCaptureText()
     {
         const string Canary = "canary-7f3a91";

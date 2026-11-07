@@ -465,6 +465,51 @@ static async Task<int> FacadeSmoke(NpgsqlDataSource dataSource, ReasonletGraph g
         return 26;
     }
 
+    // The subject export: remember a Reasonlet for a subject, page both calls with a limit of 10, erase the subject, and
+    // page again. The scope was erased above, so the export starts from nothing.
+    var exportSubject = new ReasonletProvenance { Source = "aot-smoke", SubjectId = "smoke-export" };
+    var exported = await memory.RememberAsync(
+        new ReasonletCapture
+        {
+            Scope = scope,
+            Question = question,
+            Graph = graph,
+            Outcome = new ReasonletOutcome(true, TimeSpan.FromMilliseconds(5), null),
+            Provenance = exportSubject,
+        },
+        ct);
+    if (exported.IsFailure)
+    {
+        Console.Error.WriteLine($"Remember for the export failed: {exported.Error.Message}");
+        return 61;
+    }
+
+    var exportedReasonlets = await memory.ListSubjectReasonletsAsync(scope, "smoke-export", 10, null, ct);
+    var exportedRuns = await memory.ListSubjectRunsAsync(scope, "smoke-export", 10, null, ct);
+    if (exportedReasonlets.IsFailure || exportedReasonlets.Value.Count != 1
+        || exportedReasonlets.Value[0].Definition.Id != exported.Value.Id)
+    {
+        Console.Error.WriteLine($"The subject export returned the wrong Reasonlets: {(exportedReasonlets.IsFailure ? exportedReasonlets.Error.Message : $"{exportedReasonlets.Value.Count} Reasonlets")}");
+        return 62;
+    }
+
+    if (exportedRuns.IsFailure || exportedRuns.Value.Count != 1
+        || exportedRuns.Value[0].ReasonletId != exported.Value.Id)
+    {
+        Console.Error.WriteLine($"The subject export returned the wrong runs: {(exportedRuns.IsFailure ? exportedRuns.Error.Message : $"{exportedRuns.Value.Count} runs")}");
+        return 64;
+    }
+
+    var exportErased = await memory.EraseAsync(new ReasonletErasure(scope, "smoke-export"), ct);
+    var afterReasonlets = await memory.ListSubjectReasonletsAsync(scope, "smoke-export", 10, null, ct);
+    var afterRuns = await memory.ListSubjectRunsAsync(scope, "smoke-export", 10, null, ct);
+    if (exportErased.IsFailure || afterReasonlets.IsFailure || afterReasonlets.Value.Count != 0
+        || afterRuns.IsFailure || afterRuns.Value.Count != 0)
+    {
+        Console.Error.WriteLine("The subject export still returned records after the erase.");
+        return 63;
+    }
+
     // A second facade over the same store with a guard that blocks the question: Blocked, and no row in the scope.
     var guardedServices = new ServiceCollection();
     guardedServices.AddSingleton(dataSource);
@@ -963,6 +1008,10 @@ internal sealed class UnreachableStore : IReasonletStore
     public ValueTask<UnitResult<MnemosyneError>> RejectAsync(ReasonletScope scope, ReasonletId id, CancellationToken ct) => throw new InvalidOperationException();
 
     public ValueTask<Result<IReadOnlyList<ReasonletReview>, MnemosyneError>> ListPendingAsync(ReasonletScope scope, int limit, ReasonletId? after, CancellationToken ct) => throw new InvalidOperationException();
+
+    public ValueTask<Result<IReadOnlyList<ReasonletRecord>, MnemosyneError>> ListSubjectReasonletsAsync(ReasonletScope scope, string subjectId, int limit, ReasonletId? after, CancellationToken ct) => throw new InvalidOperationException();
+
+    public ValueTask<Result<IReadOnlyList<ReasonletExecutionRecord>, MnemosyneError>> ListSubjectRunsAsync(ReasonletScope scope, string subjectId, int limit, ExecutionId? after, CancellationToken ct) => throw new InvalidOperationException();
 }
 
 /// <summary>An embedding generator that throws, for a path that must stop before the embedding.</summary>
@@ -1104,6 +1153,10 @@ internal sealed class RecordingMemory(ReasonletGraph graph) : IReasonletMemory
     public ValueTask<UnitResult<MnemosyneError>> RejectAsync(ReasonletScope scope, ReasonletId id, CancellationToken ct) => throw new NotSupportedException();
 
     public ValueTask<Result<IReadOnlyList<ReasonletReview>, MnemosyneError>> ListPendingAsync(ReasonletScope scope, int limit, ReasonletId? after, CancellationToken ct) => throw new NotSupportedException();
+
+    public ValueTask<Result<IReadOnlyList<ReasonletRecord>, MnemosyneError>> ListSubjectReasonletsAsync(ReasonletScope scope, string subjectId, int limit, ReasonletId? after, CancellationToken ct) => throw new NotSupportedException();
+
+    public ValueTask<Result<IReadOnlyList<ReasonletExecutionRecord>, MnemosyneError>> ListSubjectRunsAsync(ReasonletScope scope, string subjectId, int limit, ExecutionId? after, CancellationToken ct) => throw new NotSupportedException();
 }
 
 /// <summary>A tool written by hand, so that nothing goes through reflection under native AOT.</summary>

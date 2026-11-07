@@ -87,7 +87,7 @@ The stored Reasonlet carries the resolved intent and name, so what recall return
 
 - **`Source`**, required: what produced it, such as the name of your agent.
 - **`RunId`**, optional: the id of the run in your own system, so you can trace a Reasonlet back to it.
-- **`SubjectId`**, optional: the person the record is about. It is what makes [erasure by subject](scopes-and-subjects.md#subjects) possible.
+- **`SubjectId`**, optional: the person the record is about. It is what makes [erasure by subject](scopes-and-subjects.md#subjects) and the subject export possible.
 - **`Tags`**, optional: free-form key-value pairs.
 
 Each run you record carries its own provenance too.

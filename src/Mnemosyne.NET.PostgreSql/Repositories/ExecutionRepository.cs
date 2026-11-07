@@ -451,4 +451,40 @@ internal sealed partial class ExecutionRepository(IAsyncDbConnection connection)
         SELECT count(*)::int FROM deleted
         """)]
     public partial Task<int> DeleteForErasureAsync(string scope, Guid[] keptIds, IAsyncDbTransaction transaction, CancellationToken ct);
+
+    /// <summary>
+    /// One page of the runs a subject export covers in the scope, ordered by id, each with every input to its verdict
+    /// and its feedback: the runs whose subject is <paramref name="subjectId"/>, whichever Reasonlet they ran, and every
+    /// run, whoever made it, on a Reasonlet of the scope that the subject owns. That is the set a subject erase removes,
+    /// as <see cref="LockExecutionsForErasureAsync"/> selects it. A null <paramref name="after"/> starts at the beginning.
+    /// </summary>
+    /// <remarks>
+    /// The two sets are a <c>UNION</c> of their own index paths, not an <c>OR</c> in one <c>WHERE</c>. With the <c>OR</c>,
+    /// PostgreSQL 17 walked the <c>(scope, id)</c> index in id order and filtered, which read every run of the scope to
+    /// find a subject with few: 66 ms for three matches among 100000 runs, against 0.16 ms for the union. Each branch
+    /// returns at most <paramref name="limit"/> rows, but neither index orders by id, so each sorts all of its matching
+    /// rows on every page. The first <paramref name="limit"/> ids of the union lie within the first
+    /// <paramref name="limit"/> of each branch. The feedback is joined after the page is cut.
+    /// </remarks>
+    [Query("""
+        SELECT e.id, e.reasonlet_id, e.scope, e.executed_at, e.agent_success, e.duration_ticks, e.score,
+               e.evaluated_success, e.evaluation_score, e.evaluator, e.feedback_worked, e.success,
+               e.source, e.run_id, e.subject_id, e.tags, f.utility, f.correctness, f.reusability,
+               f.recorded_at
+        FROM (
+            (SELECT own.id FROM mnemosyne.reasonlet_executions own
+             WHERE own.scope = @scope AND own.subject_id = @subjectId AND (@after::uuid IS NULL OR own.id > @after)
+             ORDER BY own.id LIMIT @limit)
+            UNION
+            (SELECT held.id FROM mnemosyne.reasonlets r
+             JOIN mnemosyne.reasonlet_executions held ON held.scope = r.scope AND held.reasonlet_id = r.id
+             WHERE r.scope = @scope AND r.subject_id = @subjectId AND (@after::uuid IS NULL OR held.id > @after)
+             ORDER BY held.id LIMIT @limit)
+            ORDER BY id LIMIT @limit
+        ) page
+        JOIN mnemosyne.reasonlet_executions e ON e.scope = @scope AND e.id = page.id
+        LEFT JOIN mnemosyne.reasonlet_feedback f ON f.execution_id = e.id AND f.scope = e.scope
+        ORDER BY e.id
+        """)]
+    public partial Task<List<SubjectRunRow>> ListSubjectRunsAsync(string scope, string subjectId, Guid? after, int limit, CancellationToken ct);
 }

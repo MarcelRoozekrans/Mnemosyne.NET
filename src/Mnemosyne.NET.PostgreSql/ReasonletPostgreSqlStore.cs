@@ -1000,6 +1000,155 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
     }
 
     /// <inheritdoc />
+    public ValueTask<Result<IReadOnlyList<ReasonletRecord>, MnemosyneError>> ListSubjectReasonletsAsync(
+        ReasonletScope scope, string subjectId, int limit, ReasonletId? after, CancellationToken ct) =>
+        StoreTelemetry.RunAsync("list_subject_reasonlets", activity => ListSubjectReasonletsOperationAsync(scope, subjectId, limit, after, activity, ct));
+
+    private async ValueTask<Result<IReadOnlyList<ReasonletRecord>, MnemosyneError>> ListSubjectReasonletsOperationAsync(
+        ReasonletScope scope, string subjectId, int limit, ReasonletId? after, Activity? activity, CancellationToken ct)
+    {
+        StoreTelemetry.ListLimit(activity, limit);
+        var migrated = await EnsureMigratedAsync(ct).ConfigureAwait(false);
+        if (migrated.IsFailure)
+        {
+            return migrated.Error;
+        }
+
+        var invalid = ValidateScope(scope) ?? ValidateSubjectList(subjectId, limit, after);
+        if (invalid is not null)
+        {
+            return invalid.Value;
+        }
+
+        var result = await GuardAsync(ListSubjectReasonletsCoreAsync(scope, subjectId, limit, after, ct)).ConfigureAwait(false);
+        if (result.IsSuccess)
+        {
+            StoreTelemetry.ListReturned(activity, result.Value.Count);
+        }
+
+        return result;
+    }
+
+    private static MnemosyneError? ValidateSubjectList(string subjectId, int limit, ReasonletId? after)
+    {
+        if (string.IsNullOrWhiteSpace(subjectId))
+        {
+            return new MnemosyneError(MnemosyneErrorCode.Validation, "subjectId: must not be blank");
+        }
+
+        return ValidateListPending(limit, after);
+    }
+
+    // The subject id matches exactly, case included. A Reasonlet without a metrics row reads as no runs.
+    private async Task<Result<IReadOnlyList<ReasonletRecord>, MnemosyneError>> ListSubjectReasonletsCoreAsync(
+        ReasonletScope scope, string subjectId, int limit, ReasonletId? after, CancellationToken ct)
+    {
+        await using var connection = (await _dataSource.OpenConnectionAsync(ct).ConfigureAwait(false)).AsAsync();
+        var rows = await new ReasonletRepository(connection).ListSubjectReasonletsAsync(scope.Value, subjectId, after?.Value, limit, ct).ConfigureAwait(false);
+        var records = new List<ReasonletRecord>(rows.Count);
+        foreach (var row in rows)
+        {
+            records.Add(new ReasonletRecord
+            {
+                Definition = ToDefinition(row.ToReasonletRow()),
+                Metrics = new ReasonletMetrics(row.Runs, row.Successes, row.LastSuccessAt, row.LastExecutedAt, row.JudgedRuns, row.JudgedSuccesses),
+            });
+        }
+
+        return records;
+    }
+
+    /// <inheritdoc />
+    public ValueTask<Result<IReadOnlyList<ReasonletExecutionRecord>, MnemosyneError>> ListSubjectRunsAsync(
+        ReasonletScope scope, string subjectId, int limit, ExecutionId? after, CancellationToken ct) =>
+        StoreTelemetry.RunAsync("list_subject_runs", activity => ListSubjectRunsOperationAsync(scope, subjectId, limit, after, activity, ct));
+
+    private async ValueTask<Result<IReadOnlyList<ReasonletExecutionRecord>, MnemosyneError>> ListSubjectRunsOperationAsync(
+        ReasonletScope scope, string subjectId, int limit, ExecutionId? after, Activity? activity, CancellationToken ct)
+    {
+        StoreTelemetry.ListLimit(activity, limit);
+        var migrated = await EnsureMigratedAsync(ct).ConfigureAwait(false);
+        if (migrated.IsFailure)
+        {
+            return migrated.Error;
+        }
+
+        var invalid = ValidateScope(scope) ?? ValidateSubjectRuns(subjectId, limit, after);
+        if (invalid is not null)
+        {
+            return invalid.Value;
+        }
+
+        var result = await GuardAsync(ListSubjectRunsCoreAsync(scope, subjectId, limit, after, ct)).ConfigureAwait(false);
+        if (result.IsSuccess)
+        {
+            StoreTelemetry.ListReturned(activity, result.Value.Count);
+        }
+
+        return result;
+    }
+
+    private static MnemosyneError? ValidateSubjectRuns(string subjectId, int limit, ExecutionId? after)
+    {
+        if (ValidateSubjectList(subjectId, limit, null) is { } invalid)
+        {
+            return invalid;
+        }
+
+        return after is { } cursor && Check.NotDefault(cursor, nameof(after)) is { IsFailure: true } bad ? bad.Error : null;
+    }
+
+    // The set is what an erase of the subject removes: the subject's own runs on any Reasonlet, and every run on a
+    // Reasonlet of the scope that the subject owns. The subject id matches exactly, case included. An execution
+    // carries no verdict source column, so it follows from the inputs: feedback with a verdict, else an evaluator's
+    // verdict, else the agent's own flag.
+    private async Task<Result<IReadOnlyList<ReasonletExecutionRecord>, MnemosyneError>> ListSubjectRunsCoreAsync(
+        ReasonletScope scope, string subjectId, int limit, ExecutionId? after, CancellationToken ct)
+    {
+        await using var connection = (await _dataSource.OpenConnectionAsync(ct).ConfigureAwait(false)).AsAsync();
+        var rows = await new ExecutionRepository(connection).ListSubjectRunsAsync(scope.Value, subjectId, after?.Value, limit, ct).ConfigureAwait(false);
+        var records = new List<ReasonletExecutionRecord>(rows.Count);
+        foreach (var row in rows)
+        {
+            records.Add(ToRunRecord(row));
+        }
+
+        return records;
+    }
+
+    private static ReasonletExecutionRecord ToRunRecord(SubjectRunRow row)
+    {
+        ReasonletEvaluation? evaluation = row.EvaluatedSuccess is { } judged
+            ? new ReasonletEvaluation(judged, row.EvaluationScore!.Value, row.Evaluator!)
+            : null;
+        ReasonletFeedback? feedback = row.Utility is { } utility
+            ? new ReasonletFeedback(utility, row.Correctness!.Value, row.Reusability!.Value, row.FeedbackWorked)
+            : null;
+        return new ReasonletExecutionRecord
+        {
+            Id = new ExecutionId(row.Id),
+            ReasonletId = new ReasonletId(row.ReasonletId),
+            Scope = new ReasonletScope(row.Scope),
+            ExecutedAt = row.ExecutedAt,
+            Outcome = new ReasonletOutcome(row.AgentSuccess, TimeSpan.FromTicks(row.DurationTicks), row.Score),
+            Evaluation = evaluation,
+            Feedback = feedback,
+            FeedbackRecordedAt = row.FeedbackRecordedAt,
+            Success = row.Success,
+            VerdictSource = row.FeedbackWorked is not null
+                ? ReasonletVerdictSource.Feedback
+                : evaluation is not null ? ReasonletVerdictSource.Evaluator : ReasonletVerdictSource.Agent,
+            Provenance = new ReasonletProvenance
+            {
+                Source = row.Source,
+                RunId = row.RunId,
+                SubjectId = row.SubjectId,
+                Tags = row.Tags is null ? null : JsonSerializer.Deserialize(row.Tags, TagsJson.Default.DictionaryStringString),
+            },
+        };
+    }
+
+    /// <inheritdoc />
     public ValueTask<UnitResult<MnemosyneError>> ApproveAsync(ReasonletScope scope, ReasonletId id, CancellationToken ct) =>
         StoreTelemetry.RunAsync("approve", activity => ApproveOperationAsync(scope, id, activity, ct));
 
