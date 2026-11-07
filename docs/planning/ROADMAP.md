@@ -234,11 +234,12 @@ Design: [roadmap design](../superpowers/specs/2026-10-21-roadmap-design.md), bui
 **Plan:** `docs/superpowers/plans/2026-11-06-phase-4.7-subject-export.md`
 **Completed:** 2026-11-06
 
-### Phase 4.8: 1.0.0 release [status: active]
+### Phase 4.8: 1.0.0 release [status: complete]
 **Goal:** Release 1.0.0 through release-please.
 **Surface:** Infra
 **HelpWanted:** no
 **Plan:** `docs/superpowers/plans/2026-11-06-phase-4.8-1-0-release.md`
+**Completed:** 2026-11-07
 
 ## Milestone 5: Variants [status: pending]
 **Goal:** Choose between sibling versions of a procedure, post-1.0 (handover phase 4).
