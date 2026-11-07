@@ -96,7 +96,7 @@ if (pipeline != 0)
 
 // Variant selection as a host wires it: AddMnemosyneVariantSelection wraps the selector in the container, and two
 // candidates of one lineage rank as one match under native AOT. Needs no database.
-var variant = await VariantSmoke();
+var variant = await VariantSmoke(read.Value);
 if (variant != 0)
 {
     return variant;
@@ -653,7 +653,7 @@ static ReasonletCapture GateCapture(ReasonletScope scope, string question, Reaso
     Provenance = new ReasonletProvenance { Source = "aot-smoke" },
 };
 
-static async Task<int> VariantSmoke()
+static async Task<int> VariantSmoke(ReasonletGraph graph)
 {
     var services = new ServiceCollection();
     services.AddSingleton<IReasonletSelector>(new ReasonletSelector(new ReasonletRankingOptions(), TimeProvider.System));
@@ -671,6 +671,34 @@ static async Task<int> VariantSmoke()
     {
         Console.Error.WriteLine("The variant selector did not rank an empty candidate set to nothing.");
         return 66;
+    }
+
+    var lineage = ReasonletId.New();
+    ReasonletCandidate Candidate(double similarity) => new()
+    {
+        LineageId = lineage,
+        Reasonlet = new ReasonletDefinition
+        {
+            Id = ReasonletId.New(),
+            Scope = new ReasonletScope("aot-variant"),
+            Name = "refund-order",
+            Intent = "refund an order",
+            Version = "1.0",
+            Graph = graph,
+            Provenance = new ReasonletProvenance { Source = "aot-smoke" },
+            Status = ReasonletStatus.Active,
+            CreatedAt = DateTimeOffset.UnixEpoch,
+        },
+        Similarity = similarity,
+        Metrics = new ReasonletMetrics(0, 0, null, DateTimeOffset.UnixEpoch),
+    };
+
+    var grouped = await selector.RankAsync(
+        new ReasonletQuery { Scope = new ReasonletScope("aot-variant"), Question = "q" }, [Candidate(0.9), Candidate(0.8)], CancellationToken.None);
+    if (grouped.IsFailure || grouped.Value.Count != 1)
+    {
+        Console.Error.WriteLine("The variant selector did not rank two candidates of one lineage as one match.");
+        return 67;
     }
 
     return 0;
