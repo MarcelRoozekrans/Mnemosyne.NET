@@ -21,7 +21,7 @@ See the [milestone design](../superpowers/specs/2026-11-07-milestone-5-design.md
 
 ## Phases
 1. Phase 5.1 — Variant selection [complete]
-2. Phase 5.2 — Exploration [pending]
+2. Phase 5.2 — Exploration [complete]
 3. Phase 5.3 — Docs and sample [pending]
 
 ## Audit History

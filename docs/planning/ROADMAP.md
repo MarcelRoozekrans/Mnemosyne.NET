@@ -261,11 +261,12 @@ Design: [roadmap design](../superpowers/specs/2026-10-21-roadmap-design.md), bui
 **Plan:** `docs/superpowers/plans/2026-11-07-phase-5.1-variant-selection.md`
 **Completed:** 2026-11-07
 
-### Phase 5.2: Exploration [status: pending]
+### Phase 5.2: Exploration [status: complete]
 **Goal:** Thompson sampling with the parent prior, a seed for reproducible picks and an optional minimum number of trials, proven by a simulation in which a stronger new version overtakes an incumbent.
 **Surface:** Backend
 **HelpWanted:** no
 **Plan:** `docs/superpowers/plans/2026-11-07-phase-5.2-exploration.md`
+**Completed:** 2026-11-07
 
 ### Phase 5.3: Docs and sample [status: pending]
 **Goal:** Update `variants.md`, add a variants guide and a self-checking sample that CI runs.
