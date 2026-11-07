@@ -255,10 +255,10 @@ Design: [roadmap design](../superpowers/specs/2026-10-21-roadmap-design.md), bui
 - [ ] Docs and a self-checking sample cover variants
 
 ### Phase 5.1: Variant selection [status: pending]
-**Goal:** A `VariantSelector` over `IReasonletSelector` that groups candidates by lineage and picks one variant per lineage, with a seedable random source and telemetry.
+**Goal:** A `VariantSelector` over `IReasonletSelector` that groups candidates by lineage and picks the best variant per lineage, opt-in through `AddMnemosyneVariantSelection`, with telemetry.
 **Surface:** Backend
 **HelpWanted:** no
-**Plan:** _to be written_
+**Plan:** `docs/superpowers/plans/2026-11-07-phase-5.1-variant-selection.md`
 
 ### Phase 5.2: Exploration [status: pending]
 **Goal:** Thompson sampling with the parent prior and an optional minimum number of trials, proven by a simulation in which a stronger new version overtakes an incumbent.
