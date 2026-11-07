@@ -1,5 +1,25 @@
 # Changelog
 
+## [1.0.0](https://github.com/MarcelRoozekrans/Mnemosyne.NET/compare/v0.9.0...v1.0.0) (2026-11-07)
+
+
+### ⚠ BREAKING CHANGES
+
+* make the capture and suggestion helpers internal
+* make the validation and limit helpers internal
+* Check, EvaluationLimits and ReasonletGraphLimits are no longer public.
+
+### Miscellaneous Chores
+
+* prepare 1.0.0 ([#86](https://github.com/MarcelRoozekrans/Mnemosyne.NET/issues/86)) ([82abd4e](https://github.com/MarcelRoozekrans/Mnemosyne.NET/commit/82abd4ebcbf805e3df544bdbcbfe5d7ec955c7d3))
+
+
+### Code Refactoring
+
+* make the capture and suggestion helpers internal ([3a5d30e](https://github.com/MarcelRoozekrans/Mnemosyne.NET/commit/3a5d30e032f3acd05e307a84a24ba2e528ed8ea6))
+* make the validation and limit helpers internal ([3a5d30e](https://github.com/MarcelRoozekrans/Mnemosyne.NET/commit/3a5d30e032f3acd05e307a84a24ba2e528ed8ea6))
+* rename the subject run listing to ListSubjectExecutionsAsync ([3a5d30e](https://github.com/MarcelRoozekrans/Mnemosyne.NET/commit/3a5d30e032f3acd05e307a84a24ba2e528ed8ea6))
+
 ## [0.9.0](https://github.com/MarcelRoozekrans/Mnemosyne.NET/compare/v0.8.1...v0.9.0) (2026-11-07)
 
 
