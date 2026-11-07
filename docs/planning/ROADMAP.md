@@ -270,4 +270,4 @@ Design: [roadmap design](../superpowers/specs/2026-10-21-roadmap-design.md), bui
 **Goal:** Update `variants.md`, add a variants guide and a self-checking sample that CI runs.
 **Surface:** Docs
 **HelpWanted:** no
-**Plan:** _to be written_
+**Plan:** `docs/superpowers/plans/2026-11-07-phase-5.3-variant-docs-sample.md`
