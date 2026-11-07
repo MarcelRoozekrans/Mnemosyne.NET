@@ -26,7 +26,8 @@ public sealed class VariantSimulationTests
     {
         var selector = new VariantSelector(new ReasonletSelector(Ranking, new FixedTimeProvider()), options, Ranking);
         var outcomes = new Random(outcomeSeed);
-        var lineage = ReasonletId.New();
+        // A fixed lineage id too: the seeded draws hash it, so a random one would change them from run to run.
+        var lineage = new ReasonletId(new Guid("00000000-0000-0000-0000-00000000000a"));
         // Fixed ids, the incumbent's the lower. A new version with no runs of its own scores exactly as its parent does,
         // so without exploration the two tie on score and similarity and the lowest id wins. Random ids would make that
         // tie-break, and with it this test, depend on the clock.
@@ -80,8 +81,8 @@ public sealed class VariantSimulationTests
     private static ReasonletMetrics Next(ReasonletMetrics metrics, bool success) =>
         new(metrics.Runs + 1, metrics.Successes + (success ? 1 : 0), null, Now);
 
-    // Observed child picks in the first 20 and the last 100 rounds: seed 11 = 14 and 100, seed 23 = 17 and 100,
-    // seed 42 = 15 and 100. The thresholds, 1 and 60, leave a wide margin: the child's 0.9 against the incumbent's 0.7
+    // Observed child picks in the first 20 and the last 100 rounds: seed 11 = 11 and 100, seed 23 = 10 and 100,
+    // seed 42 = 18 and 100. The thresholds, 1 and 60, leave a wide margin: the child's 0.9 against the incumbent's 0.7
     // makes it win nearly every round once it has been tried a few times.
     [Theory]
     [InlineData(11)]
@@ -100,6 +101,7 @@ public sealed class VariantSimulationTests
     [Fact]
     public async Task WithoutExplorationTheNewVersionIsNeverChosen()
     {
+        // Relies on the lowest-id tie rule, with the incumbent's id lower as v7 ids would be for the older version.
         var chosen = await Simulate(new VariantSelectionOptions(), 11);
 
         Assert.DoesNotContain(true, chosen);

@@ -15,21 +15,21 @@ public sealed class VariantExplorationSurfaceTests
         public override DateTimeOffset GetUtcNow() => Now;
     }
 
-    private static ReasonletCandidate Candidate(ReasonletId lineage, double similarity) =>
+    private static ReasonletCandidate Candidate(ReasonletId lineage, double similarity, int id) =>
         new()
         {
             LineageId = lineage,
-            Reasonlet = TestData.Definition() with { Id = ReasonletId.New() },
+            Reasonlet = TestData.Definition() with { Id = new ReasonletId(new Guid(id, 0, 0, new byte[8])) },
             Similarity = similarity,
             Metrics = new ReasonletMetrics(0, 0, null, Now),
         };
 
     private static async Task<int> RankedCount(IReasonletSelector selector)
     {
-        var lineage = ReasonletId.New();
+        var lineage = new ReasonletId(new Guid(100, 0, 0, new byte[8]));
         var result = await selector.RankAsync(
             TestData.Query() with { Top = 10 },
-            [Candidate(lineage, 0.9), Candidate(lineage, 0.8)],
+            [Candidate(lineage, 0.9, 1), Candidate(lineage, 0.8, 2)],
             TestContext.Current.CancellationToken);
         Assert.True(result.IsSuccess);
         return result.Value.Count;
