@@ -34,9 +34,9 @@ A new version of a procedure gets a fair chance to prove itself. Today the defau
 ## Phases
 
 1. **Phase 5.1: Variant selection** — `Surface: Backend`
-   - **Goal:** A `VariantSelector` over `IReasonletSelector` that groups candidates by lineage and picks one variant per lineage, with a seedable random source and telemetry.
+   - **Goal:** A `VariantSelector` over `IReasonletSelector` that groups candidates by lineage and picks the best variant per lineage, opt-in through a service extension, with telemetry. Grooming moved the seedable random source to 5.2.
 2. **Phase 5.2: Exploration** — `Surface: Backend`
-   - **Goal:** Thompson sampling with the parent prior and an optional minimum number of trials, proven by a simulation in which a stronger new version overtakes an incumbent.
+   - **Goal:** Thompson sampling with the parent prior, a seed and an optional minimum number of trials, proven by a simulation in which a stronger new version overtakes an incumbent.
 3. **Phase 5.3: Docs and sample** — `Surface: Docs`
    - **Goal:** Update `variants.md`, add a variants guide and a self-checking sample that CI runs.
 
