@@ -174,16 +174,17 @@ Design: [roadmap design](../superpowers/specs/2026-10-21-roadmap-design.md), bui
 **Plan:** `docs/superpowers/plans/2026-11-05-phase-3.7-integration-docs-samples.md`
 **Completed:** 2026-11-06
 
-## Milestone 4: 1.0 [status: active]
+## Milestone 4: 1.0 [status: complete]
 **Goal:** Ship 1.0.0: stable public API, versioning ready for variants, benchmarks in CI, complete docs.
 **Started:** 2026-11-06
+**Completed:** 2026-11-07
 **Definition of Done:**
-- [ ] #55, #57 and #58 closed
-- [ ] Versioning and lineage API lets variant selection be added without a breaking change
-- [ ] BenchmarkDotNet suite runs in CI
-- [ ] PublicApiAnalyzers baselines and package validation fail CI on a breaking change, and the graph schema compatibility policy is published
-- [ ] Docsite complete, including the data protection guide
-- [ ] 1.0.0 on NuGet
+- [x] #55, #57 and #58 closed
+- [x] Versioning and lineage API lets variant selection be added without a breaking change
+- [x] BenchmarkDotNet suite runs in CI
+- [x] PublicApiAnalyzers baselines and package validation fail CI on a breaking change, and the graph schema compatibility policy is published
+- [x] Docsite complete, including the data protection guide
+- [x] 1.0.0 on NuGet
 
 ### Phase 4.1: Test and sample hygiene [status: complete]
 **Goal:** Share the scripted model and embedding stubs across the PostgreSQL tests (#55) and the self-check runner across the four samples (#57).
