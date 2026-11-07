@@ -325,9 +325,8 @@ public class ContractShapeTests
     }
 
     [Fact]
-    public void CheckExposesOnlyTheHelpersOtherPackagesUse()
+    public void CheckHoldsOnlyTheHelpersTheOtherPackagesUse()
     {
-        // Public API: a change here is a breaking or widening change to every package that extends Mnemosyne.
         var members = typeof(Check).GetMethods(BindingFlags.Public | BindingFlags.Static | BindingFlags.DeclaredOnly)
             .Select(m => m.Name + "(" + string.Join(", ", m.GetParameters().Select(p => p.ParameterType.Name)) + ")")
             .Order(StringComparer.Ordinal)
@@ -347,18 +346,29 @@ public class ContractShapeTests
                 "ValidUtf16(String, String)",
             ],
             members);
-        Assert.True(typeof(Check).IsPublic);
-        Assert.Equal("Mnemosyne.NET.Abstractions.Validation", typeof(Check).Namespace);
+        Assert.False(typeof(Check).IsPublic);
+        Assert.False(typeof(EvaluationLimits).IsPublic);
+        Assert.False(typeof(ReasonletGraphLimits).IsPublic);
     }
 
     [Fact]
-    public void OnlyTheTestProjectSeesAbstractionsInternals()
+    public void OnlyTheTestProjectAndTheSiblingPackagesSeeAbstractionsInternals()
     {
         var csproj = Path.Combine(RepoConventionsTests.RepoRoot(), "src", "Mnemosyne.NET.Abstractions", "Mnemosyne.NET.Abstractions.csproj");
         var friends = XDocument.Load(csproj).Descendants("InternalsVisibleTo")
             .Select(e => e.Attribute("Include")?.Value)
             .ToArray();
-        Assert.Equal(new string?[] { "Mnemosyne.NET.Tests" }, friends);
+        Assert.Equal(
+            new string?[]
+            {
+                "Mnemosyne.NET.Tests",
+                "Mnemosyne.NET",
+                "Mnemosyne.NET.PostgreSql",
+                "Mnemosyne.NET.Minos",
+                "Mnemosyne.NET.Sentinel",
+                "Mnemosyne.NET.AgentFramework",
+            },
+            friends);
     }
 
     [Fact]

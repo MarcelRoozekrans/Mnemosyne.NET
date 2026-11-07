@@ -1,15 +1,7 @@
 #nullable enable
-const Mnemosyne.NET.Abstractions.EvaluationLimits.MaxEvaluatorLength = 100 -> int
-const Mnemosyne.NET.Abstractions.EvaluationLimits.MaxRunTextLength = 32000 -> int
 const Mnemosyne.NET.Abstractions.MnemosyneTelemetry.ActivitySourceName = "Mnemosyne.NET" -> string!
 const Mnemosyne.NET.Abstractions.MnemosyneTelemetry.MeterName = "Mnemosyne.NET" -> string!
 const Mnemosyne.NET.Abstractions.ReasonletGraph.CurrentSchemaVersion = 1 -> int
-const Mnemosyne.NET.Abstractions.ReasonletGraphLimits.MaxEdges = 2000 -> int
-const Mnemosyne.NET.Abstractions.ReasonletGraphLimits.MaxIdentifierLength = 256 -> int
-const Mnemosyne.NET.Abstractions.ReasonletGraphLimits.MaxNodes = 500 -> int
-const Mnemosyne.NET.Abstractions.ReasonletGraphLimits.MaxPropertiesBytes = 65536 -> int
-const Mnemosyne.NET.Abstractions.ReasonletGraphLimits.MaxPropertyDepth = 32 -> int
-const Mnemosyne.NET.Abstractions.ReasonletGraphLimits.MaxTextLength = 1024 -> int
 Mnemosyne.NET.Abstractions.CaptureVerdict
 Mnemosyne.NET.Abstractions.CaptureVerdict.CaptureVerdict() -> void
 Mnemosyne.NET.Abstractions.CaptureVerdict.Detector.get -> string?
@@ -17,7 +9,6 @@ Mnemosyne.NET.Abstractions.CaptureVerdict.Equals(Mnemosyne.NET.Abstractions.Capt
 Mnemosyne.NET.Abstractions.CaptureVerdict.Guard.get -> string!
 Mnemosyne.NET.Abstractions.CaptureVerdict.IsBlocked.get -> bool
 Mnemosyne.NET.Abstractions.CaptureVerdict.Validate() -> ZeroAlloc.Results.UnitResult<Mnemosyne.NET.Abstractions.MnemosyneError>
-Mnemosyne.NET.Abstractions.EvaluationLimits
 Mnemosyne.NET.Abstractions.ExecutionId
 Mnemosyne.NET.Abstractions.ExecutionId.Deconstruct(out System.Guid Value) -> void
 Mnemosyne.NET.Abstractions.ExecutionId.Equals(Mnemosyne.NET.Abstractions.ExecutionId other) -> bool
@@ -239,7 +230,6 @@ Mnemosyne.NET.Abstractions.ReasonletGraph.SchemaVersion.get -> int
 Mnemosyne.NET.Abstractions.ReasonletGraph.SchemaVersion.init -> void
 Mnemosyne.NET.Abstractions.ReasonletGraph.Validate() -> ZeroAlloc.Results.UnitResult<Mnemosyne.NET.Abstractions.MnemosyneError>
 Mnemosyne.NET.Abstractions.ReasonletGraphJson
-Mnemosyne.NET.Abstractions.ReasonletGraphLimits
 Mnemosyne.NET.Abstractions.ReasonletId
 Mnemosyne.NET.Abstractions.ReasonletId.Deconstruct(out System.Guid Value) -> void
 Mnemosyne.NET.Abstractions.ReasonletId.Equals(Mnemosyne.NET.Abstractions.ReasonletId other) -> bool
@@ -463,7 +453,6 @@ Mnemosyne.NET.Abstractions.ReasonletVerdictSource
 Mnemosyne.NET.Abstractions.ReasonletVerdictSource.Agent = 1 -> Mnemosyne.NET.Abstractions.ReasonletVerdictSource
 Mnemosyne.NET.Abstractions.ReasonletVerdictSource.Evaluator = 2 -> Mnemosyne.NET.Abstractions.ReasonletVerdictSource
 Mnemosyne.NET.Abstractions.ReasonletVerdictSource.Feedback = 3 -> Mnemosyne.NET.Abstractions.ReasonletVerdictSource
-Mnemosyne.NET.Abstractions.Validation.Check
 override Mnemosyne.NET.Abstractions.CaptureVerdict.GetHashCode() -> int
 override Mnemosyne.NET.Abstractions.ExecutionId.GetHashCode() -> int
 override Mnemosyne.NET.Abstractions.ExecutionId.ToString() -> string!
@@ -603,17 +592,6 @@ static Mnemosyne.NET.Abstractions.ReasonletScore.operator !=(Mnemosyne.NET.Abstr
 static Mnemosyne.NET.Abstractions.ReasonletScore.operator ==(Mnemosyne.NET.Abstractions.ReasonletScore left, Mnemosyne.NET.Abstractions.ReasonletScore right) -> bool
 static Mnemosyne.NET.Abstractions.ReasonletStoreEntry.operator !=(Mnemosyne.NET.Abstractions.ReasonletStoreEntry? left, Mnemosyne.NET.Abstractions.ReasonletStoreEntry? right) -> bool
 static Mnemosyne.NET.Abstractions.ReasonletStoreEntry.operator ==(Mnemosyne.NET.Abstractions.ReasonletStoreEntry? left, Mnemosyne.NET.Abstractions.ReasonletStoreEntry? right) -> bool
-static Mnemosyne.NET.Abstractions.Validation.Check.All(params System.ReadOnlySpan<System.Func<ZeroAlloc.Results.UnitResult<Mnemosyne.NET.Abstractions.MnemosyneError>>!> checks) -> ZeroAlloc.Results.UnitResult<Mnemosyne.NET.Abstractions.MnemosyneError>
-static Mnemosyne.NET.Abstractions.Validation.Check.Fail(string! path, string! reason) -> ZeroAlloc.Results.UnitResult<Mnemosyne.NET.Abstractions.MnemosyneError>
-static Mnemosyne.NET.Abstractions.Validation.Check.MaxLength(string? value, int max, string! path) -> ZeroAlloc.Results.UnitResult<Mnemosyne.NET.Abstractions.MnemosyneError>
-static Mnemosyne.NET.Abstractions.Validation.Check.Nested(ZeroAlloc.Results.UnitResult<Mnemosyne.NET.Abstractions.MnemosyneError> inner, string! prefix) -> ZeroAlloc.Results.UnitResult<Mnemosyne.NET.Abstractions.MnemosyneError>
-static Mnemosyne.NET.Abstractions.Validation.Check.NotBlank(string? value, string! path) -> ZeroAlloc.Results.UnitResult<Mnemosyne.NET.Abstractions.MnemosyneError>
-static Mnemosyne.NET.Abstractions.Validation.Check.NotDefault(Mnemosyne.NET.Abstractions.ExecutionId id, string! path) -> ZeroAlloc.Results.UnitResult<Mnemosyne.NET.Abstractions.MnemosyneError>
-static Mnemosyne.NET.Abstractions.Validation.Check.NotDefault(Mnemosyne.NET.Abstractions.ReasonletId id, string! path) -> ZeroAlloc.Results.UnitResult<Mnemosyne.NET.Abstractions.MnemosyneError>
-static Mnemosyne.NET.Abstractions.Validation.Check.NotNull(object? value, string! path) -> ZeroAlloc.Results.UnitResult<Mnemosyne.NET.Abstractions.MnemosyneError>
-static Mnemosyne.NET.Abstractions.Validation.Check.Range(int value, int min, int max, string! path) -> ZeroAlloc.Results.UnitResult<Mnemosyne.NET.Abstractions.MnemosyneError>
-static Mnemosyne.NET.Abstractions.Validation.Check.UnitInterval(double value, string! path) -> ZeroAlloc.Results.UnitResult<Mnemosyne.NET.Abstractions.MnemosyneError>
-static Mnemosyne.NET.Abstractions.Validation.Check.ValidUtf16(string? value, string! path) -> ZeroAlloc.Results.UnitResult<Mnemosyne.NET.Abstractions.MnemosyneError>
 ~override Mnemosyne.NET.Abstractions.CaptureVerdict.Equals(object obj) -> bool
 ~override Mnemosyne.NET.Abstractions.CaptureVerdict.ToString() -> string
 ~override Mnemosyne.NET.Abstractions.ExecutionId.Equals(object obj) -> bool

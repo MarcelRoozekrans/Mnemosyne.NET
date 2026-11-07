@@ -13,7 +13,7 @@ namespace Mnemosyne.NET.Abstractions.Validation;
 /// same way. Each check returns success or one failure; <see cref="All"/> runs a sequence and stops at the first failure,
 /// and <see cref="Nested"/> prefixes a nested record's path.
 /// </remarks>
-public static class Check
+internal static class Check
 {
     private static UnitResult<MnemosyneError> Ok() => UnitResult<MnemosyneError>.Success();
 

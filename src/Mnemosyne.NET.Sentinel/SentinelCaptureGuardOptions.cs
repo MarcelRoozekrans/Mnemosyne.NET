@@ -22,7 +22,7 @@ public sealed class SentinelCaptureGuardOptions
 
     /// <summary>
     /// Gets the name the guard reports itself under. Must not be blank, must be valid UTF-16 and must not be longer than
-    /// <see cref="EvaluationLimits.MaxEvaluatorLength"/> code points. Defaults to <c>ai-sentinel</c>.
+    /// 100 code points. Defaults to <c>ai-sentinel</c>.
     /// </summary>
     public string GuardName { get; init; } = "ai-sentinel";
 
