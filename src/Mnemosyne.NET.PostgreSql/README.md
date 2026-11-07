@@ -2,6 +2,8 @@
 
 PostgreSQL + pgvector store for Reasonlets: an `IReasonletStore` that keeps procedures, their runs and their feedback, and finds the nearest procedure to an embedding. It needs PostgreSQL 15 or later with pgvector 0.8.0 or later.
 
+Mnemosyne.NET follows [SemVer](https://semver.org) from 1.0.0. An analyzer baseline locks the public API, and the [compatibility policy](https://marcelroozekrans.github.io/Mnemosyne.NET/concepts/compatibility) says what a release may change.
+
 ```bash
 dotnet add package Mnemosyne.NET.PostgreSql
 ```

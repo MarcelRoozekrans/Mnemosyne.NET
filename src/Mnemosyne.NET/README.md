@@ -2,6 +2,8 @@
 
 Reasonlet selection and ranking: find the best known procedure for a question.
 
+Mnemosyne.NET follows [SemVer](https://semver.org) from 1.0.0. An analyzer baseline locks the public API, and the [compatibility policy](https://marcelroozekrans.github.io/Mnemosyne.NET/concepts/compatibility) says what a release may change.
+
 An agent asks a question and gets back the few Reasonlets most worth trying, best first, each with a score breakdown of similarity, success rate and freshness. The agent still makes the final call. This package holds:
 
 - `ReasonletMemory`, the default `IReasonletMemory` facade. It ties together a store, a selector, an embedding generator, an optional intent extractor and an optional evaluator.

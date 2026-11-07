@@ -2,6 +2,8 @@
 
 A capture guard that runs [AI.Sentinel](https://github.com/MarcelRoozekrans/AI.Sentinel)'s detectors over a capture before the Reasonlet is stored. `SentinelCaptureGuard` is an `ICaptureGuard`: it blocks the capture when a detector reaches the configured severity, and allows it otherwise.
 
+Mnemosyne.NET follows [SemVer](https://semver.org) from 1.0.0. An analyzer baseline locks the public API, and the [compatibility policy](https://marcelroozekrans.github.io/Mnemosyne.NET/concepts/compatibility) says what a release may change.
+
 ```bash
 dotnet add package Mnemosyne.NET.Sentinel
 ```

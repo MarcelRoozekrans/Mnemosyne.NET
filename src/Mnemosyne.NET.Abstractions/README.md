@@ -2,6 +2,8 @@
 
 Records and interfaces for Reasonlets, procedural memory for .NET agents.
 
+Mnemosyne.NET follows [SemVer](https://semver.org) from 1.0.0. An analyzer baseline locks the public API, and the [compatibility policy](https://marcelroozekrans.github.io/Mnemosyne.NET/concepts/compatibility) says what a release may change.
+
 The package holds the record types (scope, provenance, outcome, graph, capture, query, receipt) and the contracts.
 `IReasonletMemory` is the caller-facing facade: remember, recall, record executions and feedback, erase, and list a data subject's Reasonlets and runs with `ListSubjectReasonletsAsync` and `ListSubjectExecutionsAsync`.
 A recall returns `ReasonletMatch` records, built from the `ReasonletCandidate` records a store supplies, with a `ReasonletEvidence` on each match. All three are init-only records, and the candidate and the match carry a `LineageId`: the id of the root of the version tree, its own id for a root.
