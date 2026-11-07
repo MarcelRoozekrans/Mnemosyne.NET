@@ -486,5 +486,5 @@ internal sealed partial class ExecutionRepository(IAsyncDbConnection connection)
         LEFT JOIN mnemosyne.reasonlet_feedback f ON f.execution_id = e.id AND f.scope = e.scope
         ORDER BY e.id
         """)]
-    public partial Task<List<SubjectRunRow>> ListSubjectRunsAsync(string scope, string subjectId, Guid? after, int limit, CancellationToken ct);
+    public partial Task<List<SubjectRunRow>> ListSubjectExecutionsAsync(string scope, string subjectId, Guid? after, int limit, CancellationToken ct);
 }

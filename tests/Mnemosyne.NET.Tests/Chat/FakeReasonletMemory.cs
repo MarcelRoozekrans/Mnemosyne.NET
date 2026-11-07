@@ -95,7 +95,7 @@ internal sealed class FakeReasonletMemory : IReasonletMemory
 
     public ValueTask<Result<IReadOnlyList<ReasonletRecord>, MnemosyneError>> ListSubjectReasonletsAsync(ReasonletScope scope, string subjectId, int limit, ReasonletId? after, CancellationToken ct) => throw new NotSupportedException();
 
-    public ValueTask<Result<IReadOnlyList<ReasonletExecutionRecord>, MnemosyneError>> ListSubjectRunsAsync(ReasonletScope scope, string subjectId, int limit, ExecutionId? after, CancellationToken ct) => throw new NotSupportedException();
+    public ValueTask<Result<IReadOnlyList<ReasonletExecutionRecord>, MnemosyneError>> ListSubjectExecutionsAsync(ReasonletScope scope, string subjectId, int limit, ExecutionId? after, CancellationToken ct) => throw new NotSupportedException();
 
     private void Enter()
     {

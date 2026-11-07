@@ -228,5 +228,5 @@ public interface IReasonletStore
     /// <param name="after">The last id of the previous page, or null for the first page.</param>
     /// <param name="ct">The cancellation token.</param>
     /// <returns>The page, or the error.</returns>
-    ValueTask<Result<IReadOnlyList<ReasonletExecutionRecord>, MnemosyneError>> ListSubjectRunsAsync(ReasonletScope scope, string subjectId, int limit, ExecutionId? after, CancellationToken ct);
+    ValueTask<Result<IReadOnlyList<ReasonletExecutionRecord>, MnemosyneError>> ListSubjectExecutionsAsync(ReasonletScope scope, string subjectId, int limit, ExecutionId? after, CancellationToken ct);
 }

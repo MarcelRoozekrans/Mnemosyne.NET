@@ -34,17 +34,17 @@ public sealed class SubjectExportTests
     }
 
     [Fact]
-    public async Task ListSubjectRunsDelegatesToTheStoreWithTheCallersArguments()
+    public async Task ListSubjectExecutionsDelegatesToTheStoreWithTheCallersArguments()
     {
         var cursor = ExecutionId.New();
         using var cts = new CancellationTokenSource();
         var failure = new MnemosyneError(MnemosyneErrorCode.Unavailable, "store down");
-        _store.ListSubjectRunsResult = Result<IReadOnlyList<ReasonletExecutionRecord>, MnemosyneError>.Failure(failure);
+        _store.ListSubjectExecutionsResult = Result<IReadOnlyList<ReasonletExecutionRecord>, MnemosyneError>.Failure(failure);
 
-        var result = await Memory().ListSubjectRunsAsync(Scope, "subject-1", 25, cursor, cts.Token);
+        var result = await Memory().ListSubjectExecutionsAsync(Scope, "subject-1", 25, cursor, cts.Token);
 
         Assert.Equal(failure, result.Error);
-        Assert.Equal((Scope, "subject-1", 25, (ExecutionId?)cursor, cts.Token), _store.ListedSubjectRuns);
+        Assert.Equal((Scope, "subject-1", 25, (ExecutionId?)cursor, cts.Token), _store.ListedSubjectExecutions);
     }
 
     [Fact]
@@ -68,7 +68,7 @@ public sealed class SubjectExportTests
         foreach (var (name, scope, subject, limit, defaultCursor, expected) in cases)
         {
             var reasonlets = await memory.ListSubjectReasonletsAsync(scope, subject!, limit, defaultCursor ? default(ReasonletId) : null, ct);
-            var runs = await memory.ListSubjectRunsAsync(scope, subject!, limit, defaultCursor ? default(ExecutionId) : null, ct);
+            var runs = await memory.ListSubjectExecutionsAsync(scope, subject!, limit, defaultCursor ? default(ExecutionId) : null, ct);
 
             Assert.True(reasonlets.IsFailure, name);
             Assert.True(runs.IsFailure, name);
@@ -89,8 +89,8 @@ public sealed class SubjectExportTests
 
         Assert.True((await memory.ListSubjectReasonletsAsync(Scope, "s", 1, null, ct)).IsSuccess);
         Assert.True((await memory.ListSubjectReasonletsAsync(Scope, "s", 100, null, ct)).IsSuccess);
-        Assert.True((await memory.ListSubjectRunsAsync(Scope, "s", 1, null, ct)).IsSuccess);
-        Assert.True((await memory.ListSubjectRunsAsync(Scope, "s", 100, null, ct)).IsSuccess);
+        Assert.True((await memory.ListSubjectExecutionsAsync(Scope, "s", 1, null, ct)).IsSuccess);
+        Assert.True((await memory.ListSubjectExecutionsAsync(Scope, "s", 100, null, ct)).IsSuccess);
         Assert.Equal(4, _store.Calls);
     }
 }

@@ -485,7 +485,7 @@ static async Task<int> FacadeSmoke(NpgsqlDataSource dataSource, ReasonletGraph g
     }
 
     var exportedReasonlets = await memory.ListSubjectReasonletsAsync(scope, "smoke-export", 10, null, ct);
-    var exportedRuns = await memory.ListSubjectRunsAsync(scope, "smoke-export", 10, null, ct);
+    var exportedRuns = await memory.ListSubjectExecutionsAsync(scope, "smoke-export", 10, null, ct);
     if (exportedReasonlets.IsFailure || exportedReasonlets.Value.Count != 1
         || exportedReasonlets.Value[0].Definition.Id != exported.Value.Id)
     {
@@ -502,7 +502,7 @@ static async Task<int> FacadeSmoke(NpgsqlDataSource dataSource, ReasonletGraph g
 
     var exportErased = await memory.EraseAsync(new ReasonletErasure(scope, "smoke-export"), ct);
     var afterReasonlets = await memory.ListSubjectReasonletsAsync(scope, "smoke-export", 10, null, ct);
-    var afterRuns = await memory.ListSubjectRunsAsync(scope, "smoke-export", 10, null, ct);
+    var afterRuns = await memory.ListSubjectExecutionsAsync(scope, "smoke-export", 10, null, ct);
     if (exportErased.IsFailure || afterReasonlets.IsFailure || afterReasonlets.Value.Count != 0
         || afterRuns.IsFailure || afterRuns.Value.Count != 0)
     {
@@ -1011,7 +1011,7 @@ internal sealed class UnreachableStore : IReasonletStore
 
     public ValueTask<Result<IReadOnlyList<ReasonletRecord>, MnemosyneError>> ListSubjectReasonletsAsync(ReasonletScope scope, string subjectId, int limit, ReasonletId? after, CancellationToken ct) => throw new InvalidOperationException();
 
-    public ValueTask<Result<IReadOnlyList<ReasonletExecutionRecord>, MnemosyneError>> ListSubjectRunsAsync(ReasonletScope scope, string subjectId, int limit, ExecutionId? after, CancellationToken ct) => throw new InvalidOperationException();
+    public ValueTask<Result<IReadOnlyList<ReasonletExecutionRecord>, MnemosyneError>> ListSubjectExecutionsAsync(ReasonletScope scope, string subjectId, int limit, ExecutionId? after, CancellationToken ct) => throw new InvalidOperationException();
 }
 
 /// <summary>An embedding generator that throws, for a path that must stop before the embedding.</summary>
@@ -1156,7 +1156,7 @@ internal sealed class RecordingMemory(ReasonletGraph graph) : IReasonletMemory
 
     public ValueTask<Result<IReadOnlyList<ReasonletRecord>, MnemosyneError>> ListSubjectReasonletsAsync(ReasonletScope scope, string subjectId, int limit, ReasonletId? after, CancellationToken ct) => throw new NotSupportedException();
 
-    public ValueTask<Result<IReadOnlyList<ReasonletExecutionRecord>, MnemosyneError>> ListSubjectRunsAsync(ReasonletScope scope, string subjectId, int limit, ExecutionId? after, CancellationToken ct) => throw new NotSupportedException();
+    public ValueTask<Result<IReadOnlyList<ReasonletExecutionRecord>, MnemosyneError>> ListSubjectExecutionsAsync(ReasonletScope scope, string subjectId, int limit, ExecutionId? after, CancellationToken ct) => throw new NotSupportedException();
 }
 
 /// <summary>A tool written by hand, so that nothing goes through reflection under native AOT.</summary>

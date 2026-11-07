@@ -162,17 +162,17 @@ internal sealed class FakeStore : IReasonletStore
         return ValueTask.FromResult(ListSubjectReasonletsResult);
     }
 
-    public (ReasonletScope Scope, string SubjectId, int Limit, ExecutionId? After, CancellationToken Ct)? ListedSubjectRuns { get; private set; }
+    public (ReasonletScope Scope, string SubjectId, int Limit, ExecutionId? After, CancellationToken Ct)? ListedSubjectExecutions { get; private set; }
 
-    public Result<IReadOnlyList<ReasonletExecutionRecord>, MnemosyneError> ListSubjectRunsResult { get; set; } =
+    public Result<IReadOnlyList<ReasonletExecutionRecord>, MnemosyneError> ListSubjectExecutionsResult { get; set; } =
         Result<IReadOnlyList<ReasonletExecutionRecord>, MnemosyneError>.Success([]);
 
-    public ValueTask<Result<IReadOnlyList<ReasonletExecutionRecord>, MnemosyneError>> ListSubjectRunsAsync(
+    public ValueTask<Result<IReadOnlyList<ReasonletExecutionRecord>, MnemosyneError>> ListSubjectExecutionsAsync(
         ReasonletScope scope, string subjectId, int limit, ExecutionId? after, CancellationToken ct)
     {
         Calls++;
-        ListedSubjectRuns = (scope, subjectId, limit, after, ct);
-        return ValueTask.FromResult(ListSubjectRunsResult);
+        ListedSubjectExecutions = (scope, subjectId, limit, after, ct);
+        return ValueTask.FromResult(ListSubjectExecutionsResult);
     }
 }
 

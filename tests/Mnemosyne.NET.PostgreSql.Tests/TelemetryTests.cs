@@ -432,7 +432,7 @@ public sealed class TelemetryTests(PgVectorFixture fixture) : IClassFixture<PgVe
     }
 
     [Fact]
-    public async Task ListSubjectRunsTagsLimitAndReturned()
+    public async Task ListSubjectExecutionsTagsLimitAndReturned()
     {
         var store = await MigratedStoreAsync();
         var scope = PgVectorFixture.NewScope();
@@ -440,12 +440,12 @@ public sealed class TelemetryTests(PgVectorFixture fixture) : IClassFixture<PgVe
         await store.RememberAsync(Entries.Entry(scope, Entries.Graph("b")), Ct);
         using var capture = new TelemetryCapture();
 
-        Assert.Equal(2, (await store.ListSubjectRunsAsync(scope, "subject-1", 5, null, Ct)).Value.Count);
+        Assert.Equal(2, (await store.ListSubjectExecutionsAsync(scope, "subject-1", 5, null, Ct)).Value.Count);
 
-        var activity = Single(capture, "mnemosyne.list_subject_runs");
+        var activity = Single(capture, "mnemosyne.list_subject_executions");
         Assert.Equal(ActivityStatusCode.Unset, activity.Status);
         Assert.Equal([new("mnemosyne.list.limit", 5), new("mnemosyne.list.returned", 2)], AllTags(activity));
-        AssertOperation(capture, "list_subject_runs", "ok");
+        AssertOperation(capture, "list_subject_executions", "ok");
     }
 
     [Fact]

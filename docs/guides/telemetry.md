@@ -48,7 +48,7 @@ Every store method is one operation, and so is each recall, each judge call and 
 | `reject` | store | `RejectAsync` |
 | `list_pending` | store | `ListPendingAsync` |
 | `list_subject_reasonlets` | store | `ListSubjectReasonletsAsync` |
-| `list_subject_runs` | store | `ListSubjectRunsAsync` |
+| `list_subject_executions` | store | `ListSubjectExecutionsAsync` |
 | `recall` | facade | `RecallAsync` |
 | `evaluate` | facade | one call to the registered `IReasonletEvaluator` |
 | `guard` | facade | one call to the registered `ICaptureGuard` |
@@ -73,7 +73,7 @@ There is one activity per operation, with these tags:
 | `mnemosyne.reject` | `mnemosyne.reasonlet.id`, set before it runs |
 | `mnemosyne.list_pending` | `mnemosyne.list.limit`, set before it runs; on success `mnemosyne.list.returned` |
 | `mnemosyne.list_subject_reasonlets` | `mnemosyne.list.limit`, set before it runs; on success `mnemosyne.list.returned` |
-| `mnemosyne.list_subject_runs` | `mnemosyne.list.limit`, set before it runs; on success `mnemosyne.list.returned` |
+| `mnemosyne.list_subject_executions` | `mnemosyne.list.limit`, set before it runs; on success `mnemosyne.list.returned` |
 | `mnemosyne.recall` | see below |
 | `mnemosyne.evaluate` | see below |
 | `mnemosyne.guard` | see below |

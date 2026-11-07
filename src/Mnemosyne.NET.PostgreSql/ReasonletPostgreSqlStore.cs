@@ -1059,11 +1059,11 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
     }
 
     /// <inheritdoc />
-    public ValueTask<Result<IReadOnlyList<ReasonletExecutionRecord>, MnemosyneError>> ListSubjectRunsAsync(
+    public ValueTask<Result<IReadOnlyList<ReasonletExecutionRecord>, MnemosyneError>> ListSubjectExecutionsAsync(
         ReasonletScope scope, string subjectId, int limit, ExecutionId? after, CancellationToken ct) =>
-        StoreTelemetry.RunAsync("list_subject_runs", activity => ListSubjectRunsOperationAsync(scope, subjectId, limit, after, activity, ct));
+        StoreTelemetry.RunAsync("list_subject_executions", activity => ListSubjectExecutionsOperationAsync(scope, subjectId, limit, after, activity, ct));
 
-    private async ValueTask<Result<IReadOnlyList<ReasonletExecutionRecord>, MnemosyneError>> ListSubjectRunsOperationAsync(
+    private async ValueTask<Result<IReadOnlyList<ReasonletExecutionRecord>, MnemosyneError>> ListSubjectExecutionsOperationAsync(
         ReasonletScope scope, string subjectId, int limit, ExecutionId? after, Activity? activity, CancellationToken ct)
     {
         StoreTelemetry.ListLimit(activity, limit);
@@ -1073,13 +1073,13 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
             return migrated.Error;
         }
 
-        var invalid = ValidateScope(scope) ?? ValidateSubjectRuns(subjectId, limit, after);
+        var invalid = ValidateScope(scope) ?? ValidateSubjectExecutions(subjectId, limit, after);
         if (invalid is not null)
         {
             return invalid.Value;
         }
 
-        var result = await GuardAsync(ListSubjectRunsCoreAsync(scope, subjectId, limit, after, ct)).ConfigureAwait(false);
+        var result = await GuardAsync(ListSubjectExecutionsCoreAsync(scope, subjectId, limit, after, ct)).ConfigureAwait(false);
         if (result.IsSuccess)
         {
             StoreTelemetry.ListReturned(activity, result.Value.Count);
@@ -1088,7 +1088,7 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
         return result;
     }
 
-    private static MnemosyneError? ValidateSubjectRuns(string subjectId, int limit, ExecutionId? after)
+    private static MnemosyneError? ValidateSubjectExecutions(string subjectId, int limit, ExecutionId? after)
     {
         if (ValidateSubjectList(subjectId, limit, null) is { } invalid)
         {
@@ -1102,11 +1102,11 @@ public sealed class ReasonletPostgreSqlStore : IReasonletStore
     // Reasonlet of the scope that the subject owns. The subject id matches exactly, case included. An execution
     // carries no verdict source column, so it follows from the inputs: feedback with a verdict, else an evaluator's
     // verdict, else the agent's own flag.
-    private async Task<Result<IReadOnlyList<ReasonletExecutionRecord>, MnemosyneError>> ListSubjectRunsCoreAsync(
+    private async Task<Result<IReadOnlyList<ReasonletExecutionRecord>, MnemosyneError>> ListSubjectExecutionsCoreAsync(
         ReasonletScope scope, string subjectId, int limit, ExecutionId? after, CancellationToken ct)
     {
         await using var connection = (await _dataSource.OpenConnectionAsync(ct).ConfigureAwait(false)).AsAsync();
-        var rows = await new ExecutionRepository(connection).ListSubjectRunsAsync(scope.Value, subjectId, after?.Value, limit, ct).ConfigureAwait(false);
+        var rows = await new ExecutionRepository(connection).ListSubjectExecutionsAsync(scope.Value, subjectId, after?.Value, limit, ct).ConfigureAwait(false);
         var records = new List<ReasonletExecutionRecord>(rows.Count);
         foreach (var row in rows)
         {
