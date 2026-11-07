@@ -20,5 +20,6 @@
     <Project Path="samples/Mnemosyne.Samples.Evaluation/Mnemosyne.Samples.Evaluation.csproj" />
     <Project Path="samples/Mnemosyne.Samples.ChatPipeline/Mnemosyne.Samples.ChatPipeline.csproj" />
     <Project Path="samples/Mnemosyne.Samples.AgentFramework/Mnemosyne.Samples.AgentFramework.csproj" />
+    <Project Path="samples/Mnemosyne.Samples.Variants/Mnemosyne.Samples.Variants.csproj" />
   </Folder>
 </Solution>

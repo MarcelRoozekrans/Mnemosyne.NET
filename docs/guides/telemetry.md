@@ -91,8 +91,11 @@ There is one activity per operation, with these tags:
 | `mnemosyne.recall.chosen.version` | on success, when at least one match is returned: the first match's version |
 | `mnemosyne.recall.chosen.lineage_id` | on success, when at least one match is returned: the id of the root of the first match's version tree |
 | `mnemosyne.recall.chosen.score` | on success, when at least one match is returned: the first match's total score |
+| `mnemosyne.recall.variant.lineages` | only with [variant selection](variants.md): how many lineages it kept |
+| `mnemosyne.recall.variant.dropped` | only with variant selection: how many sibling versions it dropped because another version of the same lineage was kept |
+| `mnemosyne.recall.variant.explored` | only with variant selection that explores: how many lineages it picked a version for that does not have the lineage's highest smoothed success rate. It counts picks before `Top` and the similarity cut-off, so it can exceed `lineages`. |
 
-The candidate and returned counts show how much the [cut-off](../concepts/ranking.md#the-cut-off) drops, which helps when you tune it for your embedding model.
+The three variant tags hold counts only, never ids or text. The candidate and returned counts show how much the [cut-off](../concepts/ranking.md#the-cut-off) drops, which helps when you tune it for your embedding model.
 
 ### The evaluate activity
 

@@ -99,6 +99,28 @@ public sealed class RepoConventionsTests
     }
 
     [Fact]
+    public void CiRunsTheVariantsSample()
+    {
+        // The sample checks the variant selection the docs describe, so it is a test only while CI runs it.
+        var root = RepoRoot();
+        Assert.True(
+            File.Exists(Path.Combine(root, "samples", "Mnemosyne.Samples.Variants", "Mnemosyne.Samples.Variants.csproj")),
+            "the variants sample's project is missing");
+
+        var job = JobBody(StripComments(File.ReadAllText(Path.Combine(root, ".github", "workflows", "ci.yml"))), "aot-publish");
+        Assert.Contains("dotnet run --project samples/Mnemosyne.Samples.Variants", job, StringComparison.Ordinal);
+
+        // The sample needs no database, so its step must not set one up.
+        var start = job.IndexOf("- name: Run the variants sample", StringComparison.Ordinal);
+        Assert.True(start >= 0, "the variants sample's CI step is missing");
+        var next = job.IndexOf("- name:", start + 1, StringComparison.Ordinal);
+        var step = next < 0 ? job[start..] : job[start..next];
+        Assert.DoesNotContain("env:", step, StringComparison.Ordinal);
+        Assert.DoesNotContain("MNEMOSYNE_SAMPLE_PG", step, StringComparison.Ordinal);
+        Assert.DoesNotContain("Host=", step, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void EveryTestProjectUsingTestcontainersRequiresDocker()
     {
         var root = RepoRoot();
