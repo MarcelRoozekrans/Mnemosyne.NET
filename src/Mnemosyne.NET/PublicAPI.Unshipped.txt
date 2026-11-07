@@ -1,1 +1,4 @@
 #nullable enable
+Mnemosyne.NET.VariantSelector
+Mnemosyne.NET.VariantSelector.RankAsync(Mnemosyne.NET.Abstractions.ReasonletQuery! query, System.Collections.Generic.IReadOnlyList<Mnemosyne.NET.Abstractions.ReasonletCandidate!>! candidates, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<ZeroAlloc.Results.Result<System.Collections.Generic.IReadOnlyList<Mnemosyne.NET.Abstractions.ReasonletMatch!>!, Mnemosyne.NET.Abstractions.MnemosyneError>>
+Mnemosyne.NET.VariantSelector.VariantSelector(Mnemosyne.NET.Abstractions.IReasonletSelector! inner) -> void
