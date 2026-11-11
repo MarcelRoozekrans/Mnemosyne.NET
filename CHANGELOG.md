@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.0](https://github.com/MarcelRoozekrans/Mnemosyne.NET/compare/v1.1.0...v1.2.0) (2026-11-11)
+
+
+### Features
+
+* add net11.0 target ([8b68cb6](https://github.com/MarcelRoozekrans/Mnemosyne.NET/commit/8b68cb698199cd9158431afd2e126abb488c3ec3))
+
 ## [1.1.0](https://github.com/MarcelRoozekrans/Mnemosyne.NET/compare/v1.0.0...v1.1.0) (2026-11-07)
 
 
