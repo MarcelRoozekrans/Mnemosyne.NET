@@ -1,6 +1,6 @@
 # Evaluation
 
-A console walkthrough of how Mnemosyne.NET judges runs. It needs only Docker and the .NET 10 SDK, and no API key and no model.
+A console walkthrough of how Mnemosyne.NET judges runs. It needs only Docker and the .NET 11 SDK, and no API key and no model.
 
 It registers a rule-based evaluator, records runs for two procedures, and recalls the same question three times. The verdict on one run changes, and the ranking follows. The output shows each step and the ranked matches with the evidence behind their success rate.
 

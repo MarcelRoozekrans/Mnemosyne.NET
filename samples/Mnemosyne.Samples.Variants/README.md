@@ -1,6 +1,6 @@
 # Variants
 
-A console walkthrough of how Mnemosyne.NET lets a new version of a Reasonlet overtake a proven one. It needs only the .NET 10 SDK: no Docker, no database, no model and no API key.
+A console walkthrough of how Mnemosyne.NET lets a new version of a Reasonlet overtake a proven one. It needs only the .NET 11 SDK: no Docker, no database, no model and no API key.
 
 It builds the candidates by hand. The incumbent has 200 runs at a 70% success rate. Its new version has no runs yet, and would really succeed 90% of the time. An unrelated procedure sits beside them. The outcomes are drawn from a seeded `Random` and the selector has a fixed seed, so the counts are the same on every run.
 

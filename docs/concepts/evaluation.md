@@ -120,4 +120,4 @@ A match with `JudgedRuns` of 0 rests on the agent's word alone. Treat its high s
 
 ## See it run
 
-The [evaluation sample](https://github.com/MarcelRoozekrans/Mnemosyne.NET/tree/main/samples/Mnemosyne.Samples.Evaluation) judges runs offline with a rule-based evaluator, then lets a person overrule one, and prints how the ranking moves each time. It needs only Docker and the .NET 10 SDK.
+The [evaluation sample](https://github.com/MarcelRoozekrans/Mnemosyne.NET/tree/main/samples/Mnemosyne.Samples.Evaluation) judges runs offline with a rule-based evaluator, then lets a person overrule one, and prints how the ranking moves each time. It needs only Docker and the .NET 11 SDK.

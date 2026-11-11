@@ -78,7 +78,7 @@ It also needs PostgreSQL 15 or later with pgvector 0.8.0 or later. There is no i
 | `Mnemosyne.NET.Sentinel` | A capture guard that runs AI.Sentinel's detectors over a capture before the Reasonlet is stored. |
 | `Mnemosyne.NET.AgentFramework` | Reasonlet memory for Microsoft Agent Framework agents. |
 
-Most applications reference `Mnemosyne.NET` and `Mnemosyne.NET.PostgreSql`, and get the abstractions with them. Embeddings come from any `IEmbeddingGenerator<string, Embedding<float>>` from Microsoft.Extensions.AI, so you pick the model. All six packages target .NET 10 and are compatible with native AOT and trimming.
+Most applications reference `Mnemosyne.NET` and `Mnemosyne.NET.PostgreSql`, and get the abstractions with them. Embeddings come from any `IEmbeddingGenerator<string, Embedding<float>>` from Microsoft.Extensions.AI, so you pick the model. All six packages target .NET 10 and .NET 11 and are compatible with native AOT and trimming.
 
 ## Where to go next
 

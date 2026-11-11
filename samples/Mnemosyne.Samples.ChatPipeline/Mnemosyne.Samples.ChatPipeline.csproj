@@ -1,6 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
+    <TargetFrameworks />
+    <TargetFramework>net11.0</TargetFramework>
     <OutputType>Exe</OutputType>
     <!-- AI.Sentinel pulls in ZeroAlloc.Authorization, whose bundled generator would emit a registration type into this
          exe. The sample declares no policies, so it uses the package's own switch, as Mnemosyne.NET.Sentinel does. -->

@@ -1,6 +1,6 @@
 # Chat pipeline
 
-A console walkthrough of `UseReasonlets` with AI.Sentinel and the review gate. It needs only Docker and the .NET 10 SDK, and no API key and no model.
+A console walkthrough of `UseReasonlets` with AI.Sentinel and the review gate. It needs only Docker and the .NET 11 SDK, and no API key and no model.
 
 A scripted chat client plays the model. It calls two host tools and then gives a fixed answer. The pipeline is `UseReasonlets` over `UseFunctionInvocation`. The sample asks three questions and prints what Mnemosyne did with each exchange.
 
