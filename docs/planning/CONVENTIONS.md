@@ -6,7 +6,7 @@
 
 ## Stack
 
-**Language / runtime:** .NET 10
+**Language / runtime:** .NET 10 and .NET 11
 **Package manager:** NuGet (central package management)
 **Framework:** none (library; Microsoft.Extensions.AI for embeddings)
 **Datastore:** PostgreSQL + pgvector

@@ -1,6 +1,6 @@
 # Agent Framework
 
-A console walkthrough of `ReasonletContextProvider` on a Microsoft Agent Framework agent. It needs only Docker and the .NET 10 SDK, and no API key and no model.
+A console walkthrough of `ReasonletContextProvider` on a Microsoft Agent Framework agent. It needs only Docker and the .NET 11 SDK, and no API key and no model.
 
 A scripted chat client plays the model. It calls two host tools and then gives a fixed answer. The agent is a `ChatClientAgent` with one `ReasonletContextProvider` in its `AIContextProviders`. The sample runs it twice and prints what Mnemosyne did with each run.
 

@@ -50,7 +50,9 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: 10.0.x
+          dotnet-version: |
+            10.0.x
+            11.0.x
 
       - name: Cache NuGet packages
         uses: actions/cache@v6
@@ -178,7 +180,9 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: 10.0.x
+          dotnet-version: |
+            10.0.x
+            11.0.x
 
       - name: Cache NuGet packages
         uses: actions/cache@v6
@@ -273,7 +277,9 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: 10.0.x
+          dotnet-version: |
+            10.0.x
+            11.0.x
 
       - name: Publish the smoke app with native AOT
         run: dotnet publish tests/Mnemosyne.NET.AotSmoke -c Release -r linux-x64 -p:PublishAot=true -warnaserror
@@ -281,7 +287,7 @@ jobs:
       - name: Run the native binary
         env:
           MNEMOSYNE_AOT_PG: Host=localhost;Port=5432;Username=postgres;Password=postgres;Database=postgres
-        run: tests/Mnemosyne.NET.AotSmoke/bin/Release/net10.0/linux-x64/publish/Mnemosyne.NET.AotSmoke
+        run: tests/Mnemosyne.NET.AotSmoke/bin/Release/net11.0/linux-x64/publish/Mnemosyne.NET.AotSmoke
 
       # The store-and-recall sample checks the ranking the docs describe and exits 1 when it differs. It gets a
       # database of its own: the smoke above migrated the postgres database with 3 dimensions, the sample uses 256.
@@ -368,7 +374,9 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: 10.0.x
+          dotnet-version: |
+            10.0.x
+            11.0.x
 
       - name: Derive the package version
         shell: bash

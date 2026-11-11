@@ -9,7 +9,7 @@ All five samples run through one shared runner. It gives each database sample tw
 
 ## Store and recall
 
-[`samples/Mnemosyne.Samples.StoreAndRecall`](https://github.com/MarcelRoozekrans/Mnemosyne.NET/tree/main/samples/Mnemosyne.Samples.StoreAndRecall) is a console app that walks through the whole loop. It needs only Docker and the .NET 10 SDK. It needs no API key and no embedding model.
+[`samples/Mnemosyne.Samples.StoreAndRecall`](https://github.com/MarcelRoozekrans/Mnemosyne.NET/tree/main/samples/Mnemosyne.Samples.StoreAndRecall) is a console app that walks through the whole loop. It needs only Docker and the .NET 11 SDK. It needs no API key and no embedding model.
 
 ### What it does
 
@@ -87,7 +87,7 @@ A real model gives different similarities, so the numbers above change, and you 
 
 ## Evaluation
 
-[`samples/Mnemosyne.Samples.Evaluation`](https://github.com/MarcelRoozekrans/Mnemosyne.NET/tree/main/samples/Mnemosyne.Samples.Evaluation) is a console app that shows how a run's verdict changes the ranking. It needs only Docker and the .NET 10 SDK. It needs no API key and no model.
+[`samples/Mnemosyne.Samples.Evaluation`](https://github.com/MarcelRoozekrans/Mnemosyne.NET/tree/main/samples/Mnemosyne.Samples.Evaluation) is a console app that shows how a run's verdict changes the ranking. It needs only Docker and the .NET 11 SDK. It needs no API key and no model.
 
 ### What it does
 
@@ -152,7 +152,7 @@ The sample also uses the same offline embedding stand-in as store and recall, so
 
 ## Chat pipeline
 
-[`samples/Mnemosyne.Samples.ChatPipeline`](https://github.com/MarcelRoozekrans/Mnemosyne.NET/tree/main/samples/Mnemosyne.Samples.ChatPipeline) is a console app that shows `UseReasonlets` with the review gate and AI.Sentinel. It needs only Docker and the .NET 10 SDK. It needs no API key and no model.
+[`samples/Mnemosyne.Samples.ChatPipeline`](https://github.com/MarcelRoozekrans/Mnemosyne.NET/tree/main/samples/Mnemosyne.Samples.ChatPipeline) is a console app that shows `UseReasonlets` with the review gate and AI.Sentinel. It needs only Docker and the .NET 11 SDK. It needs no API key and no model.
 
 ### What it does
 
@@ -217,7 +217,7 @@ The sample also uses the same offline embedding stand-in as store and recall, so
 
 ## Agent Framework
 
-[`samples/Mnemosyne.Samples.AgentFramework`](https://github.com/MarcelRoozekrans/Mnemosyne.NET/tree/main/samples/Mnemosyne.Samples.AgentFramework) is a console app that shows `ReasonletContextProvider` on a Microsoft Agent Framework agent. It needs only Docker and the .NET 10 SDK. It needs no API key and no model.
+[`samples/Mnemosyne.Samples.AgentFramework`](https://github.com/MarcelRoozekrans/Mnemosyne.NET/tree/main/samples/Mnemosyne.Samples.AgentFramework) is a console app that shows `ReasonletContextProvider` on a Microsoft Agent Framework agent. It needs only Docker and the .NET 11 SDK. It needs no API key and no model.
 
 ### What it does
 
@@ -277,7 +277,7 @@ The sample also uses the same offline embedding stand-in as store and recall, so
 
 ## Variants
 
-[`samples/Mnemosyne.Samples.Variants`](https://github.com/MarcelRoozekrans/Mnemosyne.NET/tree/main/samples/Mnemosyne.Samples.Variants) is a console app that shows how a new version of a Reasonlet overtakes a proven one. It needs only the .NET 10 SDK. It needs no Docker, no database, no API key and no model.
+[`samples/Mnemosyne.Samples.Variants`](https://github.com/MarcelRoozekrans/Mnemosyne.NET/tree/main/samples/Mnemosyne.Samples.Variants) is a console app that shows how a new version of a Reasonlet overtakes a proven one. It needs only the .NET 11 SDK. It needs no Docker, no database, no API key and no model.
 
 ### What it does
 

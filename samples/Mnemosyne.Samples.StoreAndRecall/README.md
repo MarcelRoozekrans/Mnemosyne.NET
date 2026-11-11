@@ -1,6 +1,6 @@
 # Store and recall
 
-A console walkthrough of Mnemosyne.NET. It needs only Docker and the .NET 10 SDK, and no API key.
+A console walkthrough of Mnemosyne.NET. It needs only Docker and the .NET 11 SDK, and no API key.
 
 It stores three procedures, records how they ran, captures a new version of the proven one, and recalls a question. The output shows each step and the ranked matches with their score breakdown.
 
