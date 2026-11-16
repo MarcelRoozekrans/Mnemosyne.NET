@@ -23,7 +23,7 @@
     <PackageVersion Include="Minos.NET" Version="1.13.1" />
     <PackageVersion Include="Minos.NET.SystemOne" Version="1.13.1" />
     <PackageVersion Include="Npgsql" Version="10.0.3" />
-    <PackageVersion Include="Testcontainers.PostgreSql" Version="4.16.0" />
+    <PackageVersion Include="Testcontainers.PostgreSql" Version="4.17.0" />
     <PackageVersion Include="xunit.runner.visualstudio" Version="4.0.1" />
     <PackageVersion Include="xunit.v3" Version="3.2.2" />
     <PackageVersion Include="ZeroAlloc.ORM" Version="2.16.1" />
