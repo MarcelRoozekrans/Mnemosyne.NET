@@ -27,6 +27,7 @@ CI job `build-test` in `ci.yml`, on ubuntu and windows:
 dotnet restore Mnemosyne.NET.slnx
 dotnet build Mnemosyne.NET.slnx --no-restore -c Release
 dotnet test tests/Mnemosyne.NET.Tests --no-build -c Release --verbosity normal
+# ubuntu leg only: needs Docker with Linux containers
 dotnet test tests/Mnemosyne.NET.PostgreSql.Tests --no-build -c Release --verbosity normal
 ```
 
