@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.1](https://github.com/MarcelRoozekrans/Mnemosyne.NET/compare/v1.2.0...v1.2.1) (2026-11-16)
+
+
+### Bug Fixes
+
+* embed PDBs so Go to Definition shows the package source ([0cb04c8](https://github.com/MarcelRoozekrans/Mnemosyne.NET/commit/0cb04c8994952c90d6ad78256d0b82fe6306025c))
+
 ## [1.2.0](https://github.com/MarcelRoozekrans/Mnemosyne.NET/compare/v1.1.0...v1.2.0) (2026-11-11)
 
 
