@@ -412,8 +412,8 @@ jobs:
         with:
           user: ${{ vars.NUGET_USER }}
 
-      # The .snupkg files ride along: nuget.org receives them with each .nupkg from the same
-      # directory. --skip-duplicate makes a retry after a partial failure safe.
+      # The PDBs are embedded in the DLLs, so there is no separate symbol package to push.
+      # --skip-duplicate makes a retry after a partial failure safe.
       - name: Push every package to nuget.org
         shell: bash
         env:
