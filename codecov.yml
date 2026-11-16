@@ -14,3 +14,7 @@ ignore:
   - "samples/**"
   - "**/obj/**"
   - "**/*.g.cs"
+# CI builds the src/ projects with ContinuousIntegrationBuild, so their PDBs, and the Cobertura
+# reports read from them, carry /_/ paths instead of the runner's checkout path. Map them back.
+fixes:
+  - "/_/::"
