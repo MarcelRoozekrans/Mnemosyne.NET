@@ -87,7 +87,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v7
         with:
-          node-version: 24
+          node-version: 26
 
       # Installs from the committed package-lock.json. Without a lockfile the next fresh install
       # picks new transitive versions, and a build that was green yesterday breaks without a change.
