@@ -5,6 +5,10 @@ as Reasonlets. Six NuGet packages ship from `src/`, sharing one version: `Abstra
 interfaces), `Mnemosyne.NET` (facade and ranking), `PostgreSql` (pgvector store), `Minos`, `Sentinel`
 and `AgentFramework` (adapters). The docs site under `docs/` is a Docusaurus build, not .NET.
 
+## Product-line standards
+
+This repository is part of a .NET product line. Read the [product-line standards](https://github.com/MarcelRoozekrans/product-line/blob/main/standards.md) before changing anything: they hold the rules for every product, including how to build (a failing test first, the cause before a fix, build and test output before calling work done) and what may appear in commits, pull requests and issues. Build sessions do not use superpowers. This file adds what is specific to this repository.
+
 ## Layout
 
 - Only `src/*` is packed. `tests/`, `benchmarks/` and `samples/` are `IsPackable=false`.
